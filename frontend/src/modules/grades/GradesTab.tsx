@@ -1,11 +1,13 @@
-import { EmptyState } from "../../shared/ui";
+import { useParams } from "react-router-dom";
+import { useCampusAccess } from "../campus";
+import { Gradebook } from "./Gradebook";
+import { MyGradesView } from "./MyGrades";
+import "./grades.css";
 
-// Placeholder: the grades package replaces this with the real screen.
+/** Teachers get the gradebook; a student gets their own grades in this course. */
 export function GradesTab() {
-  return (
-    <EmptyState
-      title="Calificaciones"
-      description="Acá van a estar la planilla de notas y la carga rápida de calificaciones."
-    />
-  );
+  const { id = "" } = useParams();
+  const access = useCampusAccess(id);
+  if (access === "view") return <MyGradesView campusId={Number(id)} />;
+  return <Gradebook campusId={id} />;
 }
