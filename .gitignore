@@ -1,0 +1,15 @@
+# Rust
+backend/target/
+
+# Node
+frontend/node_modules/
+frontend/dist/
+frontend/*.tsbuildinfo
+
+# SQLite
+*.db
+*.db-shm
+*.db-wal
+
+# Env
+.env

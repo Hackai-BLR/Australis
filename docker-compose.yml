@@ -1,0 +1,24 @@
+name: hackai
+
+services:
+  backend:
+    build: ./backend
+    environment:
+      DATABASE_URL: sqlite:///data/hackai.db
+      RUST_LOG: info,sqlx=warn
+    volumes:
+      - hackai-data:/data
+    ports:
+      - "8080:8080"
+    restart: unless-stopped
+
+  frontend:
+    build: ./frontend
+    depends_on:
+      - backend
+    ports:
+      - "3000:80"
+    restart: unless-stopped
+
+volumes:
+  hackai-data:
