@@ -1,0 +1,58 @@
+{
+  "key": "thesis_group",
+  "name": "Grupo de tesis",
+  "description": "Un espacio de acompañamiento para quienes elaboran su tesis: hitos, encuentros de seguimiento y recursos.",
+  "document": {
+    "schema": 1,
+    "sections": [
+      {
+        "title": "Sobre este espacio",
+        "kind": "info",
+        "blocks": [
+          { "type": "text", "text": "Espacio de acompañamiento para el desarrollo de la tesis. Se trabaja con encuentros de seguimiento y entregas parciales por hito." },
+          { "type": "widget", "widget": "join_class" }
+        ]
+      },
+      {
+        "title": "Hitos de la tesis",
+        "kind": "info",
+        "blocks": [
+          { "type": "checklist", "items": ["Tema y pregunta de investigación definidos", "Plan de tesis aprobado", "Marco teórico", "Trabajo de campo o análisis", "Borrador completo", "Versión final y defensa"] },
+          { "type": "callout", "text": "Cada estudiante acuerda con su director o directora las fechas de cada hito." }
+        ]
+      },
+      {
+        "title": "Encuentros de seguimiento",
+        "kind": "session",
+        "blocks": [
+          { "type": "text", "text": "En cada encuentro, una persona presenta su avance y el grupo aporta comentarios. Se pide enviar el material con anticipación." },
+          { "type": "widget", "widget": "classes" }
+        ]
+      },
+      {
+        "title": "Guía de presentación del avance",
+        "kind": "assignment",
+        "blocks": [
+          { "type": "text", "text": "Para cada presentación: qué se hizo desde el último encuentro, qué dificultades aparecieron y qué se hará hasta el próximo." }
+        ]
+      },
+      {
+        "title": "Recursos y normativa",
+        "kind": "resources",
+        "blocks": [
+          { "type": "text", "text": "Reunir acá el reglamento de tesis, las pautas de formato y las guías de citación." }
+        ]
+      },
+      {
+        "title": "Grabaciones",
+        "kind": "resources",
+        "blocks": [{ "type": "widget", "widget": "recordings" }]
+      },
+      {
+        "title": "Calificaciones",
+        "kind": "info",
+        "blocks": [{ "type": "widget", "widget": "grades" }]
+      }
+    ]
+  }
+}

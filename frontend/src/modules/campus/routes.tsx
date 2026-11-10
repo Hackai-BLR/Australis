@@ -1,7 +1,8 @@
 import type { RouteObject } from "react-router-dom";
 import { RequireRole } from "../../shared/auth";
 import type { CampusTab, NavItem } from "../../shared/routing";
-import { CampusListPage, CampusOverviewTab } from "./pages";
+import { HistoryTab } from "./HistoryTab";
+import { CampusListPage, CampusOverviewTab, NewCampusPage } from "./pages";
 
 export const routes: RouteObject[] = [
   {
@@ -12,10 +13,19 @@ export const routes: RouteObject[] = [
       </RequireRole>
     ),
   },
+  {
+    path: "/campuses/new",
+    element: (
+      <RequireRole roles={["professor"]}>
+        <NewCampusPage />
+      </RequireRole>
+    ),
+  },
 ];
 
 export const campusTabs: CampusTab[] = [
   { path: "", label: "Inicio", access: "view", order: 0, element: <CampusOverviewTab /> },
+  { path: "history", label: "Historial", access: "teach", order: 90, element: <HistoryTab /> },
 ];
 
 export const navItems: NavItem[] = [
