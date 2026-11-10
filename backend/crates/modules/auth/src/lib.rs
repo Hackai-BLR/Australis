@@ -28,6 +28,7 @@ pub fn router() -> Router<AppState> {
         .route("/auth/invites/{token}/accept", post(accept_invite))
         .route("/users", get(list_users).post(create_user))
         .route("/users/{id}", patch(update_user))
+        .route("/users/{id}/invite", post(reissue_invite))
 }
 
 type Cookie = [(HeaderName, String); 1];
@@ -205,4 +206,43 @@ async fn update_user(
     };
     tx.commit().await?;
     Ok(Json(user))
+}
+
+/// Re-issues the invite link of an account that has never set a password (a lost or expired
+/// link). Earlier unused links stop working. Never a password reset: 422 if a password exists.
+async fn reissue_invite(
+    State(state): State<AppState>,
+    actor: CurrentUser,
+    Path(id): Path<i64>,
+) -> AppResult<Json<Value>> {
+    require_secretary(&actor)?;
+    let mut tx = begin_write(&state.db).await?;
+    let user = directory::find_user(&mut tx, id)
+        .await?
+        .ok_or(AppError::NotFound)?;
+    if user.has_password {
+        return Err(AppError::Unprocessable(
+            "the account already has a password; an invite cannot be issued".into(),
+        ));
+    }
+    let token =
+        directory::create_invite(&mut tx, actor.id, user.id, state.config.invite_ttl_hours).await?;
+    audit::record(
+        &mut tx,
+        AuditEntry {
+            actor_id: Some(actor.id),
+            campus_id: None,
+            entity: "user",
+            entity_id: user.id,
+            subject_user_id: Some(user.id),
+            action: "reissue_invite",
+            before: None,
+            after: None,
+            reason: None,
+        },
+    )
+    .await?;
+    tx.commit().await?;
+    let invite_url = directory::invite_url(&state.config, &token);
+    Ok(Json(json!({ "user": user, "invite_url": invite_url })))
 }
