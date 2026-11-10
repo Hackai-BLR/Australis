@@ -174,6 +174,81 @@ async fn item_changes_are_audited_and_archive_keeps_the_row() {
 }
 
 #[tokio::test]
+async fn changing_a_graded_item_needs_a_reason_recorded_in_the_audit() {
+    let s = setup().await;
+    let item = s.item("Parcial", 1.0).await;
+    let a = s.app.seed_student(s.campus).await;
+    let put = json!({ "entries": [{ "item_id": item, "student_id": a.id, "score": 6 }] });
+    assert_eq!(s.put(&s.prof.cookie, put).await.0, StatusCode::OK);
+    let url = format!("/api/gradebook/items/{item}");
+    let archive = format!("{url}/archive");
+
+    for body in [
+        json!({ "weight": 3 }),
+        json!({ "weight": 3, "reason": "  " }),
+    ] {
+        let (status, _) = s.app.patch_json(&url, Some(&s.prof.cookie), body).await;
+        assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+    }
+    for body in [json!({}), json!({ "reason": "" })] {
+        let (status, _) = s.app.post_json(&archive, Some(&s.prof.cookie), body).await;
+        assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+    }
+    // Only the create row so far.
+    assert_eq!(s.audit_rows("grades.item").await, 1);
+
+    let (status, _) = s
+        .app
+        .patch_json(
+            &url,
+            Some(&s.prof.cookie),
+            json!({ "weight": 3, "reason": "peso corregido" }),
+        )
+        .await;
+    assert_eq!(status, StatusCode::OK);
+    let (status, _) = s
+        .app
+        .post_json(
+            &archive,
+            Some(&s.prof.cookie),
+            json!({ "reason": "se anula el parcial" }),
+        )
+        .await;
+    assert_eq!(status, StatusCode::OK);
+
+    let rows: Vec<(String, Option<String>, Option<i64>)> = sqlx::query_as(
+        "SELECT action, reason, actor_id FROM core_audit_log
+         WHERE entity = 'grades.item' ORDER BY id",
+    )
+    .fetch_all(&s.app.db)
+    .await
+    .unwrap();
+    assert_eq!(rows.len(), 3);
+    assert_eq!(rows[1].0, "update");
+    assert_eq!(rows[1].1.as_deref(), Some("peso corregido"));
+    assert_eq!(rows[1].2, Some(s.prof.id));
+    assert_eq!(rows[2].0, "archive");
+    assert_eq!(rows[2].1.as_deref(), Some("se anula el parcial"));
+    assert_eq!(rows[2].2, Some(s.prof.id));
+}
+
+#[tokio::test]
+async fn archive_works_without_a_body_when_the_item_has_no_grades() {
+    let s = setup().await;
+    let item = s.item("TP1", 1.0).await;
+    let (status, body) = s
+        .app
+        .post_json(
+            &format!("/api/gradebook/items/{item}/archive"),
+            Some(&s.prof.cookie),
+            Value::Null,
+        )
+        .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert!(body["archived_at"].is_string());
+}
+
+#[tokio::test]
 async fn final_is_the_weighted_mean_and_follows_the_setting() {
     let s = setup().await;
     let a = s.item("A", 1.0).await;

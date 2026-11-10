@@ -13,6 +13,7 @@ use australis_core::{
     AppError, AppResult, AppState, CurrentUser,
 };
 use axum::{
+    body::Bytes,
     extract::{Path, State},
     routing::{get, patch, post, put},
     Json, Router,
@@ -107,6 +108,30 @@ fn clean_reason(reason: &Option<String>) -> Option<String> {
         .map(str::trim)
         .filter(|r| !r.is_empty())
         .map(str::to_string)
+}
+
+/// A change to an item moves every student's final, so once the item has any score the
+/// change must carry a reason. Returns the cleaned reason.
+async fn item_change_reason(
+    conn: &mut SqliteConnection,
+    item_id: i64,
+    reason: &Option<String>,
+) -> AppResult<Option<String>> {
+    let reason = clean_reason(reason);
+    if reason.is_none() {
+        let graded: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM grades_entries WHERE item_id = ? AND score IS NOT NULL",
+        )
+        .bind(item_id)
+        .fetch_one(conn)
+        .await?;
+        if graded > 0 {
+            return Err(AppError::Unprocessable(
+                "a reason is required to change an item that already has grades".into(),
+            ));
+        }
+    }
+    Ok(reason)
 }
 
 // --- GET gradebook ----------------------------------------------------------------------
@@ -279,6 +304,7 @@ async fn update_item(
         None => before.weight,
     };
     let position = body.position.unwrap_or(before.position);
+    let reason = item_change_reason(&mut tx, item_id, &body.reason).await?;
     sqlx::query("UPDATE grades_items SET title = ?, weight = ?, position = ? WHERE id = ?")
         .bind(&title)
         .bind(weight)
@@ -298,7 +324,7 @@ async fn update_item(
             action: "update",
             before: Some(item_json(&before)),
             after: Some(item_json(&after)),
-            reason: clean_reason(&body.reason).as_deref(),
+            reason: reason.as_deref(),
         },
     )
     .await?;
@@ -306,17 +332,32 @@ async fn update_item(
     Ok(Json(after))
 }
 
+#[derive(Deserialize, Default)]
+struct ArchiveBody {
+    reason: Option<String>,
+}
+
 async fn archive_item(
     State(state): State<AppState>,
     user: CurrentUser,
     Path(item_id): Path<i64>,
+    raw: Bytes,
 ) -> AppResult<Json<Item>> {
+    // The body is optional: an empty or missing one means no reason.
+    let body: ArchiveBody = if raw.iter().all(u8::is_ascii_whitespace) {
+        ArchiveBody::default()
+    } else {
+        serde_json::from_slice::<Option<ArchiveBody>>(&raw)
+            .map_err(|_| AppError::Unprocessable("the body is not valid JSON".into()))?
+            .unwrap_or_default()
+    };
     let mut tx = begin_write(&state.db).await?;
     let before = find_item(&mut tx, item_id).await?;
     require_campus(&mut tx, &user, before.campus_id, Access::Teach).await?;
     if before.archived_at.is_some() {
         return Ok(Json(before));
     }
+    let reason = item_change_reason(&mut tx, item_id, &body.reason).await?;
     sqlx::query("UPDATE grades_items SET archived_at = datetime('now') WHERE id = ?")
         .bind(item_id)
         .execute(&mut *tx)
@@ -333,7 +374,7 @@ async fn archive_item(
             action: "archive",
             before: Some(item_json(&before)),
             after: Some(item_json(&after)),
-            reason: None,
+            reason: reason.as_deref(),
         },
     )
     .await?;

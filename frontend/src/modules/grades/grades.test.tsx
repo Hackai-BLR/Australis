@@ -6,6 +6,7 @@ import { GradeGrid } from "./GradeGrid";
 import { moveCell } from "./nav";
 import {
   formatScore,
+  itemHasGrades,
   parseCsv,
   parseScore,
   parseTable,
@@ -213,5 +214,17 @@ describe("GradeGrid", () => {
       clipboardData: { getData: () => "7,5\t8\n9\t6" },
     });
     expect(onPasteBlock).toHaveBeenCalledWith("7,5\t8\n9\t6");
+  });
+});
+
+describe("itemHasGrades", () => {
+  it("is true only when the item has a score", () => {
+    const entries = [
+      { item_id: 1, score: 7 },
+      { item_id: 2, score: null },
+    ];
+    expect(itemHasGrades(entries, 1)).toBe(true);
+    expect(itemHasGrades(entries, 2)).toBe(false);
+    expect(itemHasGrades(entries, 3)).toBe(false);
   });
 });
