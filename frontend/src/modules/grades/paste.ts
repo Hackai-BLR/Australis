@@ -179,3 +179,11 @@ export function planChanges(
   }
   return { changes, invalid, overwrites };
 }
+
+/** Changing or archiving an item that already has scores moves every final, so it needs a reason. */
+export function itemHasGrades(
+  entries: { item_id: number; score: number | null }[],
+  itemId: number,
+): boolean {
+  return entries.some((e) => e.item_id === itemId && e.score !== null);
+}

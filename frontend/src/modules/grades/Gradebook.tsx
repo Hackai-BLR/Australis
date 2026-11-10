@@ -8,6 +8,7 @@ import {
   parseCsv,
   parseScore,
   parseTable,
+  itemHasGrades,
   planChanges,
   planPaste,
   type Scale,
@@ -24,6 +25,11 @@ const ACTIONS: Record<string, string> = {
 
 function errorMessage(e: unknown): string {
   return e instanceof ApiError ? e.message : "No se pudo completar la operación.";
+}
+
+/** Asks for the reason of a change to a graded item; empty when cancelled or left blank. */
+function askItemReason(question: string): string {
+  return (window.prompt(question) ?? "").trim();
 }
 
 type ItemForm = { id: number | null; title: string; weight: string } | null;
@@ -200,7 +206,22 @@ export function Gradebook({ campusId }: { campusId: string }) {
           weight: weight.value,
         });
       } else {
-        await apiPatch(`/gradebook/items/${form.id}`, { title: form.title, weight: weight.value });
+        const editing = book.items.find((i) => i.id === form.id);
+        const changed =
+          editing && (editing.title !== form.title.trim() || editing.weight !== weight.value);
+        let reason: string | undefined;
+        if (changed && itemHasGrades(book.entries, form.id)) {
+          const given = askItemReason(
+            "Esta evaluación ya tiene notas. ¿Cuál es el motivo del cambio?",
+          );
+          if (!given) return;
+          reason = given;
+        }
+        await apiPatch(`/gradebook/items/${form.id}`, {
+          title: form.title,
+          weight: weight.value,
+          reason,
+        });
       }
       setForm(null);
       await load();
@@ -214,8 +235,16 @@ export function Gradebook({ campusId }: { campusId: string }) {
     if (!window.confirm(`¿Archivar "${item.title}"? Sus notas se conservan en el historial.`)) {
       return;
     }
+    let reason: string | undefined;
+    if (itemHasGrades(book.entries, item.id)) {
+      const given = askItemReason(
+        "Esta evaluación ya tiene notas. ¿Cuál es el motivo para archivarla?",
+      );
+      if (!given) return;
+      reason = given;
+    }
     try {
-      await apiPost(`/gradebook/items/${item.id}/archive`);
+      await apiPost(`/gradebook/items/${item.id}/archive`, { reason });
       await load();
       if (auditOpen) await loadAudit();
     } catch (e) {
