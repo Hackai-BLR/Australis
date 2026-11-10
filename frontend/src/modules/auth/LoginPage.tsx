@@ -1,8 +1,8 @@
 import { useState, type FormEvent } from "react";
 import { Navigate, useNavigate, useSearchParams } from "react-router-dom";
-import { ApiError } from "../../shared/api";
 import { useAuth } from "../../shared/auth";
 import { Button, Card, Input, Spinner } from "../../shared/ui";
+import { errorMessage } from "./errors";
 
 /** Only same-site paths are accepted as a return target. */
 function safeNext(next: string | null): string {
@@ -38,7 +38,7 @@ export function LoginPage() {
       await login(email.trim(), password);
       navigate(next, { replace: true });
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "No se pudo iniciar sesión.");
+      setError(errorMessage(err, "login", "No se pudo iniciar sesión."));
       setBusy(false);
     }
   };
