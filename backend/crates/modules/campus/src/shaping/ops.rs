@@ -699,7 +699,7 @@ mod tests {
         let op = Op::RemoveSection {
             section_id: "s2".into(),
         };
-        let (n, changes) = apply_ops(&d, &[op.clone()]).unwrap();
+        let (n, changes) = apply_ops(&d, std::slice::from_ref(&op)).unwrap();
         assert_eq!(titles(&n), ["Inicio", "Cierre"]);
         assert_eq!(changes, ["Quitar la sección «Examen final»"]);
         assert!(apply_ops(&n, &[op]).is_err());
@@ -798,7 +798,7 @@ mod tests {
         let op = Op::RemoveBlock {
             block_id: "b2".into(),
         };
-        let (n, changes) = apply_ops(&d, &[op.clone()]).unwrap();
+        let (n, changes) = apply_ops(&d, std::slice::from_ref(&op)).unwrap();
         assert_eq!(n.sections[0].blocks.len(), 1);
         assert_eq!(changes, ["Quitar un bloque de texto de «Inicio»"]);
         assert!(apply_ops(&n, &[op]).is_err());
