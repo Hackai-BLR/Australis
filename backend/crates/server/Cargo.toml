@@ -2,10 +2,17 @@
 name = "australis-server"
 version.workspace = true
 edition.workspace = true
+build = "build.rs"
 
 [dependencies]
 australis-core.workspace = true
+australis-auth.workspace = true
+australis-campus.workspace = true
+australis-classes.workspace = true
+australis-grades.workspace = true
 australis-health.workspace = true
+australis-roster.workspace = true
+australis-slides.workspace = true
 anyhow.workspace = true
 axum.workspace = true
 sqlx.workspace = true
@@ -14,7 +21,17 @@ tower-http.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
 
+# Everything a module's integration test may need, so test files never add a dependency.
 [dev-dependencies]
-http-body-util = "0.1"
+async-trait.workspace = true
+encoding_rs.workspace = true
+futures.workspace = true
+hex.workspace = true
+http-body-util.workspace = true
+lopdf.workspace = true
+rand.workspace = true
+serde.workspace = true
 serde_json.workspace = true
-tower = { version = "0.5", features = ["util"] }
+sha2.workspace = true
+tokio-stream.workspace = true
+tower.workspace = true
