@@ -8,12 +8,15 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
     && cp target/release/australis-server /australis-server
 
 FROM debian:bookworm-slim
-RUN useradd --system --uid 10001 australis && mkdir /data && chown australis /data
+RUN useradd --system --uid 10001 australis \
+    && mkdir /data /uploads \
+    && chown australis /data /uploads
 COPY --from=build /australis-server /usr/local/bin/australis-server
 USER australis
 ENV DATABASE_URL=sqlite:///data/australis.db \
+    UPLOAD_DIR=/uploads \
     BIND_ADDR=0.0.0.0:8080 \
     RUST_LOG=info,sqlx=warn
 EXPOSE 8080
-VOLUME /data
+VOLUME ["/data", "/uploads"]
 CMD ["australis-server"]

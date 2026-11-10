@@ -3,6 +3,7 @@ RUN cargo install cargo-watch --locked
 WORKDIR /src
 COPY . .
 ENV DATABASE_URL=sqlite:///data/australis.db \
+    UPLOAD_DIR=/uploads \
     BIND_ADDR=0.0.0.0:8080 \
     RUST_LOG=debug,sqlx=warn
 EXPOSE 8080
