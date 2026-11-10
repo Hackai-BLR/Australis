@@ -178,6 +178,11 @@ async fn list_classes(
     user: CurrentUser,
     Path(campus_id): Path<i64>,
 ) -> AppResult<Json<Vec<ClassView>>> {
+    {
+        let mut conn = state.db.acquire().await?;
+        require_campus(&mut conn, &user, campus_id, Access::View).await?;
+    }
+    recordings::refresh_campus(&state, campus_id).await;
     let mut conn = state.db.acquire().await?;
     let access = require_campus(&mut conn, &user, campus_id, Access::View).await?;
     let can_teach = access.can(Access::Teach);
@@ -351,6 +356,12 @@ async fn get_class(
     user: CurrentUser,
     Path(class_id): Path<i64>,
 ) -> AppResult<Json<ClassView>> {
+    {
+        let mut conn = state.db.acquire().await?;
+        let row = find_class(&mut conn, class_id).await?;
+        require_campus(&mut conn, &user, row.campus_id, Access::View).await?;
+    }
+    recordings::refresh_class(&state, class_id).await;
     let mut conn = state.db.acquire().await?;
     let row = find_class(&mut conn, class_id).await?;
     let access = require_campus(&mut conn, &user, row.campus_id, Access::View).await?;
