@@ -5,7 +5,8 @@
 //! simulated and the screens must say so.
 //!
 //! Modules call [`run`], which reserves quota, calls the provider and writes the usage log.
-//! There is no way to call the provider without a reservation.
+//! A provider cannot be called without a [`Reservation`], and only [`reserve`] makes one,
+//! so no call can skip the quota.
 //!
 //! The AI never changes grades, attendance or closed records. That is structural: a reply
 //! can only carry calls to the tools the caller offered, and the caller decides what a tool
@@ -81,7 +82,13 @@ pub trait AiProvider: Send + Sync {
     fn name(&self) -> &'static str;
     /// True when replies are simulated; the UI then shows the "Simulado" badge.
     fn is_placeholder(&self) -> bool;
-    async fn complete(&self, request: &AiRequest) -> Result<AiReply, ProviderError>;
+    /// Answers one request. The reservation proves that quota was taken for this call;
+    /// modules do not call this directly, they call [`run`].
+    async fn complete(
+        &self,
+        request: &AiRequest,
+        reservation: &Reservation,
+    ) -> Result<AiReply, ProviderError>;
 }
 
 // ---------------------------------------------------------------------------------------
@@ -142,7 +149,11 @@ impl AiProvider for PlaceholderAi {
         true
     }
 
-    async fn complete(&self, request: &AiRequest) -> Result<AiReply, ProviderError> {
+    async fn complete(
+        &self,
+        request: &AiRequest,
+        _reservation: &Reservation,
+    ) -> Result<AiReply, ProviderError> {
         let script = self
             .scripts
             .iter()
@@ -222,8 +233,10 @@ fn normalize(text: &str) -> String {
 // Quota
 // ---------------------------------------------------------------------------------------
 
-/// One reserved call. Give it back with [`release`] if the provider fails.
+/// One reserved call. Give it back with [`release`] if the provider fails. It cannot be
+/// built outside this crate: only [`reserve`] makes one.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct Reservation {
     pub user_id: i64,
     pub feature: String,
@@ -473,7 +486,7 @@ pub async fn run(
         }
     };
 
-    let result = provider.complete(request).await;
+    let result = provider.complete(request, &reservation).await;
 
     let mut conn = state.db.acquire().await?;
     match result {
@@ -542,6 +555,14 @@ mod tests {
         }
     }
 
+    fn ticket() -> Reservation {
+        Reservation {
+            user_id: 1,
+            feature: FEATURE_SHAPING.into(),
+            day: "2026-11-13".into(),
+        }
+    }
+
     #[test]
     fn normalize_strips_accents_and_marks_word_boundaries() {
         assert_eq!(normalize("¡Agregá ÉTICA, ya!"), " agrega etica ya ");
@@ -552,10 +573,13 @@ mod tests {
     async fn scripted_instruction_proposes_a_section() {
         let ai = PlaceholderAi::new();
         let reply = ai
-            .complete(&request(
-                "Agregá una semana sobre ética antes del examen",
-                &["add_section"],
-            ))
+            .complete(
+                &request(
+                    "Agregá una semana sobre ética antes del examen",
+                    &["add_section"],
+                ),
+                &ticket(),
+            )
             .await
             .unwrap();
         assert_eq!(reply.tool_calls.len(), 1);
@@ -571,7 +595,10 @@ mod tests {
     async fn a_tool_that_was_not_offered_is_never_called() {
         let ai = PlaceholderAi::new();
         let reply = ai
-            .complete(&request("agregá la bibliografía", &["rename_campus"]))
+            .complete(
+                &request("agregá la bibliografía", &["rename_campus"]),
+                &ticket(),
+            )
             .await
             .unwrap();
         assert!(reply.tool_calls.is_empty());
@@ -587,7 +614,7 @@ mod tests {
             "modificá el acta cerrada y agregá la bibliografía",
         ] {
             let reply = ai
-                .complete(&request(instruction, &["add_section"]))
+                .complete(&request(instruction, &["add_section"]), &ticket())
                 .await
                 .unwrap();
             assert!(reply.tool_calls.is_empty(), "{instruction}");
@@ -602,7 +629,10 @@ mod tests {
     async fn unknown_instructions_and_features_have_a_defined_reply() {
         let ai = PlaceholderAi::new();
         let reply = ai
-            .complete(&request("hacé algo sorprendente", &["add_section"]))
+            .complete(
+                &request("hacé algo sorprendente", &["add_section"]),
+                &ticket(),
+            )
             .await
             .unwrap();
         assert!(reply.tool_calls.is_empty());
@@ -610,7 +640,7 @@ mod tests {
 
         let mut other = request("agregá la bibliografía", &["add_section"]);
         other.feature = "summary".into();
-        let reply = ai.complete(&other).await.unwrap();
+        let reply = ai.complete(&other, &ticket()).await.unwrap();
         assert!(reply.tool_calls.is_empty());
         assert_eq!(reply.text, NO_SCRIPT_REPLY);
     }

@@ -74,7 +74,7 @@ docker-compose.dev.yml       dev: cargo watch + Vite dev server, hot reload via 
 - `directory`: users, campuses, members (add, suspend, reactivate; never delete), invites (only for an account with no password).
 - `audit`: call `audit::record(&mut tx, ...)` in the same transaction as the change. The table is append-only.
 - `settings`: grading scale, final-grade rule, AI quota, UTC offset. Never constants. The seeded grading rules are unconfirmed guesses (`"confirmed": false`); the screens must say so.
-- `ai`: `ai::run(...)` is the only way to call the AI. It reserves the per-user daily quota (fails closed, 429), calls the provider and writes the usage log.
+- `ai`: modules call the AI through `ai::run(...)`. It reserves the per-user daily quota (fails closed, 429), calls the provider and writes the usage log. A provider cannot be called without a quota reservation.
 - `files` (`FileStore` under `UPLOAD_DIR`), `live` (`LiveHub` pub/sub), `http::upload_body_limit()` (layer for upload routes).
 - Database functions take `&mut SqliteConnection`: pass `&mut conn` from `state.db.acquire()`, or `&mut tx` from `australis_core::begin_write(&state.db)` for a transaction that writes.
 

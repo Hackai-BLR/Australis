@@ -11,7 +11,10 @@ use std::sync::{
 use async_trait::async_trait;
 use australis_core::{
     access::{require_campus, require_role, Access},
-    ai::{self, AiProvider, AiReply, AiRequest, AiTool, UsageQuery, UsageStatus, FEATURE_SHAPING},
+    ai::{
+        self, AiProvider, AiReply, AiRequest, AiTool, Reservation, UsageQuery, UsageStatus,
+        FEATURE_SHAPING,
+    },
     audit::{self, AuditEntry, AuditQuery},
     auth,
     directory::{self, MemberRole, MemberStatus, NewUser, UserStatus},
@@ -1156,7 +1159,12 @@ impl AiProvider for CountingAi {
         false
     }
 
-    async fn complete(&self, _request: &AiRequest) -> Result<AiReply, ProviderError> {
+    async fn complete(
+        &self,
+        _request: &AiRequest,
+        reservation: &Reservation,
+    ) -> Result<AiReply, ProviderError> {
+        assert_eq!(reservation.feature, FEATURE_SHAPING);
         self.calls.fetch_add(1, Ordering::SeqCst);
         if self.fail {
             return Err(ProviderError::Failed("the provider is down".into()));
