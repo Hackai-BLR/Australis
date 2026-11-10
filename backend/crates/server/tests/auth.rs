@@ -358,3 +358,84 @@ async fn users_endpoints_are_secretary_only() {
         .await;
     assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
 }
+
+#[tokio::test]
+async fn reissue_invite_replaces_the_old_link_for_a_never_activated_account() {
+    let app = TestApp::new().await;
+    let secretary = app.login_as(Role::Secretary).await;
+    let (user_id, old_token) = invite_professor(&app, &secretary, "perdida@test.example").await;
+
+    let (status, body) = app
+        .post_json(
+            &format!("/api/users/{user_id}/invite"),
+            Some(&secretary.cookie),
+            json!({}),
+        )
+        .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let new_token = body["invite_url"]
+        .as_str()
+        .unwrap()
+        .rsplit('/')
+        .next()
+        .unwrap()
+        .to_string();
+    assert_ne!(new_token, old_token);
+
+    let (status, _) = app
+        .get(&format!("/api/auth/invites/{old_token}"), None)
+        .await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    let (status, _) = app
+        .post_json(
+            &format!("/api/auth/invites/{old_token}/accept"),
+            None,
+            json!({ "password": "una-clave-larga" }),
+        )
+        .await;
+    assert!(status.is_client_error());
+
+    let response = app
+        .json_response(
+            axum::http::Method::POST,
+            &format!("/api/auth/invites/{new_token}/accept"),
+            None,
+            json!({ "password": "una-clave-larga" }),
+        )
+        .await;
+    assert_eq!(response.status, StatusCode::OK, "{}", response.text());
+}
+
+#[tokio::test]
+async fn reissue_invite_is_refused_for_an_activated_account_and_for_non_secretaries() {
+    let app = TestApp::new().await;
+    let secretary = app.login_as(Role::Secretary).await;
+    let professor = app.login_as(Role::Professor).await;
+    let student = app.login_as(Role::Student).await;
+
+    // The test users have passwords: never a password reset.
+    let (status, _) = app
+        .post_json(
+            &format!("/api/users/{}/invite", professor.id),
+            Some(&secretary.cookie),
+            json!({}),
+        )
+        .await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+
+    let (pending_id, _) = invite_professor(&app, &secretary, "pendiente@test.example").await;
+    for who in [&professor, &student] {
+        let (status, _) = app
+            .post_json(
+                &format!("/api/users/{pending_id}/invite"),
+                Some(&who.cookie),
+                json!({}),
+            )
+            .await;
+        assert_eq!(status, StatusCode::FORBIDDEN);
+    }
+    let (status, _) = app
+        .post_json(&format!("/api/users/{pending_id}/invite"), None, json!({}))
+        .await;
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
+}

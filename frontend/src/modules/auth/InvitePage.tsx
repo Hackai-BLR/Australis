@@ -1,8 +1,9 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { ApiError, apiGet, apiPost } from "../../shared/api";
+import { apiGet, apiPost } from "../../shared/api";
 import { ROLE_LABELS, useAuth, type Role } from "../../shared/auth";
 import { Button, Card, Input, Spinner } from "../../shared/ui";
+import { errorMessage } from "./errors";
 
 type InviteInfo = { email: string; full_name: string; role: Role };
 
@@ -59,7 +60,7 @@ export function InvitePage() {
       await refresh();
       navigate("/", { replace: true });
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "No se pudo guardar la contraseña.");
+      setError(errorMessage(err, "invite", "No se pudo guardar la contraseña."));
       setBusy(false);
     }
   };

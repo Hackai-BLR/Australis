@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
-import { ApiError, apiGet, apiPatch, apiPost } from "../../shared/api";
+import { apiGet, apiPatch, apiPost } from "../../shared/api";
+import { errorMessage } from "./errors";
 import { ROLE_LABELS, type Role } from "../../shared/auth";
 import {
   Badge,
@@ -22,6 +23,7 @@ type AccountUser = {
   full_name: string;
   role: Role;
   status: "invited" | "active" | "suspended";
+  has_password: boolean;
 };
 
 const STATUS: Record<AccountUser["status"], { label: string; tone: BadgeTone }> = {
@@ -31,7 +33,7 @@ const STATUS: Record<AccountUser["status"], { label: string; tone: BadgeTone }> 
 };
 
 function message(err: unknown, fallback: string): string {
-  return err instanceof ApiError ? err.message : fallback;
+  return errorMessage(err, "users", fallback);
 }
 
 /** Minimal user management for the secretary: list, invite professors/secretaries, suspend. */
@@ -55,6 +57,16 @@ export function UsersPage() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  const reissue = async (u: AccountUser) => {
+    try {
+      const res = await apiPost<{ invite_url: string }>(`/users/${u.id}/invite`, {});
+      setInviteUrl(res.invite_url);
+      toast.show({ message: "Invitación reenviada.", tone: "success" });
+    } catch (err) {
+      toast.show({ message: message(err, "No se pudo reenviar la invitación."), tone: "error" });
+    }
+  };
 
   return (
     <>
@@ -99,6 +111,13 @@ export function UsersPage() {
                   <Badge tone={STATUS[u.status].tone}>{STATUS[u.status].label}</Badge>
                 </td>
                 <td>
+                  {!u.has_password && u.status !== "suspended" && (
+                    <>
+                      <Button size="sm" variant="secondary" onClick={() => void reissue(u)}>
+                        Reenviar invitación
+                      </Button>{" "}
+                    </>
+                  )}
                   <Button
                     size="sm"
                     variant={u.status === "suspended" ? "secondary" : "danger"}
