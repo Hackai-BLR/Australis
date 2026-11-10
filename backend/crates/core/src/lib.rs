@@ -20,7 +20,7 @@ impl Config {
     pub fn from_env() -> Self {
         Self {
             database_url: std::env::var("DATABASE_URL")
-                .unwrap_or_else(|_| "sqlite://hackai.db".into()),
+                .unwrap_or_else(|_| "sqlite://australis.db".into()),
             bind_addr: std::env::var("BIND_ADDR").unwrap_or_else(|_| "0.0.0.0:8080".into()),
         }
     }

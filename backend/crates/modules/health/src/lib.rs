@@ -1,7 +1,7 @@
 //! Example module. Each module exposes a `router()` that the server mounts under `/api`.
 
+use australis_core::{AppResult, AppState};
 use axum::{extract::State, routing::get, Json, Router};
-use hackai_core::{AppResult, AppState};
 use serde::Serialize;
 
 pub fn router() -> Router<AppState> {
