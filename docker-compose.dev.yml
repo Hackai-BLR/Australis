@@ -1,0 +1,53 @@
+# Development stack with hot reload.
+# Run: docker compose -f docker-compose.dev.yml up --watch
+name: hackai-dev
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.dev
+    volumes:
+      - hackai-dev-data:/data
+      - hackai-dev-target:/src/target
+      - hackai-dev-cargo:/usr/local/cargo/registry
+    ports:
+      - "8080:8080"
+    develop:
+      watch:
+        - action: sync
+          path: ./backend/crates
+          target: /src/crates
+        - action: sync
+          path: ./backend/Cargo.toml
+          target: /src/Cargo.toml
+        - action: rebuild
+          path: ./backend/Cargo.lock
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.dev
+    environment:
+      API_URL: http://backend:8080
+    depends_on:
+      - backend
+    ports:
+      - "5173:5173"
+    develop:
+      watch:
+        - action: sync
+          path: ./frontend/src
+          target: /app/src
+        - action: sync
+          path: ./frontend/index.html
+          target: /app/index.html
+        - action: rebuild
+          path: ./frontend/package.json
+        - action: rebuild
+          path: ./frontend/vite.config.ts
+
+volumes:
+  hackai-dev-data:
+  hackai-dev-target:
+  hackai-dev-cargo:

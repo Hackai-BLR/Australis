@@ -23,7 +23,8 @@ frontend/
   src/app/                   app shell
   src/shared/                cross-module helpers (api.ts: fetch wrapper over /api)
   src/modules/<name>/        one folder per module; index.ts is its only public surface
-docker-compose.yml
+docker-compose.yml           production-like: release binary + nginx
+docker-compose.dev.yml       dev: cargo watch + Vite dev server, hot reload via compose watch
 ```
 
 ## Module rules
@@ -37,7 +38,11 @@ docker-compose.yml
 - Backend and frontend modules share names (e.g. `health` ↔ `health`).
 
 ## Commands
-- Everything: `docker compose up --build` (frontend http://localhost:3000, API http://localhost:8080/api/health).
+- Dev with hot reload: `docker compose -f docker-compose.dev.yml up --build --watch` (frontend http://localhost:5173, API http://localhost:8080/api/health).
+  - Compose watch syncs `backend/crates` and `frontend/src` into the containers; `cargo watch` recompiles and restarts the server, and Vite does HMR.
+  - Editing `Cargo.lock`, `package.json` or `vite.config.ts` rebuilds the image.
+  - The first build takes about 10 minutes (it installs `cargo-watch`); later builds are cached.
+- Production-like: `docker compose up --build` (frontend http://localhost:3000, API http://localhost:8080/api/health).
 - Backend locally (needs Rust): `cd backend && cargo run -p hackai-server` (defaults: `DATABASE_URL=sqlite://hackai.db`, `BIND_ADDR=0.0.0.0:8080`).
 - Frontend locally: `cd frontend && npm install && npm run dev` (http://localhost:5173, proxies `/api` to `API_URL` or http://localhost:8080).
 - Frontend build/type-check: `npm run build`.
