@@ -7,8 +7,8 @@ version = "0.1.0"
 edition = "2021"
 
 [workspace.dependencies]
-hackai-core = { path = "crates/core" }
-hackai-health = { path = "crates/modules/health" }
+australis-core = { path = "crates/core" }
+australis-health = { path = "crates/modules/health" }
 
 anyhow = "1"
 axum = "0.8"

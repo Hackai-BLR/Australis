@@ -1,6 +1,6 @@
 # Development stack with hot reload.
 # Run: docker compose -f docker-compose.dev.yml up --watch
-name: hackai-dev
+name: australis-dev
 
 services:
   backend:
@@ -10,9 +10,9 @@ services:
     environment:
       RUST_LOG: ${RUST_LOG:-debug,sqlx=warn}
     volumes:
-      - hackai-dev-data:/data
-      - hackai-dev-target:/src/target
-      - hackai-dev-cargo:/usr/local/cargo/registry
+      - australis-dev-data:/data
+      - australis-dev-target:/src/target
+      - australis-dev-cargo:/usr/local/cargo/registry
     ports:
       - "8080:8080"
     develop:
@@ -50,6 +50,6 @@ services:
           path: ./frontend/vite.config.ts
 
 volumes:
-  hackai-dev-data:
-  hackai-dev-target:
-  hackai-dev-cargo:
+  australis-dev-data:
+  australis-dev-target:
+  australis-dev-cargo:

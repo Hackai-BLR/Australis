@@ -1,11 +1,11 @@
 [package]
-name = "hackai-server"
+name = "australis-server"
 version.workspace = true
 edition.workspace = true
 
 [dependencies]
-hackai-core.workspace = true
-hackai-health.workspace = true
+australis-core.workspace = true
+australis-health.workspace = true
 anyhow.workspace = true
 axum.workspace = true
 sqlx.workspace = true

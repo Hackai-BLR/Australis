@@ -1,13 +1,13 @@
-name: hackai
+name: australis
 
 services:
   backend:
     build: ./backend
     environment:
-      DATABASE_URL: sqlite:///data/hackai.db
+      DATABASE_URL: sqlite:///data/australis.db
       RUST_LOG: ${RUST_LOG:-info,sqlx=warn}
     volumes:
-      - hackai-data:/data
+      - australis-data:/data
     ports:
       - "8080:8080"
     restart: unless-stopped
@@ -21,4 +21,4 @@ services:
     restart: unless-stopped
 
 volumes:
-  hackai-data:
+  australis-data:

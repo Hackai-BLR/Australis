@@ -39,6 +39,45 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1505bd5d3d116872e7271a6d4e16d81d0c8570876c8de68093a09ac269d8aac0"
 
 [[package]]
+name = "australis-core"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "serde_json",
+ "sqlx",
+ "thiserror",
+ "tracing",
+]
+
+[[package]]
+name = "australis-health"
+version = "0.1.0"
+dependencies = [
+ "australis-core",
+ "axum",
+ "serde",
+ "sqlx",
+]
+
+[[package]]
+name = "australis-server"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "australis-core",
+ "australis-health",
+ "axum",
+ "http-body-util",
+ "serde_json",
+ "sqlx",
+ "tokio",
+ "tower",
+ "tower-http",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "autocfg"
 version = "1.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -417,45 +456,6 @@ dependencies = [
  "cfg-if",
  "libc",
  "wasi",
-]
-
-[[package]]
-name = "hackai-core"
-version = "0.1.0"
-dependencies = [
- "axum",
- "serde_json",
- "sqlx",
- "thiserror",
- "tracing",
-]
-
-[[package]]
-name = "hackai-health"
-version = "0.1.0"
-dependencies = [
- "axum",
- "hackai-core",
- "serde",
- "sqlx",
-]
-
-[[package]]
-name = "hackai-server"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "axum",
- "hackai-core",
- "hackai-health",
- "http-body-util",
- "serde_json",
- "sqlx",
- "tokio",
- "tower",
- "tower-http",
- "tracing",
- "tracing-subscriber",
 ]
 
 [[package]]
