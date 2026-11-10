@@ -1,0 +1,74 @@
+{
+  "key": "weekly_topics",
+  "name": "Temas semanales",
+  "description": "Un curso ordenado semana a semana: cada semana tiene su tema, sus lecturas y su actividad.",
+  "document": {
+    "schema": 1,
+    "sections": [
+      {
+        "title": "Bienvenida",
+        "kind": "info",
+        "blocks": [
+          { "type": "text", "text": "Bienvenidas y bienvenidos al curso. Acá vas a encontrar el programa, las clases, las grabaciones y tus calificaciones." },
+          { "type": "callout", "text": "Completá esta sección con los objetivos, la modalidad de cursada y los criterios de aprobación." },
+          { "type": "widget", "widget": "join_class" }
+        ]
+      },
+      {
+        "title": "Programa y modalidad",
+        "kind": "info",
+        "blocks": [
+          { "type": "text", "text": "Objetivos del curso:\n- Reconocer los conceptos centrales de la materia.\n- Aplicarlos a casos reales de la práctica profesional.\n- Comunicar los resultados con claridad." },
+          { "type": "text", "text": "Modalidad: clases sincrónicas por videollamada, lecturas guiadas y una actividad breve por semana." }
+        ]
+      },
+      {
+        "title": "Semana 1: Introducción",
+        "kind": "week",
+        "blocks": [
+          { "type": "text", "text": "Presentación del curso y marco general de la materia." },
+          { "type": "checklist", "items": ["Leer el texto introductorio", "Participar en el foro de presentación"] }
+        ]
+      },
+      {
+        "title": "Semana 2: Conceptos centrales",
+        "kind": "week",
+        "blocks": [
+          { "type": "text", "text": "Definiciones y enfoques principales." },
+          { "type": "checklist", "items": ["Leer el capítulo 1", "Resolver la guía de preguntas"] }
+        ]
+      },
+      {
+        "title": "Semana 3: Aplicación",
+        "kind": "week",
+        "blocks": [
+          { "type": "text", "text": "Trabajo con ejemplos y casos de aplicación." },
+          { "type": "checklist", "items": ["Leer el capítulo 2", "Preparar un ejemplo propio"] }
+        ]
+      },
+      {
+        "title": "Semana 4: Cierre del primer módulo",
+        "kind": "week",
+        "blocks": [
+          { "type": "text", "text": "Repaso, dudas y puesta en común de lo trabajado." },
+          { "type": "callout", "text": "Agregá las semanas que necesites hasta completar el cronograma del curso." }
+        ]
+      },
+      {
+        "title": "Clases",
+        "kind": "session",
+        "blocks": [{ "type": "widget", "widget": "classes" }]
+      },
+      {
+        "title": "Grabaciones",
+        "kind": "resources",
+        "blocks": [{ "type": "widget", "widget": "recordings" }]
+      },
+      {
+        "title": "Calificaciones",
+        "kind": "info",
+        "blocks": [{ "type": "widget", "widget": "grades" }]
+      }
+    ]
+  }
+}

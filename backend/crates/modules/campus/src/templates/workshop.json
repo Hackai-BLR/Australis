@@ -1,0 +1,73 @@
+{
+  "key": "workshop",
+  "name": "Taller con entregas",
+  "description": "Un taller práctico con consignas, fechas de entrega y criterios de evaluación para cada trabajo.",
+  "document": {
+    "schema": 1,
+    "sections": [
+      {
+        "title": "Presentación del taller",
+        "kind": "info",
+        "blocks": [
+          { "type": "text", "text": "Este es un taller práctico: se aprende haciendo. Cada encuentro termina con una entrega que se evalúa con una rúbrica conocida de antemano." },
+          { "type": "widget", "widget": "join_class" }
+        ]
+      },
+      {
+        "title": "Cómo se entrega",
+        "kind": "info",
+        "blocks": [
+          { "type": "text", "text": "Las entregas se envían en el plazo indicado en cada consigna. Las entregas fuera de término se evalúan con la penalización que acuerde el equipo docente." },
+          { "type": "callout", "text": "Indicá acá el medio de entrega (correo, plataforma) y el formato esperado." }
+        ]
+      },
+      {
+        "title": "Entrega 1",
+        "kind": "assignment",
+        "blocks": [
+          { "type": "text", "text": "Consigna: describí qué tienen que producir y con qué herramientas." },
+          { "type": "checklist", "items": ["Leer la consigna completa", "Entregar el trabajo en el plazo", "Revisar la rúbrica antes de enviar"] },
+          { "type": "callout", "text": "Fecha de entrega: completar." }
+        ]
+      },
+      {
+        "title": "Entrega 2",
+        "kind": "assignment",
+        "blocks": [
+          { "type": "text", "text": "Consigna: continuación del trabajo anterior, incorporando los comentarios recibidos." },
+          { "type": "checklist", "items": ["Incorporar las correcciones de la entrega 1", "Entregar el trabajo en el plazo"] }
+        ]
+      },
+      {
+        "title": "Entrega final",
+        "kind": "assignment",
+        "blocks": [
+          { "type": "text", "text": "Consigna: trabajo integrador que reúne lo realizado durante el taller." },
+          { "type": "checklist", "items": ["Integrar las entregas anteriores", "Preparar una presentación breve"] }
+        ]
+      },
+      {
+        "title": "Material de apoyo",
+        "kind": "resources",
+        "blocks": [
+          { "type": "text", "text": "Agregá acá guías, plantillas y enlaces útiles para realizar las entregas." }
+        ]
+      },
+      {
+        "title": "Clases",
+        "kind": "session",
+        "blocks": [{ "type": "widget", "widget": "classes" }]
+      },
+      {
+        "title": "Grabaciones",
+        "kind": "resources",
+        "blocks": [{ "type": "widget", "widget": "recordings" }]
+      },
+      {
+        "title": "Calificaciones",
+        "kind": "info",
+        "blocks": [{ "type": "widget", "widget": "grades" }]
+      }
+    ]
+  }
+}

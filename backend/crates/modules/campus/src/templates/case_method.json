@@ -1,0 +1,74 @@
+{
+  "key": "case_method",
+  "name": "Seminario con método del caso",
+  "description": "Un seminario que gira alrededor de casos: lectura previa, preguntas guía y debate en clase.",
+  "document": {
+    "schema": 1,
+    "sections": [
+      {
+        "title": "Cómo funciona el seminario",
+        "kind": "info",
+        "blocks": [
+          { "type": "text", "text": "Cada encuentro parte de un caso que se lee antes de la clase. En clase se debate en grupos y se cierra con una síntesis." },
+          { "type": "callout", "text": "Leer el caso antes de la clase es condición para participar del debate." },
+          { "type": "widget", "widget": "join_class" }
+        ]
+      },
+      {
+        "title": "Caso 1",
+        "kind": "session",
+        "blocks": [
+          { "type": "text", "text": "Resumen del caso: describí en pocas líneas la situación, los actores y el problema a resolver." },
+          { "type": "text", "text": "Preguntas guía:\n1. ¿Cuál es el problema central?\n2. ¿Qué decisiones están en juego y quién las toma?\n3. ¿Qué harían ustedes y por qué?" },
+          { "type": "checklist", "items": ["Leer el caso completo", "Responder las preguntas guía por escrito", "Traer una postura para el debate"] }
+        ]
+      },
+      {
+        "title": "Caso 2",
+        "kind": "session",
+        "blocks": [
+          { "type": "text", "text": "Resumen del caso: situación, actores y problema." },
+          { "type": "checklist", "items": ["Leer el caso completo", "Preparar dos preguntas para el grupo"] }
+        ]
+      },
+      {
+        "title": "Caso 3",
+        "kind": "session",
+        "blocks": [
+          { "type": "text", "text": "Resumen del caso: situación, actores y problema." },
+          { "type": "checklist", "items": ["Leer el caso completo", "Comparar con el caso 1"] }
+        ]
+      },
+      {
+        "title": "Bibliografía",
+        "kind": "resources",
+        "blocks": [
+          { "type": "text", "text": "Listá acá las lecturas obligatorias y complementarias de cada caso." }
+        ]
+      },
+      {
+        "title": "Trabajo final",
+        "kind": "assignment",
+        "blocks": [
+          { "type": "text", "text": "Análisis escrito de un caso elegido por cada estudiante, con recomendación fundamentada." },
+          { "type": "callout", "text": "Indicá la fecha de entrega y la extensión esperada." }
+        ]
+      },
+      {
+        "title": "Clases",
+        "kind": "session",
+        "blocks": [{ "type": "widget", "widget": "classes" }]
+      },
+      {
+        "title": "Grabaciones",
+        "kind": "resources",
+        "blocks": [{ "type": "widget", "widget": "recordings" }]
+      },
+      {
+        "title": "Calificaciones",
+        "kind": "info",
+        "blocks": [{ "type": "widget", "widget": "grades" }]
+      }
+    ]
+  }
+}
