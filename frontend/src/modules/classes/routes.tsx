@@ -3,10 +3,12 @@ import { RequireRole } from "../../shared/auth";
 import type { CampusTab, NavItem } from "../../shared/routing";
 import { ClassesTab } from "./ClassesTab";
 import { ClassPage } from "./ClassPage";
+import { SimulatedMeetingPage } from "./SimulatedMeetingPage";
 import { ZoomConnectPage } from "./ZoomConnectPage";
 
 export const routes: RouteObject[] = [
   { path: "/classes/:cid", element: <ClassPage /> },
+  { path: "/simulado/zoom/:id", element: <SimulatedMeetingPage /> },
   {
     path: "/zoom",
     element: (
