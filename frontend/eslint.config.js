@@ -4,6 +4,7 @@ import reactHooks from "eslint-plugin-react-hooks";
 import reactRefresh from "eslint-plugin-react-refresh";
 import tseslint from "typescript-eslint";
 import prettier from "eslint-config-prettier";
+import moduleBoundaries from "./eslint-rules/module-boundaries.js";
 
 export default tseslint.config(
   { ignores: ["dist"] },
@@ -17,19 +18,18 @@ export default tseslint.config(
     plugins: {
       "react-hooks": reactHooks,
       "react-refresh": reactRefresh,
+      australis: { rules: { "module-boundaries": moduleBoundaries } },
     },
     rules: {
       ...reactHooks.configs.recommended.rules,
       "react-refresh/only-export-components": ["warn", { allowConstantExport: true }],
       // Modules expose a public surface through index.ts; no deep imports into other modules.
-      "no-restricted-imports": [
-        "error",
-        {
-          patterns: [
-            { group: ["**/modules/*/*"], message: "Import modules through their index.ts." },
-          ],
-        },
-      ],
+      // The rule resolves relative paths, so "../health/api" is caught as well as "modules/x/y".
+      "australis/module-boundaries": "error",
     },
+  },
+  {
+    files: ["eslint-rules/**/*.js", "*.config.{js,ts}"],
+    languageOptions: { globals: globals.node },
   },
 );
