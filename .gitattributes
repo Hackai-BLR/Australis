@@ -1,1 +1,9 @@
 * text=auto eol=lf
+
+# Office and PDF files are never text.
+*.xlsx binary
+*.pdf binary
+*.pptx binary
+
+# CSV fixtures test exact bytes (BOM, CRLF, Windows-1252): never normalise them.
+**/fixtures/**/*.csv -text

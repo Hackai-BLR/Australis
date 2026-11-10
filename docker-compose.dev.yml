@@ -8,9 +8,25 @@ services:
       context: ./backend
       dockerfile: Dockerfile.dev
     environment:
+      UPLOAD_DIR: /uploads
       RUST_LOG: ${RUST_LOG:-debug,sqlx=warn}
+      # An empty value means "use the default"; see .env.example.
+      SESSION_TTL_HOURS: ${SESSION_TTL_HOURS:-}
+      COOKIE_SECURE: ${COOKIE_SECURE:-}
+      MAX_UPLOAD_MB: ${MAX_UPLOAD_MB:-}
+      APP_BASE_URL: ${APP_BASE_URL:-http://localhost:5173}
+      AI_PROVIDER: ${AI_PROVIDER:-}
+      AI_API_KEY: ${AI_API_KEY:-}
+      ZOOM_PROVIDER: ${ZOOM_PROVIDER:-}
+      ZOOM_ACCOUNT_ID: ${ZOOM_ACCOUNT_ID:-}
+      ZOOM_CLIENT_ID: ${ZOOM_CLIENT_ID:-}
+      ZOOM_CLIENT_SECRET: ${ZOOM_CLIENT_SECRET:-}
+      SEED_ADMIN_EMAIL: ${SEED_ADMIN_EMAIL:-}
+      SEED_ADMIN_PASSWORD: ${SEED_ADMIN_PASSWORD:-}
+      SEED_DEMO: ${SEED_DEMO:-}
     volumes:
       - australis-dev-data:/data
+      - australis-dev-uploads:/uploads
       - australis-dev-target:/src/target
       - australis-dev-cargo:/usr/local/cargo/registry
     ports:
@@ -51,5 +67,6 @@ services:
 
 volumes:
   australis-dev-data:
+  australis-dev-uploads:
   australis-dev-target:
   australis-dev-cargo:

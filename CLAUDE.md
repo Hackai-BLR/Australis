@@ -30,7 +30,7 @@ A standalone campus platform for postgraduate programs (HackAI 2026, Product tra
 ## Stack
 | Layer | Tech |
 |---|---|
-| Backend | Rust (edition 2021), Cargo workspace, Axum 0.8, Tokio, tower-http (trace, CORS), tracing |
+| Backend | Rust (edition 2021), Cargo workspace, Axum 0.8, Tokio, tower-http (trace), tracing; no CORS layer (the frontend reaches the API on its own origin) |
 | Database | SQLite 3 via sqlx 0.8 (runtime queries, `sqlx::migrate!`), WAL mode, foreign keys on |
 | Frontend | React 18, TypeScript 5.6, Vite 5 |
 | Serving | nginx serves the built frontend and proxies `/api/` to the backend |
@@ -40,10 +40,10 @@ A standalone campus platform for postgraduate programs (HackAI 2026, Product tra
 ```
 backend/
   Cargo.toml                 workspace; shared dependency versions live here
-  crates/core/               shared kernel: Config, connect(), AppState, AppError/AppResult
+  crates/core/               shared kernel (see "Kernel" below)
   crates/modules/<name>/     one crate per module; each exposes `pub fn router() -> Router<AppState>`
-  crates/server/             composition root: lib.rs (init_db, app: mounts modules under /api), main.rs (logging + listener)
-  crates/server/tests/       integration tests
+  crates/server/             composition root: lib.rs (build_state, app: mounts modules under /api), seed.rs (startup seed), main.rs (logging + listener)
+  crates/server/tests/       integration tests; common/mod.rs holds the helpers
   crates/server/migrations/  sqlx migrations, one SQL file per change (NNNN_<module>_<what>.sql)
 frontend/
   src/app/                   app shell
@@ -56,12 +56,39 @@ docker-compose.dev.yml       dev: cargo watch + Vite dev server, hot reload via 
 ## Module rules
 - A backend module depends only on `australis-core`, never on another module. Shared needs go into `core`.
 - Each module owns its tables. Prefix table names with the module name.
-- Adding a backend module:
+- **Kernel tables** (`core_` prefix: users, sessions, invites, campuses, members, audit log, settings, AI usage, AI quota) belong to `australis-core`. Modules reach them only through `australis_core` functions, never with their own SQL. A module table may have foreign keys only to `core_` tables; a reference to another module's row is a plain integer. One exception: a module migration may seed its own default settings with `INSERT OR IGNORE INTO core_settings`.
+- Kernel database functions take `&mut SqliteConnection`; outside a transaction they take the write lock up front (`BEGIN IMMEDIATE`), inside one they join it. `app()` rewrites every non-JSON 4xx/5xx body (axum rejections, 405, 413) to `{"error": ...}`, so handlers can use plain `axum::Json`/`Path`/`Multipart`.
+- The modules `auth`, `campus`, `roster`, `grades`, `classes` and `slides` already exist as skeletons: registered in the workspace, the server crate and `app()`, with their full `[dependencies]`. A feature package only fills in `src/`.
+- **Frozen shared files.** After the kernel and frontend-shell packages, these change only when a package truly cannot finish otherwise (smallest change, reported as a deviation): `backend/Cargo.toml`, `Cargo.lock`, every crate's `Cargo.toml`, `crates/server/src/**`, `crates/core/**`, `tests/common/**`, `frontend/package.json` and its lockfile, `frontend/src/app/**`, `frontend/src/shared/**`, `nginx.conf`, the compose files and CI. Feature packages add no dependencies.
+- **Migration ranges.** core 0001-0049, auth 0050-0099, campus 0100-0149, campus AI shaping 0150-0199, roster 0200-0299, grades 0300-0399, classes 0400-0449, recordings 0450-0499, slides 0500-0599. sqlx applies a lower-numbered file added after a higher one (`tests/migrations.rs` proves it), so branches cannot collide. Never edit a migration that is already on the branch you started from: sqlx refuses to start when a checksum changes. Add a new file instead.
+- Adding a further backend module:
   1. Create `crates/modules/<name>`; it is picked up by the `crates/modules/*` workspace glob.
   2. Add it to `[workspace.dependencies]` and to `crates/server/Cargo.toml`.
   3. Merge its `router()` in `app()` in `crates/server/src/lib.rs`.
+- Routes use axum 0.8 syntax `/{id}` (`/:id` panics at startup). Errors are `AppError`, sent as `{"error": "<message>"}`.
 - Frontend modules import other modules only through their `index.ts` (enforced by ESLint `no-restricted-imports`).
 - Backend and frontend modules share names (e.g. `health` ↔ `health`).
+
+## Kernel (`australis-core`)
+- `auth`: Argon2id passwords, `sign_in`, sessions, the `CurrentUser` extractor (401 without a valid `australis_session` cookie), `Role`.
+- `access`: `require_role`, and `require_campus(conn, &user, campus_id, Access::Manage | Teach | View)`. Manage: the secretary, or a professor member. Teach: Manage plus a guest member. View: Teach plus an active student member. Suspended means no access.
+- `directory`: users, campuses, members (add, suspend, reactivate; never delete), invites (only for an account with no password).
+- `audit`: call `audit::record(&mut tx, ...)` in the same transaction as the change. The table is append-only.
+- `settings`: grading scale, final-grade rule, AI quota, UTC offset. Never constants. The seeded grading rules are unconfirmed guesses (`"confirmed": false`); the screens must say so.
+- `ai`: modules call the AI through `ai::run(...)`. It reserves the per-user daily quota (fails closed, 429), calls the provider and writes the usage log. A provider cannot be called without a quota reservation.
+- `files` (`FileStore` under `UPLOAD_DIR`), `live` (`LiveHub` pub/sub), `http::upload_body_limit()` (layer for upload routes).
+- Database functions take `&mut SqliteConnection`: pass `&mut conn` from `state.db.acquire()`, or `&mut tx` from `australis_core::begin_write(&state.db)` for a transaction that writes.
+
+## Placeholder providers
+Nothing in this build calls an outside service. Each provider is a trait in core with a placeholder in `AppState`. The UI shows a "Simulado" badge wherever placeholder data appears.
+
+| Trait | Placeholder | What it returns |
+|---|---|---|
+| `AiProvider` (`state.ai`) | `PlaceholderAi` | Scripted replies from `crates/core/scripts/*.json`, matched by keyword; a fixed reply for anything else |
+| `ZoomProvider` (`state.zoom`) | `PlaceholderZoom` | A made-up meeting whose links point at the app, and a sample recording with the transcript in `crates/core/samples/` |
+| `SlideConverter` (`state.slides`) | `NoConverter` | "Not configured": upload a PDF instead of a `.pptx` |
+
+`AI_PROVIDER` and `ZOOM_PROVIDER` accept only `placeholder`. The keys in `.env.example` are reserved for real providers.
 
 ## Commands
 - Dev with hot reload: `docker compose -f docker-compose.dev.yml up --build --watch` (frontend http://localhost:5173, API http://localhost:8080/api/health).
@@ -72,11 +99,15 @@ docker-compose.dev.yml       dev: cargo watch + Vite dev server, hot reload via 
 - Backend locally (needs Rust): `cd backend && cargo run -p australis-server` (defaults: `DATABASE_URL=sqlite://australis.db`, `BIND_ADDR=0.0.0.0:8080`).
 - Frontend locally: `cd frontend && npm install && npm run dev` (http://localhost:5173, proxies `/api` to `API_URL` or http://localhost:8080).
 - Frontend build/type-check: `npm run build`. Lint: `npm run lint`. Format: `npm run format` (check: `npm run format:check`).
-- Backend checks (in Docker, no local Rust): `docker run --rm -v "${PWD}:/src" -w /src rust:1-slim-bookworm sh -c "rustup component add rustfmt clippy && cargo fmt --all --check && cargo clippy --all-targets -- -D warnings && cargo test"` from `backend/`.
-- Env vars: see `.env.example`; copy it to `.env` (Compose reads it).
+- Backend checks (in Docker, no local Rust), from the repo root in PowerShell: `docker run --rm -v "${PWD}:/src" -v australis-cargo-registry:/usr/local/cargo/registry -v australis-target:/target -e CARGO_TARGET_DIR=/target -w /src/backend australis-check sh -c "cargo fmt --all --check && cargo clippy --all-targets --locked -- -D warnings && cargo test --locked"`.
+  - `australis-check` is `rust:1-slim-bookworm` plus rustfmt and clippy. Build it once from a Dockerfile with two lines: `FROM rust:1-slim-bookworm` and `RUN rustup component add rustfmt clippy`.
+  - Use one target volume per worktree (`australis-target-<name>`). While iterating, run one test file: `cargo test --test <module>`.
+- Env vars: see `.env.example`; copy it to `.env` (Compose reads it and passes each variable to the backend).
+- First accounts: set `SEED_ADMIN_EMAIL` and `SEED_ADMIN_PASSWORD` to create the first secretary at startup. `SEED_DEMO=true` adds fake professors and students with the same password. The seed never changes an existing account.
 
 ## Testing
-- Backend integration tests live in `crates/server/tests/`. Use `common::test_app()` (fresh in-memory SQLite with migrations) and `common::get_json()`; requests go through `tower::ServiceExt::oneshot`, no port needed.
+- Backend integration tests live in `crates/server/tests/`. `common::TestApp::new()` gives `{ router, db, state }` on its own temp-file SQLite database, with migrations applied and placeholder providers. Requests go through `tower::ServiceExt::oneshot`, no port needed.
+- Requests: `app.get`, `post_json`, `put_json`, `patch_json`, `delete`, `post_multipart`, each with an optional session cookie. Seeding: `app.login_as(role)`, `seed_campus(&owner)`, `seed_student(campus)`, `seed_guest(campus)`.
 - One test file per module (`tests/<module>.rs`).
 
 ## CI
@@ -87,4 +118,4 @@ docker-compose.dev.yml       dev: cargo watch + Vite dev server, hot reload via 
 
 ## Notes
 - Rust is not installed on the Windows host; build and run the backend through Docker.
-- The SQLite file lives in the `australis-data` Docker volume at `/data/australis.db`.
+- The SQLite file lives in the `australis-data` Docker volume at `/data/australis.db`. Uploads live in the `australis-uploads` volume at `/uploads`.
