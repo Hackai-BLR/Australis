@@ -139,11 +139,13 @@ export function RosterTab() {
                     {m.suspended_reason && <div>Motivo: {m.suspended_reason}</div>}
                   </td>
                   <td className="au-row">
-                    {m.status === "active" && m.user_status === "invited" && (
-                      <Button size="sm" variant="secondary" onClick={() => void reinvite(m)}>
-                        Nuevo enlace
-                      </Button>
-                    )}
+                    {m.role === "student" &&
+                      m.status === "active" &&
+                      m.user_status === "invited" && (
+                        <Button size="sm" variant="secondary" onClick={() => void reinvite(m)}>
+                          Nuevo enlace
+                        </Button>
+                      )}
                     {m.role !== "professor" && (
                       <Button
                         size="sm"

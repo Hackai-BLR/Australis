@@ -666,3 +666,120 @@ async fn no_route_deletes_users_or_members() {
     assert_eq!(count(&app, "core_users").await, users);
     assert_eq!(count(&app, "core_members").await, members);
 }
+
+async fn invited_account(app: &TestApp, email: &str, role: Role) -> i64 {
+    let mut conn = app.db.acquire().await.unwrap();
+    directory::create_user(
+        &mut conn,
+        NewUser {
+            email,
+            full_name: "Pendiente",
+            role,
+            password_hash: None,
+        },
+    )
+    .await
+    .unwrap()
+    .id
+}
+
+#[tokio::test]
+async fn a_pending_professor_cannot_be_taken_over_through_guest_and_reinvite() {
+    let app = TestApp::new().await;
+    let attacker = app.login_as(Role::Professor).await;
+    let campus = app.seed_campus(&attacker).await;
+    let pending = invited_account(&app, "pendiente@test.example", Role::Professor).await;
+
+    let (status, _) = app
+        .post_json(
+            &format!("/api/campuses/{campus}/teachers"),
+            Some(&attacker.cookie),
+            json!({ "email": "pendiente@test.example" }),
+        )
+        .await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+
+    // Even if the account were a guest member, reinvite covers students only.
+    let mut conn = app.db.acquire().await.unwrap();
+    directory::add_member(&mut conn, attacker.id, campus, pending, MemberRole::Guest)
+        .await
+        .unwrap();
+    drop(conn);
+    let (status, body) = app
+        .post_json(
+            &format!("/api/campuses/{campus}/members/{pending}/invite"),
+            Some(&attacker.cookie),
+            json!({}),
+        )
+        .await;
+    assert!(!status.is_success(), "{body}");
+    assert_eq!(count(&app, "core_invites").await, 0);
+}
+
+#[tokio::test]
+async fn confirming_never_issues_a_link_for_an_existing_account() {
+    let app = TestApp::new().await;
+    let prof_b = app.login_as(Role::Professor).await;
+    let campus_b = app.seed_campus(&prof_b).await;
+    let prof_a = app.login_as(Role::Professor).await;
+    let campus_a = app.seed_campus(&prof_a).await;
+
+    let (_, preview) = paste(&app, &prof_b, campus_b, "S;s@alumnos.test\n").await;
+    let (_, result) = confirm(&app, &prof_b, campus_b, preview["id"].as_i64().unwrap()).await;
+    let student = result["invites"][0]["user_id"].as_i64().unwrap();
+    let url = result["invites"][0]["invite_url"].as_str().unwrap();
+    let token = url.rsplit('/').next().unwrap().to_string();
+
+    let (_, preview) = paste(&app, &prof_a, campus_a, "S;s@alumnos.test\n").await;
+    assert_eq!(preview["importable"], 1);
+    let (status, result) = confirm(&app, &prof_a, campus_a, preview["id"].as_i64().unwrap()).await;
+    assert_eq!(status, StatusCode::OK, "{result}");
+    assert_eq!(result["added_existing"], 1);
+    assert_eq!(result["invites"].as_array().unwrap().len(), 0);
+    // B's link still works.
+    let (status, _) = app.get(&format!("/api/auth/invites/{token}"), None).await;
+    assert_eq!(status, StatusCode::OK);
+
+    // And A cannot re-issue it for a student who also belongs to another campus.
+    let (status, _) = app
+        .post_json(
+            &format!("/api/campuses/{campus_a}/members/{student}/invite"),
+            Some(&prof_a.cookie),
+            json!({}),
+        )
+        .await;
+    assert_eq!(status, StatusCode::CONFLICT);
+    let (status, _) = app.get(&format!("/api/auth/invites/{token}"), None).await;
+    assert_eq!(status, StatusCode::OK);
+}
+
+#[tokio::test]
+async fn extra_columns_are_dropped_without_a_header_or_a_name_column() {
+    let app = TestApp::new().await;
+    let professor = app.login_as(Role::Professor).await;
+    let campus = app.seed_campus(&professor).await;
+
+    let text = "Ana Pérez;30111222;Comisión 2;ana@alumnos.test\n";
+    let (status, preview) = paste(&app, &professor, campus, text).await;
+    assert_eq!(status, StatusCode::CREATED, "{preview}");
+    assert_eq!(row(&preview, "ana@alumnos.test")["full_name"], "Ana Pérez");
+    assert!(!preview.to_string().contains("30111222"));
+
+    // A header with an email column but no name column stores no name from other columns.
+    let (_, preview) = paste(
+        &app,
+        &professor,
+        campus,
+        "DNI;Email\n30111222;luis@alumnos.test\n",
+    )
+    .await;
+    let luis = row(&preview, "luis@alumnos.test");
+    assert_eq!(luis["full_name"], "");
+    assert_eq!(luis["importable"], false);
+    assert!(!preview.to_string().contains("30111222"));
+    let stored: Vec<String> = sqlx::query_scalar("SELECT full_name FROM roster_import_rows")
+        .fetch_all(&app.db)
+        .await
+        .unwrap();
+    assert!(stored.iter().all(|n| !n.contains("3011")));
+}

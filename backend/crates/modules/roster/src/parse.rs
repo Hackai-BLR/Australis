@@ -203,7 +203,7 @@ fn rows_to_parsed(rows: Vec<Vec<String>>) -> AppResult<Vec<ParsedRow>> {
         let (name, email) = match &header {
             Some(h) => {
                 let cell = |i: Option<usize>| i.and_then(|i| row.get(i)).map(|c| clean(c));
-                let mut name = cell(h.full).filter(|n| !n.is_empty()).unwrap_or_else(|| {
+                let name = cell(h.full).filter(|n| !n.is_empty()).unwrap_or_else(|| {
                     [cell(h.given), cell(h.family)]
                         .into_iter()
                         .flatten()
@@ -211,33 +211,25 @@ fn rows_to_parsed(rows: Vec<Vec<String>>) -> AppResult<Vec<ParsedRow>> {
                         .collect::<Vec<_>>()
                         .join(" ")
                 });
-                if name.is_empty() && h.full.is_none() && h.given.is_none() && h.family.is_none() {
-                    name = row
-                        .iter()
-                        .enumerate()
-                        .filter(|(i, _)| *i != h.email)
-                        .map(|(_, c)| clean(c))
-                        .find(|c| !c.is_empty())
-                        .unwrap_or_default();
-                }
                 let (email, extra) = split_email_cell(row.get(h.email).map_or("", String::as_str));
                 (clean(&format!("{name} {extra}")), clean(&email))
             }
             None => {
+                // No header: the name is the text around the email, else the first other cell
+                // without digits. Every other cell (ids, groups) is dropped.
                 let at = row.iter().position(|c| c.contains('@'));
-                let mut email = String::new();
-                let mut parts: Vec<String> = Vec::new();
-                for (i, cell) in row.iter().enumerate() {
-                    if Some(i) == at {
-                        let (e, extra) = split_email_cell(cell);
-                        email = e;
-                        parts.push(extra);
-                    } else {
-                        parts.push(cell.clone());
-                    }
+                let (email, extra) = at.map(|i| split_email_cell(&row[i])).unwrap_or_default();
+                let mut name = clean(&extra);
+                if name.is_empty() {
+                    name = row
+                        .iter()
+                        .enumerate()
+                        .filter(|(i, _)| Some(*i) != at)
+                        .map(|(_, c)| clean(c))
+                        .find(|c| !c.is_empty() && !c.chars().any(|ch| ch.is_ascii_digit()))
+                        .unwrap_or_default();
                 }
-                let name = parts.iter().map(|p| clean(p)).filter(|p| !p.is_empty());
-                (name.collect::<Vec<_>>().join(" "), clean(&email))
+                (name, clean(&email))
             }
         };
         parsed.push(ParsedRow {

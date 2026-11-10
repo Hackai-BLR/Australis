@@ -379,8 +379,10 @@ async fn confirm(
         } else {
             result.added_existing += 1;
         }
-        // An account that never set a password gets a link; one that did signs in as usual.
-        if !account.has_password {
+        // Only an account created by this import gets a link. An existing account keeps its
+        // own sign-in or pending link: issuing one here would revoke it and let this campus's
+        // professor take over the account.
+        if is_new {
             let token = directory::create_invite(
                 &mut tx,
                 user.id,
@@ -507,9 +509,24 @@ async fn reinvite(
 ) -> AppResult<Json<serde_json::Value>> {
     let mut tx = begin_write(&state.db).await?;
     australis_core::require_campus(&mut tx, &user, campus_id, Access::Manage).await?;
-    directory::find_member(&mut tx, campus_id, target)
+    let member = directory::find_member(&mut tx, campus_id, target)
         .await?
         .ok_or(AppError::NotFound)?;
+    if member.role != MemberRole::Student {
+        return Err(AppError::Unprocessable(
+            "an invite link can only be re-issued for a student".into(),
+        ));
+    }
+    // A student who also belongs to another campus may have a pending link from there.
+    let account = directory::find_user(&mut tx, target)
+        .await?
+        .ok_or(AppError::NotFound)?;
+    let campuses = directory::campuses_for_user(&mut tx, &account.into()).await?;
+    if campuses.iter().any(|c| c.id != campus_id) {
+        return Err(AppError::Conflict(
+            "the student belongs to other campuses; the link cannot be re-issued here".into(),
+        ));
+    }
     let token =
         directory::create_invite(&mut tx, user.id, target, state.config.invite_ttl_hours).await?;
     tx.commit().await?;
@@ -539,6 +556,11 @@ async fn add_teacher(
     if account.role != Role::Professor {
         return Err(AppError::Unprocessable(
             "only a professor account can be added as a guest teacher".into(),
+        ));
+    }
+    if !account.has_password {
+        return Err(AppError::Unprocessable(
+            "the professor has not activated the account yet".into(),
         ));
     }
     let member =
