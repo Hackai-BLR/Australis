@@ -3,7 +3,7 @@
 //! build the same app.
 
 use anyhow::bail;
-use australis_core::{auth, config::PLACEHOLDER_PROVIDER, AppError, AppState, Config};
+use australis_core::{auth, config::PLACEHOLDER_PROVIDER, http, AppError, AppState, Config};
 use axum::Router;
 use sqlx::SqlitePool;
 use tower_http::trace::TraceLayer;
@@ -51,6 +51,7 @@ pub fn app(state: AppState) -> Router {
     Router::new()
         .nest("/api", api)
         .fallback(|| async { AppError::NotFound })
+        .layer(axum::middleware::from_fn(http::json_error_bodies))
         .layer(TraceLayer::new_for_http())
         .with_state(state)
 }

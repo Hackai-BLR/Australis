@@ -12,7 +12,7 @@
 
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use sqlx::{Connection as _, SqliteConnection};
+use sqlx::SqliteConnection;
 
 use crate::{
     access::Access,
@@ -190,7 +190,7 @@ pub async fn find_user_by_email(
     email: &str,
 ) -> AppResult<Option<User>> {
     let user = sqlx::query_as::<_, User>(&format!("{USER_SELECT} WHERE u.email = ?"))
-        .bind(email.trim())
+        .bind(email.trim().to_lowercase())
         .fetch_optional(conn)
         .await?;
     Ok(user)
@@ -243,7 +243,7 @@ pub async fn suspend_user(
             "you cannot suspend your own account".into(),
         ));
     }
-    let mut tx = conn.begin().await?;
+    let mut tx = crate::begin_nested(conn).await?;
     let before = find_user(&mut tx, user_id)
         .await?
         .ok_or(AppError::NotFound)?;
@@ -287,7 +287,7 @@ pub async fn reactivate_user(
     reason: &str,
 ) -> AppResult<User> {
     let reason = required_text(reason, "the reason", 500)?;
-    let mut tx = conn.begin().await?;
+    let mut tx = crate::begin_nested(conn).await?;
     let before = find_user(&mut tx, user_id)
         .await?
         .ok_or(AppError::NotFound)?;
@@ -339,7 +339,7 @@ pub async fn create_campus(
     owner_id: i64,
 ) -> AppResult<Campus> {
     let name = required_text(name, "the campus name", 200)?;
-    let mut tx = conn.begin().await?;
+    let mut tx = crate::begin_nested(conn).await?;
     let result = sqlx::query("INSERT INTO core_campuses (name, owner_id) VALUES (?, ?)")
         .bind(&name)
         .bind(owner_id)
@@ -434,7 +434,7 @@ pub async fn add_member(
     user_id: i64,
     role: MemberRole,
 ) -> AppResult<Member> {
-    let mut tx = conn.begin().await?;
+    let mut tx = crate::begin_nested(conn).await?;
     let user = find_user(&mut tx, user_id)
         .await?
         .ok_or(AppError::NotFound)?;
@@ -526,7 +526,7 @@ pub async fn suspend_member(
     reason: &str,
 ) -> AppResult<Member> {
     let reason = required_text(reason, "the reason", 500)?;
-    let mut tx = conn.begin().await?;
+    let mut tx = crate::begin_nested(conn).await?;
     let before = find_member(&mut tx, campus_id, user_id)
         .await?
         .ok_or(AppError::NotFound)?;
@@ -577,7 +577,7 @@ pub async fn reactivate_member(
     reason: &str,
 ) -> AppResult<Member> {
     let reason = required_text(reason, "the reason", 500)?;
-    let mut tx = conn.begin().await?;
+    let mut tx = crate::begin_nested(conn).await?;
     let before = find_member(&mut tx, campus_id, user_id)
         .await?
         .ok_or(AppError::NotFound)?;
@@ -633,7 +633,7 @@ pub async fn create_invite(
     user_id: i64,
     ttl_hours: i64,
 ) -> AppResult<String> {
-    let mut tx = conn.begin().await?;
+    let mut tx = crate::begin_nested(conn).await?;
     let user = find_user(&mut tx, user_id)
         .await?
         .ok_or(AppError::NotFound)?;
@@ -705,7 +705,7 @@ pub async fn accept_invite(
     password_hash: &str,
 ) -> AppResult<User> {
     let token_hash = auth::hash_token(token);
-    let mut tx = conn.begin().await?;
+    let mut tx = crate::begin_nested(conn).await?;
     let invite = sqlx::query_as::<_, InviteRow>(
         "SELECT user_id, (used_at IS NOT NULL) AS used, (revoked_at IS NOT NULL) AS revoked,
                 (expires_at <= datetime('now')) AS expired

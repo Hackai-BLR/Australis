@@ -16,7 +16,7 @@ use std::{str::FromStr, sync::Arc, time::Duration};
 
 use sqlx::{
     sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePool, SqlitePoolOptions},
-    Sqlite, Transaction,
+    Connection, Sqlite, SqliteConnection, Transaction,
 };
 
 pub mod access;
@@ -76,7 +76,10 @@ pub async fn connect(database_url: &str) -> Result<SqlitePool, sqlx::Error> {
         .create_if_missing(true)
         .journal_mode(SqliteJournalMode::Wal)
         .busy_timeout(Duration::from_secs(5))
-        .foreign_keys(true);
+        .foreign_keys(true)
+        // The audit and never-delete triggers must also fire for the delete that
+        // INSERT OR REPLACE performs.
+        .pragma("recursive_triggers", "ON");
     SqlitePoolOptions::new()
         .max_connections(5)
         .connect_with(options)
@@ -88,4 +91,17 @@ pub async fn connect(database_url: &str) -> Result<SqlitePool, sqlx::Error> {
 /// "database is locked". Use it for every transaction that writes.
 pub async fn begin_write(db: &SqlitePool) -> AppResult<Transaction<'static, Sqlite>> {
     Ok(db.begin_with("BEGIN IMMEDIATE").await?)
+}
+
+/// Starts a transaction on a connection a kernel function received. Outside a transaction it
+/// is `BEGIN IMMEDIATE` (the write lock is taken up front, so the busy timeout applies);
+/// inside one it is a savepoint, so the function joins the caller's transaction.
+pub(crate) async fn begin_nested(
+    conn: &mut SqliteConnection,
+) -> AppResult<Transaction<'_, Sqlite>> {
+    if conn.is_in_transaction() {
+        Ok(conn.begin().await?)
+    } else {
+        Ok(conn.begin_with("BEGIN IMMEDIATE").await?)
+    }
 }
