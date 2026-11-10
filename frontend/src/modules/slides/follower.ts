@@ -40,11 +40,15 @@ export function followerReducer(state: FollowerState, action: FollowerAction): F
       if (held && held.id === incoming.id && incoming.seq < held.seq) return state;
       // A different session (the professor started another one) starts fresh.
       const sameSession = held !== null && held.id === incoming.id;
-      return { live: incoming, localPage: sameSession ? state.localPage : null };
+      // The professor arriving at the student's page means the student follows again.
+      const keep = sameSession && state.localPage !== incoming.current_page;
+      return { live: incoming, localPage: keep ? state.localPage : null };
     }
     case "browse": {
       if (!state.live) return state;
-      return { ...state, localPage: clamp(action.page, state.live.page_count) };
+      const page = clamp(action.page, state.live.page_count);
+      // Browsing onto the professor's page is following again.
+      return { ...state, localPage: page === state.live.current_page ? null : page };
     }
     case "backToLive":
       return { ...state, localPage: null };
@@ -63,4 +67,9 @@ export function isBehindLive(state: FollowerState): boolean {
   return state.live?.status === "live" && state.localPage !== null
     ? state.localPage !== state.live.current_page
     : false;
+}
+
+/** True while the student holds their own page; the view is then not following the professor. */
+export function isBrowsing(state: FollowerState): boolean {
+  return state.localPage !== null;
 }
