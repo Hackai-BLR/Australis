@@ -23,6 +23,20 @@ function mockBackend(role: Role | null) {
           : json(401, { error: "unauthorized" });
       }
       if (url === "/api/health") return json(200, { status: "ok", database: "ok" });
+      if (url === "/api/campuses/4" && role) {
+        return json(200, {
+          id: 4,
+          name: "Campus de prueba",
+          owner_id: 1,
+          created_at: "2026-11-10 10:00:00",
+          access: role === "student" ? "view" : "manage",
+          member_role: role === "student" ? "student" : "professor",
+          template_key: "workshop",
+          version: 1,
+          updated_at: "2026-11-10 10:00:00",
+          document: { schema: 1, sections: [] },
+        });
+      }
       return json(404, { error: "not found" });
     }),
   );
@@ -85,7 +99,7 @@ describe("app routes", () => {
     renderAt("/campuses/4/students");
     expect(await screen.findByText("Estudiantes del campus")).toBeTruthy();
     const tabs = screen.getByRole("navigation", { name: "Secciones del campus" });
-    expect(tabs.querySelectorAll("a")).toHaveLength(5);
+    expect(tabs.querySelectorAll("a")).toHaveLength(6);
   });
 
   it("stays signed in and shows an error when logout fails", async () => {
