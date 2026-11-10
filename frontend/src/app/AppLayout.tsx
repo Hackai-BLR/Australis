@@ -10,6 +10,7 @@ export function AppLayout({ navItems }: { navItems: NavItem[] }) {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const [leaving, setLeaving] = useState(false);
+  const [logoutError, setLogoutError] = useState<string | null>(null);
 
   const items = navItems
     .filter((item) => hasRole(user, item.roles))
@@ -17,11 +18,16 @@ export function AppLayout({ navItems }: { navItems: NavItem[] }) {
 
   const onLogout = async () => {
     setLeaving(true);
+    setLogoutError(null);
     try {
       await logout();
-    } finally {
-      navigate("/login", { replace: true });
+    } catch {
+      // The session may still be alive on the server: stay here and say so.
+      setLeaving(false);
+      setLogoutError("No se pudo cerrar la sesión. Revisá la conexión e intentá de nuevo.");
+      return;
     }
+    navigate("/login", { replace: true });
   };
 
   return (
@@ -47,6 +53,11 @@ export function AppLayout({ navItems }: { navItems: NavItem[] }) {
             <Button variant="secondary" size="sm" onClick={onLogout} loading={leaving}>
               Cerrar sesión
             </Button>
+            {logoutError && (
+              <p role="alert" className="au-user__error">
+                {logoutError}
+              </p>
+            )}
           </div>
         )}
       </aside>

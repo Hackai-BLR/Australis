@@ -1,4 +1,5 @@
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { RouterProvider, createMemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AuthProvider, type Role } from "../shared/auth";
@@ -85,5 +86,48 @@ describe("app routes", () => {
     expect(await screen.findByText("Estudiantes del campus")).toBeTruthy();
     const tabs = screen.getByRole("navigation", { name: "Secciones del campus" });
     expect(tabs.querySelectorAll("a")).toHaveLength(5);
+  });
+
+  it("stays signed in and shows an error when logout fails", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        if (url === "/api/auth/me")
+          return json(200, {
+            id: 1,
+            email: "p@demo.test",
+            full_name: "Prof Demo",
+            role: "professor",
+          });
+        if (url === "/api/auth/logout") return json(500, { error: "boom" });
+        return json(404, { error: "not found" });
+      }),
+    );
+    const router = renderAt("/");
+    await userEvent.click(await screen.findByRole("button", { name: "Cerrar sesión" }));
+    expect((await screen.findByRole("alert")).textContent).toContain("No se pudo cerrar la sesión");
+    expect(router.state.location.pathname).toBe("/");
+    expect(screen.getByText("Prof Demo")).toBeTruthy();
+  });
+
+  it("goes to the login page after a successful logout", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        if (url === "/api/auth/me")
+          return json(200, {
+            id: 1,
+            email: "p@demo.test",
+            full_name: "Prof Demo",
+            role: "professor",
+          });
+        if (url === "/api/auth/logout") return new Response(null, { status: 204 });
+        return json(404, { error: "not found" });
+      }),
+    );
+    const router = renderAt("/");
+    await userEvent.click(await screen.findByRole("button", { name: "Cerrar sesión" }));
+    expect(await screen.findByRole("button", { name: "Ingresar" })).toBeTruthy();
+    expect(router.state.location.pathname).toBe("/login");
   });
 });

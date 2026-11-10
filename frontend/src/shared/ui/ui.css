@@ -447,6 +447,10 @@ a {
 .au-user__name {
   font-weight: var(--weight-medium);
 }
+.au-user__error {
+  margin: 0;
+  color: var(--color-danger);
+}
 .au-main {
   padding: var(--space-6);
   min-width: 0;

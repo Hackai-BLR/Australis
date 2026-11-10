@@ -101,6 +101,34 @@ describe("AuthProvider actions", () => {
     expect(fetchMock.mock.calls[1][1].method).toBe("POST");
   });
 
+  it("keeps the user signed in and rejects when logout fails", async () => {
+    fetchMock.mockResolvedValueOnce(json(200, ANA));
+    const text = renderProvider();
+    await waitFor(() => expect(text()).toBe("authenticated:ana@demo.test"));
+
+    fetchMock.mockResolvedValueOnce(json(500, { error: "boom" }));
+    await act(async () => {
+      await expect(auth.logout()).rejects.toEqual(new ApiError(500, "boom"));
+    });
+    expect(text()).toBe("authenticated:ana@demo.test");
+
+    fetchMock.mockRejectedValueOnce(new TypeError("Failed to fetch"));
+    await act(async () => {
+      await expect(auth.logout()).rejects.toBeInstanceOf(Error);
+    });
+    expect(text()).toBe("authenticated:ana@demo.test");
+  });
+
+  it("treats a 401 on logout as already signed out", async () => {
+    fetchMock.mockResolvedValueOnce(json(200, ANA));
+    const text = renderProvider();
+    await waitFor(() => expect(text()).toBe("authenticated:ana@demo.test"));
+
+    fetchMock.mockResolvedValueOnce(json(401, { error: "unauthorized" }));
+    await act(() => auth.logout());
+    expect(text()).toBe("anonymous:none");
+  });
+
   it("clears the user when any API call returns 401", async () => {
     fetchMock.mockResolvedValueOnce(json(200, ANA));
     const text = renderProvider();
