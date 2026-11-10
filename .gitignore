@@ -11,5 +11,8 @@ frontend/*.tsbuildinfo
 *.db-shm
 *.db-wal
 
+# Uploaded files (UPLOAD_DIR)
+uploads/
+
 # Env
 .env
