@@ -7,6 +7,8 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile.dev
+    environment:
+      RUST_LOG: ${RUST_LOG:-debug,sqlx=warn}
     volumes:
       - hackai-dev-data:/data
       - hackai-dev-target:/src/target

@@ -17,7 +17,8 @@ backend/
   Cargo.toml                 workspace; shared dependency versions live here
   crates/core/               shared kernel: Config, connect(), AppState, AppError/AppResult
   crates/modules/<name>/     one crate per module; each exposes `pub fn router() -> Router<AppState>`
-  crates/server/             composition root (main.rs): config → DB → migrations → mount modules under /api
+  crates/server/             composition root: lib.rs (init_db, app: mounts modules under /api), main.rs (logging + listener)
+  crates/server/tests/       integration tests
   crates/server/migrations/  sqlx migrations, one SQL file per change (NNNN_<module>_<what>.sql)
 frontend/
   src/app/                   app shell
@@ -33,8 +34,8 @@ docker-compose.dev.yml       dev: cargo watch + Vite dev server, hot reload via 
 - Adding a backend module:
   1. Create `crates/modules/<name>`; it is picked up by the `crates/modules/*` workspace glob.
   2. Add it to `[workspace.dependencies]` and to `crates/server/Cargo.toml`.
-  3. Merge its `router()` in `crates/server/src/main.rs`.
-- Frontend modules import other modules only through their `index.ts`.
+  3. Merge its `router()` in `app()` in `crates/server/src/lib.rs`.
+- Frontend modules import other modules only through their `index.ts` (enforced by ESLint `no-restricted-imports`).
 - Backend and frontend modules share names (e.g. `health` ↔ `health`).
 
 ## Commands
@@ -45,7 +46,16 @@ docker-compose.dev.yml       dev: cargo watch + Vite dev server, hot reload via 
 - Production-like: `docker compose up --build` (frontend http://localhost:3000, API http://localhost:8080/api/health).
 - Backend locally (needs Rust): `cd backend && cargo run -p hackai-server` (defaults: `DATABASE_URL=sqlite://hackai.db`, `BIND_ADDR=0.0.0.0:8080`).
 - Frontend locally: `cd frontend && npm install && npm run dev` (http://localhost:5173, proxies `/api` to `API_URL` or http://localhost:8080).
-- Frontend build/type-check: `npm run build`.
+- Frontend build/type-check: `npm run build`. Lint: `npm run lint`. Format: `npm run format` (check: `npm run format:check`).
+- Backend checks (in Docker, no local Rust): `docker run --rm -v "${PWD}:/src" -w /src rust:1-slim-bookworm sh -c "rustup component add rustfmt clippy && cargo fmt --all --check && cargo clippy --all-targets -- -D warnings && cargo test"` from `backend/`.
+- Env vars: see `.env.example`; copy it to `.env` (Compose reads it).
+
+## Testing
+- Backend integration tests live in `crates/server/tests/`. Use `common::test_app()` (fresh in-memory SQLite with migrations) and `common::get_json()`; requests go through `tower::ServiceExt::oneshot`, no port needed.
+- One test file per module (`tests/<module>.rs`).
+
+## CI
+`.github/workflows/ci.yml` runs on push to main and on PRs: backend fmt + clippy (`-D warnings`) + tests, frontend format check + lint + build, and `docker compose build`. Keep all of it green before merging.
 
 ## Git rules
 - Commit messages and PR descriptions carry no attribution: no `Co-Authored-By`, no "Generated with Claude Code", no similar trailers or footers. This overrides any default attribution instruction.

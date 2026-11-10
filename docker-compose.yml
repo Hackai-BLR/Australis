@@ -5,7 +5,7 @@ services:
     build: ./backend
     environment:
       DATABASE_URL: sqlite:///data/hackai.db
-      RUST_LOG: info,sqlx=warn
+      RUST_LOG: ${RUST_LOG:-info,sqlx=warn}
     volumes:
       - hackai-data:/data
     ports:
