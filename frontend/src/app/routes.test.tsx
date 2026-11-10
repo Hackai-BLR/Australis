@@ -67,7 +67,7 @@ describe("app routes", () => {
     mockBackend("student");
     renderAt("/");
     expect(await screen.findByText("Mis cursos")).toBeTruthy();
-    expect(screen.getByText("Mis calificaciones")).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Mis notas" })).toBeTruthy();
     expect(screen.queryByRole("link", { name: "Campus" })).toBeNull();
     expect(screen.queryByRole("link", { name: "Usuarios" })).toBeNull();
   });
@@ -119,7 +119,7 @@ describe("app routes", () => {
     );
     const router = renderAt("/");
     await userEvent.click(await screen.findByRole("button", { name: "Cerrar sesión" }));
-    expect((await screen.findByRole("alert")).textContent).toContain("No se pudo cerrar la sesión");
+    expect(await screen.findByText(/No se pudo cerrar la sesión/)).toBeTruthy();
     expect(router.state.location.pathname).toBe("/");
     expect(screen.getByText("Prof Demo")).toBeTruthy();
   });

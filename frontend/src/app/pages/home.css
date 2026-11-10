@@ -1,0 +1,17 @@
+.home-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 16rem), 1fr));
+  gap: var(--space-4);
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+.home-grid .au-card {
+  height: 100%;
+}
+.home-course__final {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
