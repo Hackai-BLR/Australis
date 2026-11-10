@@ -1,0 +1,161 @@
+{
+  "feature": "shaping",
+  "unknown": "Esta es una respuesta simulada: el asistente de IA todavía no está conectado y no tengo una propuesta preparada para ese pedido. Probá con: \"agregá una semana sobre ética antes del examen\", \"agregá la bibliografía\", \"agregá un aviso de bienvenida\", \"agregá las entregas\" o \"agregá el cronograma\".",
+  "replies": [
+    {
+      "id": "refuse-records",
+      "keywords": [
+        "nota",
+        "notas",
+        "calificacion",
+        "calificaciones",
+        "asistencia",
+        "asistencias",
+        "acta",
+        "actas",
+        "aprobar",
+        "desaprobar",
+        "aplazo"
+      ],
+      "text": "No puedo cambiar notas, asistencia ni actas cerradas. Solo puedo proponer cambios en la estructura y el contenido del campus, y siempre los revisás antes de aceptarlos.",
+      "tool_calls": []
+    },
+    {
+      "id": "ethics-week",
+      "keywords": ["etica"],
+      "text": "Propongo agregar una semana sobre ética profesional antes del examen, con una lectura breve y una consigna de debate.",
+      "tool_calls": [
+        {
+          "name": "add_section",
+          "input": {
+            "title": "Semana de ética profesional",
+            "placement": { "before_title_containing": "examen" },
+            "blocks": [
+              {
+                "type": "text",
+                "text": "Esta semana trabajamos los dilemas éticos más frecuentes de la práctica profesional y cómo fundamentar una decisión."
+              },
+              {
+                "type": "checklist",
+                "items": [
+                  "Leer el caso de la semana antes de la clase",
+                  "Traer por escrito una postura de media página",
+                  "Participar del debate en clase"
+                ]
+              },
+              {
+                "type": "callout",
+                "text": "La participación en el debate no lleva nota: es preparación para el examen."
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "bibliography",
+      "keywords": ["bibliografia", "lecturas", "lectura", "material", "materiales"],
+      "text": "Propongo agregar una sección de bibliografía con las lecturas obligatorias y las complementarias.",
+      "tool_calls": [
+        {
+          "name": "add_section",
+          "input": {
+            "title": "Bibliografía",
+            "placement": { "at": "end" },
+            "blocks": [
+              {
+                "type": "text",
+                "text": "Lecturas obligatorias: completá acá los títulos y capítulos de cada unidad."
+              },
+              {
+                "type": "text",
+                "text": "Lecturas complementarias: material optativo para profundizar."
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "welcome",
+      "keywords": ["bienvenida", "aviso", "anuncio", "presentacion"],
+      "text": "Propongo agregar al principio un aviso de bienvenida con lo que cada estudiante necesita saber el primer día.",
+      "tool_calls": [
+        {
+          "name": "add_section",
+          "input": {
+            "title": "Bienvenida",
+            "placement": { "at": "start" },
+            "blocks": [
+              {
+                "type": "callout",
+                "text": "¡Bienvenidos y bienvenidas! En este campus van a encontrar las clases, las grabaciones, las presentaciones y las notas del curso."
+              },
+              {
+                "type": "checklist",
+                "items": [
+                  "Revisar el cronograma",
+                  "Entrar a la clase de hoy desde el botón de inicio",
+                  "Escribir al equipo docente ante cualquier duda"
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "deliverables",
+      "keywords": ["entrega", "entregas", "trabajo practico", "trabajos practicos", "tp", "tps"],
+      "text": "Propongo agregar una sección con las entregas del curso y lo que se espera de cada una.",
+      "tool_calls": [
+        {
+          "name": "add_section",
+          "input": {
+            "title": "Entregas",
+            "placement": { "at": "end" },
+            "blocks": [
+              {
+                "type": "text",
+                "text": "Cada entrega se sube en la fecha indicada. Completá acá las consignas y las fechas."
+              },
+              {
+                "type": "checklist",
+                "items": [
+                  "Entrega 1: análisis de un caso",
+                  "Entrega 2: propuesta de trabajo final",
+                  "Entrega 3: trabajo final"
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "schedule",
+      "keywords": ["cronograma", "calendario", "semanas", "agenda"],
+      "text": "Propongo agregar un cronograma con el tema de cada semana.",
+      "tool_calls": [
+        {
+          "name": "add_section",
+          "input": {
+            "title": "Cronograma",
+            "placement": { "at": "start" },
+            "blocks": [
+              {
+                "type": "checklist",
+                "items": [
+                  "Semana 1: presentación del curso",
+                  "Semana 2: marco teórico",
+                  "Semana 3: casos de estudio",
+                  "Semana 4: taller y cierre"
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}
