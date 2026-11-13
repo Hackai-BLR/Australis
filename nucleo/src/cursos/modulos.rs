@@ -205,7 +205,7 @@ pub async fn de_la_universidad_para_admin(app: &App, universidad: Option<i64>) -
         .await;
     }
     let filas = sqlx::query(&format!(
-        "SELECT c.id, c.nombre, \
+        "SELECT c.id, c.campus_externo, c.nombre, \
          (SELECT COUNT(*) FROM inscripciones_modulos i JOIN usuarios u ON u.id = i.usuario_id WHERE i.campus_id = c.id AND i.suspendida = 0 \
           AND i.rol IN ('dueño', 'profesor') AND NOT {x}) AS profesores, \
          (SELECT COUNT(*) FROM inscripciones_modulos i JOIN usuarios u ON u.id = i.usuario_id WHERE i.campus_id = c.id AND i.suspendida = 0 \
@@ -231,7 +231,7 @@ pub async fn de_la_universidad_para_admin(app: &App, universidad: Option<i64>) -
                 }),
                 None => Value::Null,
             };
-            let mut curso = json_modulos(f.get("id"), 0, &nombre, "administrador");
+            let mut curso = json_modulos(f.get("id"), f.get("campus_externo"), &nombre, "administrador");
             curso["dueno"] = dueno;
             curso["profesores"] = json!(f.get::<i64, _>("profesores"));
             curso["alumnos"] = json!(f.get::<i64, _>("alumnos"));
