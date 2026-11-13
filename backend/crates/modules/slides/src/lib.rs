@@ -10,6 +10,8 @@
 
 use std::convert::Infallible;
 
+pub mod notes;
+
 use australis_core::{
     http::upload_body_limit, require_campus, Access, AppError, AppResult, AppState, CurrentUser,
 };
@@ -41,6 +43,7 @@ pub fn router() -> Router<AppState> {
         .route("/live/{lid}/stream", get(stream_state))
         .route("/live/{lid}/goto", post(goto))
         .route("/live/{lid}/end", post(end))
+        .merge(notes::router())
 }
 
 // --- types -----------------------------------------------------------------------------------

@@ -13,6 +13,7 @@ import {
   type Presentation,
 } from "./api";
 import { isBrowsing, viewPage, type LiveState } from "./follower";
+import { NotesPanel } from "./notes/NotesPanel";
 import { PdfViewer } from "./PdfViewer";
 import { POLL_MS, useLiveFollow } from "./useLiveFollow";
 import { useCampusId } from "./useCampusId";
@@ -342,6 +343,7 @@ function FollowerView({ campusId }: { campusId: string }) {
           Estás explorando por tu cuenta. El docente está en la página {live.current_page}.
         </p>
       )}
+      <NotesPanel presentationId={live.presentation_id} page={page} />
     </Card>
   );
 }
