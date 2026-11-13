@@ -159,6 +159,13 @@ if [ -f sdk/package.json ] && [ -f plantilla-curso/package.json ]; then
     test -f "plantilla-curso/$esperado" || { echo "falta plantilla-curso/$esperado despues de empaquetar el SDK" >&2; exit 1; }
   fi
   compgen -G "plantilla-curso/vendor/campusia-sdk-*.tgz" >/dev/null
+  node -e "
+const c=require(\"crypto\"),fs=require(\"fs\");
+const t=fs.readdirSync(\"plantilla-curso/vendor\").find((f)=>/^campusia-sdk-.*[.]tgz\$/.test(f));
+const h=\"sha512-\"+c.createHash(\"sha512\").update(fs.readFileSync(\"plantilla-curso/vendor/\"+t)).digest(\"base64\");
+const l=fs.readFileSync(\"plantilla-curso/pnpm-lock.yaml\",\"utf8\");
+if(!l.includes(\"integrity: \"+h+\", tarball: file:vendor/\"+t)){console.error(\"el bloqueo de plantilla-curso no coincide con el SDK empaquetado (\"+h+\"); regenerar plantilla-curso/pnpm-lock.yaml\");process.exit(1)}
+"
 fi
 '
 

@@ -210,7 +210,7 @@ importers:
 packages:
 
   '@campusia/sdk@file:vendor/campusia-sdk-0.3.0.tgz':
-    resolution: {integrity: sha512-JSBJfiJI37ZGPmtk5aDkHLJXz3F2oCm+zLwdXeh4h8K/LV5J8ZS/Max+lsuPpC3RVzveZHd1xMuCC59oSxjJOg==, tarball: file:vendor/campusia-sdk-0.3.0.tgz}
+    resolution: {integrity: sha512-1rxLYAdcVF366Xx35Q1t59MW6f+EE0Sxi68iJ6Rw5ctVUYRvQMSBIb+R4Gal+xyQlqOARWw1xx3dhQGOibM2gw==, tarball: file:vendor/campusia-sdk-0.3.0.tgz}
     version: 0.3.0
     engines: {node: '>=20'}
     peerDependencies:
