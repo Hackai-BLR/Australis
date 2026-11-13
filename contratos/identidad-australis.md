@@ -26,7 +26,7 @@ Lo usan el núcleo (que firma y reenvía) y el backend de Australis (que verific
 
 - `AUTH_MODE=header` y `IDENTITY_PUBLIC_KEY` (clave pública del núcleo, 32 bytes en base64url sin relleno; el núcleo la publica con `Identidad::publica`). Sin la clave, el backend no arranca en ese modo.
 - Rechaza con 401: encabezado ausente, firma inválida, `v` distinto de 1, `curso` distinto de `australis`, vencido, emitido más de 30 segundos en el futuro o con vigencia mayor a 120 segundos.
-- Rol en Australis: `dueño` o `administrador` es secretaría; `profesor`, profesor; todo lo demás, alumno. El rol y el nombre se actualizan en cada pedido si cambiaron en el núcleo.
+- Rol en Australis: `dueño` es secretaría (el núcleo firma `administrador: true` solo para el dueño, porque Australis no conoce universidades y un administrador de universidad vería las de las demás); `profesor`, profesor; todo lo demás, alumno. El rol y el nombre se actualizan en cada pedido si cambiaron en el núcleo.
 - La cuenta se crea la primera vez que aparece (sin contraseña). Una cuenta invitada por la importación de alumnos se activa. Una cuenta suspendida en Australis responde 403.
 - En este modo no existen `POST /api/auth/login`, `/api/auth/invites/*`, `POST /api/users` ni `POST /api/users/{id}/invite` (404), y la cookie `australis_session` no autentica a nadie.
 - `GET /api/auth/mode` responde `{"mode":"password"|"header"}`. Con `AUTH_MODE=password` (por defecto, para desarrollo local y pruebas) el encabezado se ignora.

@@ -13,6 +13,8 @@ use crate::db::auditar;
 use crate::login::{contar, registrar};
 use crate::util::*;
 
+pub mod modulos;
+
 const COLORES: [&str; 7] = ["#1F7A4D", "#A4492A", "#6E4BA8", "#A87400", "#5B7A1E", "#9C2F6A", "#2E6A8E"];
 const ALFABETO: &[u8] = b"ABCDEFGHJKMNPQRSTUVWXYZ23456789";
 const RESERVADOS: [&str; 40] = [

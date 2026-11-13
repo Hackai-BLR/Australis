@@ -330,6 +330,12 @@ pub fn router(app: Estado) -> Router {
         .route("/api/owner/universidades/{id}/dominios", post(owner::agregar_dominio))
         .route("/api/owner/uso", get(owner::uso))
         .route("/api/cursos", post(cursos::crear))
+        .route("/api/cursos-modulos", post(cursos::modulos::crear))
+        .route(
+            "/api/cursos-modulos/{id}/inscriptos",
+            get(cursos::modulos::listar_inscriptos).post(cursos::modulos::agregar_inscriptos),
+        )
+        .route("/api/cursos-modulos/{id}/sincronizar", post(cursos::modulos::sincronizar))
         .route("/api/cursos/{id}", get(cursos::ver))
         .route("/api/cursos/{id}/inscriptos", get(cursos::listar_inscriptos).post(cursos::agregar_inscriptos))
         .route(

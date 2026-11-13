@@ -76,7 +76,8 @@ export function MisCursos({
                     className="tarj"
                     data-curso={c.id}
                     onClick={() => {
-                      window.location.href = urlCurso(c.id);
+                      window.location.href =
+                        c.tipo === 'modulos' ? `${urlCurso('campus').replace(/\/$/, '')}/campuses/${c.campus_externo}` : urlCurso(c.id);
                     }}
                   >
                     <div className="franja" style={{ background: c.color }}></div>
@@ -88,7 +89,7 @@ export function MisCursos({
                     )}
                     <div className="tc">
                       <b>{c.nombre}</b>
-                      <span className="sub">{c.periodo}</span>
+                      <span className="sub">{c.tipo === 'modulos' ? 'Campus con módulos' : c.periodo}</span>
                     </div>
                   </button>
                 ))}
