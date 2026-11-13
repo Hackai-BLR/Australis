@@ -12,7 +12,7 @@ import {
   uploadPresentation,
   type Presentation,
 } from "./api";
-import { isBehindLive, viewPage, type LiveState } from "./follower";
+import { isBrowsing, viewPage, type LiveState } from "./follower";
 import { PdfViewer } from "./PdfViewer";
 import { POLL_MS, useLiveFollow } from "./useLiveFollow";
 import { useCampusId } from "./useCampusId";
@@ -308,7 +308,7 @@ function FollowerView({ campusId }: { campusId: string }) {
   }
 
   const page = viewPage(state);
-  const behind = isBehindLive(state);
+  const behind = isBrowsing(state);
   const browse = (p: number) => dispatch({ type: "browse", page: p });
   return (
     <Card

@@ -3,6 +3,7 @@ import {
   followerReducer,
   initialFollower,
   isBehindLive,
+  isBrowsing,
   viewPage,
   type FollowerState,
   type LiveState,
@@ -70,5 +71,36 @@ describe("followerReducer", () => {
     state = apply(state, live(0, 1, 2));
     expect(state.live?.id).toBe(2);
     expect(viewPage(state)).toBe(1);
+  });
+
+  it("follows again when the student browses onto the professor's page", () => {
+    let state = apply(initialFollower, live(1, 5));
+    state = followerReducer(state, { type: "browse", page: 8 });
+    state = followerReducer(state, { type: "browse", page: 5 });
+    expect(state.localPage).toBeNull();
+    state = apply(state, live(2, 6));
+    expect(viewPage(state)).toBe(6);
+  });
+
+  it("follows again when the professor arrives at the student's page", () => {
+    let state = apply(initialFollower, live(1, 2));
+    state = followerReducer(state, { type: "browse", page: 4 });
+    state = apply(state, live(2, 3));
+    expect(state.localPage).toBe(4);
+    state = apply(state, live(3, 4));
+    expect(state.localPage).toBeNull();
+    state = apply(state, live(4, 5));
+    expect(viewPage(state)).toBe(5);
+  });
+
+  it("reports browsing whenever a local page is held", () => {
+    let state = apply(initialFollower, live(1, 2));
+    expect(isBrowsing(state)).toBe(false);
+    state = followerReducer(state, { type: "browse", page: 7 });
+    expect(isBrowsing(state)).toBe(true);
+    expect(isBehindLive(state)).toBe(true);
+    state = followerReducer(state, { type: "browse", page: 2 });
+    expect(isBrowsing(state)).toBe(false);
+    expect(isBehindLive(state)).toBe(false);
   });
 });
