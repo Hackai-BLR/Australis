@@ -196,9 +196,11 @@ async fn lanzar_pnpm(programa: &str, previos: &[&str], dir: &Path, args: &[&str]
         .await
 }
 
+const PNPM_FIJADO: &str = "pnpm@12.18.0";
+
 async fn correr_pnpm_con(principal: &str, respaldo: &str, dir: &Path, args: &[&str]) -> anyhow::Result<()> {
     let r = match lanzar_pnpm(principal, &[], dir, args).await {
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => lanzar_pnpm(respaldo, &["pnpm"], dir, args).await,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => lanzar_pnpm(respaldo, &[PNPM_FIJADO], dir, args).await,
         otro => otro,
     }
     .map_err(|e| anyhow::anyhow!("no se pudo ejecutar pnpm: {e}"))?;
@@ -712,6 +714,20 @@ mod pruebas_pnpm {
     async fn usa_corepack_cuando_no_hay_pnpm() {
         let dir = std::env::temp_dir();
         correr_pnpm_con("pnpm-que-no-existe-xyz", "echo", &dir, &["--version"]).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn el_respaldo_pasa_la_version_fijada() {
+        let dir = std::env::temp_dir();
+        let r = lanzar_pnpm("echo", &[PNPM_FIJADO], &dir, &["x"]).await.unwrap();
+        assert_eq!(String::from_utf8_lossy(&r.stdout).trim(), "pnpm@12.18.0 x");
+    }
+
+    #[test]
+    fn la_version_fijada_coincide_con_la_plantilla() {
+        let p = concat!(env!("CARGO_MANIFEST_DIR"), "/../plantilla-curso/package.json");
+        let t = std::fs::read_to_string(p).unwrap();
+        assert!(t.contains(&format!("\"packageManager\": \"{PNPM_FIJADO}\"")));
     }
 
     #[tokio::test]
