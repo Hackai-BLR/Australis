@@ -41,6 +41,7 @@ pub struct Config {
     pub construccion_max_seg: i64,
     pub identidad_clave_privada: Option<String>,
     pub identidad_vigencia_seg: i64,
+    pub australis_url: Option<String>,
     pub limite_unirse_usuario: i64,
     pub limite_unirse_ip: i64,
     pub raiz_archivos: PathBuf,
@@ -205,7 +206,21 @@ fn tipos_archivos() -> Result<Vec<String>, String> {
     Ok(tipos)
 }
 
-pub fn es_desarrollo() -> Result<bool, String> {
+fn australis_url() -> Result<Option<String>, String> {
+    match var("AUSTRALIS_URL") {
+        None => Ok(None),
+        Some(v) => {
+            let v = v.trim_end_matches('/').to_string();
+            if (v.starts_with("http://") || v.starts_with("https://")) && !v.contains(char::is_whitespace) {
+                Ok(Some(v))
+            } else {
+                Err("AUSTRALIS_URL tiene que ser una URL http o https".to_string())
+            }
+        }
+    }
+}
+
+pub fn es_desarrollo() ->Result<bool, String> {
     match var("ENTORNO").as_deref() {
         None | Some("produccion") => Ok(false),
         Some("desarrollo") => Ok(true),
@@ -360,6 +375,7 @@ impl Config {
             construccion_max_seg: entero("CONSTRUCCION_MAX_SEG", 900)?.max(1),
             identidad_clave_privada: identidad_clave_privada()?,
             identidad_vigencia_seg: entero("IDENTIDAD_VIGENCIA_SEG", 60)?.clamp(1, 120),
+            australis_url: australis_url()?,
             limite_unirse_usuario: entero("LIMITE_UNIRSE_USUARIO", 10)?,
             limite_unirse_ip: entero("LIMITE_UNIRSE_IP", 30)?,
             raiz_archivos: absoluta("RAIZ_ARCHIVOS", "/srv/campusia/archivos")?,

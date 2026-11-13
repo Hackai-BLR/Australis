@@ -18,8 +18,11 @@ pub enum Host {
     Plataforma,
     Curso(String),
     Prueba(String),
+    Australis,
     Ajeno,
 }
+
+pub const SUBDOMINIO_AUSTRALIS: &str = "campus";
 
 pub fn separar_host(crudo: &str) -> (String, Option<String>) {
     let crudo = crudo.trim().to_ascii_lowercase();
@@ -52,6 +55,9 @@ pub fn clasificar(nombre: &str, base: &str) -> Host {
     }
     if let Some(id) = sub.strip_suffix("-prueba") {
         return if etiqueta_valida(id) { Host::Prueba(id.to_string()) } else { Host::Ajeno };
+    }
+    if sub == SUBDOMINIO_AUSTRALIS {
+        return Host::Australis;
     }
     Host::Plataforma
 }
@@ -104,6 +110,7 @@ pub async fn filtro(State(app): State<Estado>, req: Request, next: Next) -> Resp
             Host::Ajeno => no_encontrado_texto(),
             Host::Curso(id) => crate::enrutador::atender(&app, &id, puerto.as_deref(), req).await,
             Host::Prueba(id) => crate::prueba::atender(&app, &id, puerto.as_deref(), req).await,
+            Host::Australis => crate::enrutador::atender_australis(&app, puerto.as_deref(), req).await,
             Host::Plataforma => {
                 if ruta == "/modelo" || ruta.starts_with("/modelo/") {
                     no_encontrado_texto()
