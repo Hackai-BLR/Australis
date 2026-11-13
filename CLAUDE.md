@@ -18,7 +18,7 @@ A standalone campus platform for postgraduate programs (HackAI 2026, Product tra
   7. Zoom meeting per class with a "join today's class" button
   8. Automatic recording and Zoom transcript on the class page
   9. Synced presentations: students' pages follow the professor's current slide
-- **Later builds:** everything marked "Later" in `docs/features.md` (attendance, AI class summary, dropout alerts, surveys, unofficial certificates, closing grades, and more). Don't build these until the first build is done.
+- **Later builds:** the first build is merged. Everything marked "Later" in `docs/features.md` is built in phases following `docs/plan.md`, the main plan: it lists each feature's dependencies, owned paths and migration range, and how to claim a feature (a branch `feat/f<NN>-<slug>` and a draft pull request). Read it and check what is already taken on GitHub before starting any feature.
 - **Rules for every feature:**
   - The AI never changes grades, attendance or closed records.
   - A removed student is suspended, never deleted. Changes to grades or attendance are logged with who, when and why.
@@ -61,6 +61,7 @@ docker-compose.dev.yml       dev: cargo watch + Vite dev server, hot reload via 
 - The modules `auth`, `campus`, `roster`, `grades`, `classes` and `slides` already exist as skeletons: registered in the workspace, the server crate and `app()`, with their full `[dependencies]`. A feature package only fills in `src/`.
 - **Frozen shared files.** After the kernel and frontend-shell packages, these change only when a package truly cannot finish otherwise (smallest change, reported as a deviation): `backend/Cargo.toml`, `Cargo.lock`, every crate's `Cargo.toml`, `crates/server/src/**`, `crates/core/**`, `tests/common/**`, `frontend/package.json` and its lockfile, `frontend/src/app/**`, `frontend/src/shared/**`, `nginx.conf`, the compose files and CI. Feature packages add no dependencies.
 - **Migration ranges.** core 0001-0049, auth 0050-0099, campus 0100-0149, campus AI shaping 0150-0199, roster 0200-0299, grades 0300-0399, classes 0400-0449, recordings 0450-0499, slides 0500-0599. sqlx applies a lower-numbered file added after a higher one (`tests/migrations.rs` proves it), so branches cannot collide. Never edit a migration that is already on the branch you started from: sqlx refuses to start when a checksum changes. Add a new file instead.
+- **After the first build** each feature `F<NN>` in `docs/plan.md` has its own migration range, `0600 + (NN - 10) * 10` and the nine numbers after it. Only a phase kickoff (`phase/<N>`) edits the frozen shared files.
 - Adding a further backend module:
   1. Create `crates/modules/<name>`; it is picked up by the `crates/modules/*` workspace glob.
   2. Add it to `[workspace.dependencies]` and to `crates/server/Cargo.toml`.

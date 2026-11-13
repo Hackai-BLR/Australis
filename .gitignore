@@ -16,3 +16,6 @@ uploads/
 
 # Env
 .env
+
+# Claude Code agent worktrees
+.claude/worktrees/
