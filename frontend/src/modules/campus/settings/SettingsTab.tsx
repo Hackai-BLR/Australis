@@ -40,6 +40,32 @@ function message(err: unknown, fallback: string): string {
   return err instanceof ApiError ? err.message : fallback;
 }
 
+const ERRORS_ES: Record<string, string> = {
+  "the grading scale needs min, max and pass":
+    "La escala necesita nota mínima, máxima y de aprobación.",
+  "the grading scale needs min < max and a pass mark inside it":
+    "La nota mínima debe ser menor que la máxima, y la de aprobación debe estar dentro de la escala.",
+  "the grading scale leaves scores already entered outside it":
+    "La escala deja afuera notas que ya se cargaron.",
+  "this setting cannot be set for one campus":
+    "Esta regla no se puede definir para un solo campus.",
+};
+
+/** The save error in Spanish: known server messages are mapped, anything else is generic. */
+function saveMessage(err: unknown): string {
+  if (err instanceof ApiError) {
+    const known = ERRORS_ES[err.message];
+    if (known) return known;
+    if (err.status === 403) return "No tenés permiso para cambiar esta configuración.";
+  }
+  return "No se pudo guardar el cambio. Revisá los valores e intentá de nuevo.";
+}
+
+const FIELD_NAMES: Record<string, string[]> = {
+  "grading.scale": ["min", "max", "pass"],
+  "attendance.rule": ["min_percent"],
+};
+
 type Editing = { entry: SettingEntry; mode: "edit" | "reset" };
 
 /** "Configuración" tab: per-campus overrides of the grading and attendance rules. */
@@ -52,6 +78,7 @@ export function SettingsTab() {
   const [fields, setFields] = useState<Record<string, string>>({});
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -75,6 +102,7 @@ export function SettingsTab() {
       min_percent: String(value.min_percent ?? ""),
     });
     setReason("");
+    setSaveError(null);
     setEditing({ entry, mode });
   }
 
@@ -95,6 +123,11 @@ export function SettingsTab() {
   async function save() {
     if (!editing) return;
     const { entry, mode } = editing;
+    if (mode === "edit" && (FIELD_NAMES[entry.key] ?? []).some((f) => !fields[f]?.trim())) {
+      setSaveError("Completá todos los valores numéricos antes de guardar.");
+      return;
+    }
+    setSaveError(null);
     setBusy(true);
     try {
       if (mode === "edit") {
@@ -109,7 +142,7 @@ export function SettingsTab() {
       setEditing(null);
       await load();
     } catch (err) {
-      setNotice({ tone: "error", text: message(err, "No se pudo guardar el cambio.") });
+      setSaveError(saveMessage(err));
     } finally {
       setBusy(false);
     }
@@ -226,6 +259,11 @@ export function SettingsTab() {
         }
       >
         <div className="au-stack">
+          {saveError && (
+            <p className="au-field__error" role="alert" style={{ margin: 0 }}>
+              {saveError}
+            </p>
+          )}
           {editing?.mode === "edit" && key === "grading.scale" && (
             <>
               {field("min", "Nota mínima")}

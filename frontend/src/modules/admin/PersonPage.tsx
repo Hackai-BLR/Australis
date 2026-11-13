@@ -17,6 +17,7 @@ export function PersonPage() {
   useEffect(() => {
     let live = true;
     setPerson(null);
+    setError(null);
     apiGet<PersonDetail>(`/admin/people/${id}`)
       .then((p) => {
         if (live) setPerson(p);

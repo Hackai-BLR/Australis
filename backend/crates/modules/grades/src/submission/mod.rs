@@ -222,6 +222,7 @@ async fn list_all(State(state): State<AppState>, user: CurrentUser) -> AppResult
             "campus_id": campus.id,
             "campus_name": campus.name,
             "university": campus.university,
+            "university_name": campus.university,
             "students": campus.students,
             "status": sub.status,
             "note": sub.note,

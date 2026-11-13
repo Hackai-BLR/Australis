@@ -4,6 +4,7 @@ export type CampusSummary = {
   id: number;
   name: string;
   university: string | null;
+  university_name?: string | null;
   created_at: string;
   professors: number;
   guests: number;

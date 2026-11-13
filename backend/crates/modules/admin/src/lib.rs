@@ -57,6 +57,15 @@ impl From<User> for Person {
     }
 }
 
+/// A campus with the name to show for its university. The kernel stores only the platform's
+/// opaque university id and no name, so the name is the id until the platform sends one.
+#[derive(Serialize)]
+struct CampusRow {
+    #[serde(flatten)]
+    campus: CampusSummary,
+    university_name: Option<String>,
+}
+
 #[derive(Serialize)]
 struct PersonDetail {
     #[serde(flatten)]
@@ -100,13 +109,20 @@ async fn campuses(
     State(state): State<AppState>,
     user: CurrentUser,
     Query(query): Query<CampusQuery>,
-) -> AppResult<Json<Vec<CampusSummary>>> {
+) -> AppResult<Json<Vec<CampusRow>>> {
     let mut conn = state.db.acquire().await?;
     let mut list = directory::list_campus_summaries(&mut conn, &user).await?;
     if let Some(needle) = needle(&query.q) {
         list.retain(|campus| campus.name.to_lowercase().contains(&needle));
     }
-    Ok(Json(list))
+    let rows = list
+        .into_iter()
+        .map(|campus| CampusRow {
+            university_name: campus.university.clone(),
+            campus,
+        })
+        .collect();
+    Ok(Json(rows))
 }
 
 async fn people(

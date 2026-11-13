@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -87,5 +87,54 @@ describe("SettingsTab", () => {
       expect(call?.[0]).toContain("/campuses/7/settings/attendance.rule");
       expect(JSON.parse(call?.[1].body).reason).toBe("Pedido del coordinador");
     });
+  });
+
+  async function openScale() {
+    renderTab();
+    await screen.findByText("Escala de calificaciones");
+    await userEvent.click(screen.getAllByRole("button", { name: "Modificar" })[0]);
+    await userEvent.type(screen.getByLabelText("Motivo del cambio"), "Prueba");
+  }
+
+  it("shows a Spanish error inside the dialog when the save fails", async () => {
+    fetchMock.mockImplementation((_url: string, init?: RequestInit) =>
+      Promise.resolve(
+        init?.method === "PUT"
+          ? json(422, { error: "the grading scale needs min < max and a pass mark inside it" })
+          : json(200, overview),
+      ),
+    );
+    await openScale();
+    await userEvent.click(screen.getByRole("button", { name: "Guardar" }));
+    const dialog = await screen.findByRole("dialog");
+    const alert = await within(dialog).findByRole("alert");
+    expect(alert.textContent).toContain("La nota mínima debe ser menor que la máxima");
+    expect(screen.queryByText(/the grading scale/)).toBeNull();
+  });
+
+  it("falls back to a generic Spanish message for unknown errors", async () => {
+    fetchMock.mockImplementation((_url: string, init?: RequestInit) =>
+      Promise.resolve(
+        init?.method === "PUT" ? json(500, { error: "database is locked" }) : json(200, overview),
+      ),
+    );
+    await openScale();
+    await userEvent.click(screen.getByRole("button", { name: "Guardar" }));
+    const dialog = await screen.findByRole("dialog");
+    expect((await within(dialog).findByRole("alert")).textContent).toContain(
+      "No se pudo guardar el cambio",
+    );
+  });
+
+  it("does not send a cleared number field as 0", async () => {
+    fetchMock.mockResolvedValue(json(200, overview));
+    await openScale();
+    await userEvent.clear(screen.getByLabelText("Nota de aprobación"));
+    await userEvent.click(screen.getByRole("button", { name: "Guardar" }));
+    const dialog = await screen.findByRole("dialog");
+    expect((await within(dialog).findByRole("alert")).textContent).toContain(
+      "Completá todos los valores",
+    );
+    expect(fetchMock.mock.calls.some((c) => c[1]?.method === "PUT")).toBe(false);
   });
 });

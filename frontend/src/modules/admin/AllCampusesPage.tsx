@@ -114,6 +114,7 @@ export function AllCampusesPage() {
               <thead>
                 <tr>
                   <th>Nombre</th>
+                  <th>Universidad</th>
                   <th>Docentes</th>
                   <th>Invitados</th>
                   <th>Estudiantes</th>
@@ -126,6 +127,7 @@ export function AllCampusesPage() {
                     <td>
                       <Link to={`/campuses/${c.id}`}>{c.name}</Link>
                     </td>
+                    <td>{c.university_name ?? c.university ?? "—"}</td>
                     <td>{c.professors}</td>
                     <td>{c.guests}</td>
                     <td>{c.students}</td>
