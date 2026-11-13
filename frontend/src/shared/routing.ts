@@ -5,6 +5,7 @@
 //               ("/campuses"); wrap role-only pages in <RequireRole>.
 //   campusTabs: CampusTab[] shown as tabs inside /campuses/:id.
 //   navItems:   NavItem[] added to the sidebar (optional; [] when none).
+//   globalWidgets: GlobalWidget[] shown on every signed-in page (optional; most modules omit it).
 // The auth module also exports publicRoutes (pages reachable without a session, e.g. /login).
 import type { ReactNode } from "react";
 import type { Role } from "./auth";
@@ -22,6 +23,13 @@ export type CampusTab = {
   access: CampusAccess;
   /** Sort key; lower comes first. */
   order: number;
+};
+
+/** Something a module shows on every signed-in page, outside the page itself (a floating button). */
+export type GlobalWidget = {
+  /** Stable key, unique across modules. */
+  id: string;
+  element: ReactNode;
 };
 
 export type NavItem = {
