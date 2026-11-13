@@ -240,6 +240,7 @@ dependencies = [
  "australis-health",
  "australis-roster",
  "australis-slides",
+ "australis-support",
  "axum",
  "base64 0.22.1",
  "ed25519-dalek",
@@ -280,6 +281,16 @@ dependencies = [
  "tokio",
  "tokio-stream",
  "tracing",
+]
+
+[[package]]
+name = "australis-support"
+version = "0.1.0"
+dependencies = [
+ "australis-core",
+ "axum",
+ "serde",
+ "sqlx",
 ]
 
 [[package]]

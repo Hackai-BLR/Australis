@@ -17,6 +17,7 @@ australis-grades = { path = "crates/modules/grades" }
 australis-health = { path = "crates/modules/health" }
 australis-roster = { path = "crates/modules/roster" }
 australis-slides = { path = "crates/modules/slides" }
+australis-support = { path = "crates/modules/support" }
 
 anyhow = "1"
 argon2 = "0.5"

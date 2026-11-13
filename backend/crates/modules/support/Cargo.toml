@@ -1,0 +1,10 @@
+[package]
+name = "australis-support"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+australis-core.workspace = true
+axum.workspace = true
+serde.workspace = true
+sqlx.workspace = true
