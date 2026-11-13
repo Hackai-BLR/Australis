@@ -42,6 +42,7 @@ pub struct Config {
     pub identidad_clave_privada: Option<String>,
     pub identidad_vigencia_seg: i64,
     pub australis_url: Option<String>,
+    pub australis_token_modelo: Option<String>,
     pub limite_unirse_usuario: i64,
     pub limite_unirse_ip: i64,
     pub raiz_archivos: PathBuf,
@@ -220,6 +221,14 @@ fn australis_url() -> Result<Option<String>, String> {
     }
 }
 
+fn australis_token_modelo() -> Result<Option<String>, String> {
+    match var("AUSTRALIS_TOKEN_MODELO") {
+        None => Ok(None),
+        Some(v) if crate::modelo::token_valido(&v, "cmt_") => Ok(Some(v)),
+        Some(_) => Err("AUSTRALIS_TOKEN_MODELO tiene que ser un token cmt_ de 43 caracteres base64url".to_string()),
+    }
+}
+
 pub fn es_desarrollo() ->Result<bool, String> {
     match var("ENTORNO").as_deref() {
         None | Some("produccion") => Ok(false),
@@ -376,6 +385,7 @@ impl Config {
             identidad_clave_privada: identidad_clave_privada()?,
             identidad_vigencia_seg: entero("IDENTIDAD_VIGENCIA_SEG", 60)?.clamp(1, 120),
             australis_url: australis_url()?,
+            australis_token_modelo: australis_token_modelo()?,
             limite_unirse_usuario: entero("LIMITE_UNIRSE_USUARIO", 10)?,
             limite_unirse_ip: entero("LIMITE_UNIRSE_IP", 30)?,
             raiz_archivos: absoluta("RAIZ_ARCHIVOS", "/srv/campusia/archivos")?,
