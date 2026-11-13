@@ -190,6 +190,20 @@ async fn upload(
             _ => {}
         }
     }
+    if let Some(id) = class_id {
+        let mut conn = state.db.acquire().await.map_err(AppError::from)?;
+        let in_campus: Option<i64> =
+            sqlx::query_scalar("SELECT 1 FROM classes_classes WHERE id = ? AND campus_id = ?")
+                .bind(id)
+                .bind(campus_id)
+                .fetch_optional(&mut *conn)
+                .await?;
+        if in_campus.is_none() {
+            return Err(
+                AppError::Unprocessable("class_id is not a class of this campus".into()).into(),
+            );
+        }
+    }
     let (filename, bytes) =
         file.ok_or_else(|| AppError::BadRequest("a file field is required".into()))?;
 
