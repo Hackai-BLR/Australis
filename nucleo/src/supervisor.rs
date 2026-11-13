@@ -185,19 +185,31 @@ fn sdk_empaquetado(dir: &Path) -> Option<PathBuf> {
     lista.pop()
 }
 
-async fn correr_pnpm(dir: &Path, args: &[&str]) -> anyhow::Result<()> {
-    let r = Command::new("pnpm")
+async fn lanzar_pnpm(programa: &str, previos: &[&str], dir: &Path, args: &[&str]) -> std::io::Result<std::process::Output> {
+    Command::new(programa)
         .kill_on_drop(true)
         .current_dir(dir)
+        .args(previos)
         .args(args)
         .stdin(Stdio::null())
         .output()
         .await
-        .map_err(|e| anyhow::anyhow!("no se pudo ejecutar pnpm: {e}"))?;
+}
+
+async fn correr_pnpm_con(principal: &str, respaldo: &str, dir: &Path, args: &[&str]) -> anyhow::Result<()> {
+    let r = match lanzar_pnpm(principal, &[], dir, args).await {
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => lanzar_pnpm(respaldo, &["pnpm"], dir, args).await,
+        otro => otro,
+    }
+    .map_err(|e| anyhow::anyhow!("no se pudo ejecutar pnpm: {e}"))?;
     if !r.status.success() {
         anyhow::bail!("pnpm {} falló: {}", args.join(" "), String::from_utf8_lossy(&r.stderr).trim());
     }
     Ok(())
+}
+
+async fn correr_pnpm(dir: &Path, args: &[&str]) -> anyhow::Result<()> {
+    correr_pnpm_con("pnpm", "corepack", dir, args).await
 }
 
 impl Supervisor {
@@ -689,5 +701,25 @@ impl Supervisor {
                 let _ = sqlx::query("UPDATE cursos SET estado = 'error' WHERE id = ?").bind(&id).execute(&self.db).await;
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod pruebas_pnpm {
+    use super::*;
+
+    #[tokio::test]
+    async fn usa_corepack_cuando_no_hay_pnpm() {
+        let dir = std::env::temp_dir();
+        correr_pnpm_con("pnpm-que-no-existe-xyz", "echo", &dir, &["--version"]).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn falla_con_mensaje_si_no_hay_ninguno() {
+        let dir = std::env::temp_dir();
+        let e = correr_pnpm_con("pnpm-que-no-existe-xyz", "corepack-que-no-existe-xyz", &dir, &["--version"])
+            .await
+            .unwrap_err();
+        assert!(e.to_string().contains("no se pudo ejecutar pnpm"));
     }
 }
