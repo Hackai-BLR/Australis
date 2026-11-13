@@ -1,0 +1,173 @@
+---
+- name: Crear la carpeta de claves de apt
+  ansible.builtin.file:
+    path: /etc/apt/keyrings
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Leer la clave del repositorio de Docker
+  ansible.builtin.stat:
+    path: /etc/apt/keyrings/docker.asc
+  register: docker_clave_previa
+
+- name: Descargar la clave del repositorio de Docker
+  ansible.builtin.get_url:
+    url: https://download.docker.com/linux/{{ docker_distribucion }}/gpg
+    dest: /etc/apt/keyrings/docker.asc
+    owner: root
+    group: root
+    mode: "0644"
+  when: not docker_clave_previa.stat.exists or docker_clave_previa.stat.size == 0
+
+- name: Agregar el repositorio de Docker
+  ansible.builtin.template:
+    src: docker.sources.j2
+    dest: /etc/apt/sources.list.d/docker.sources
+    owner: root
+    group: root
+    mode: "0644"
+  register: docker_repositorio
+
+- name: Actualizar la lista de paquetes con el repositorio de Docker
+  ansible.builtin.apt:
+    update_cache: true
+  when: docker_repositorio.changed
+
+- name: Leer si Docker ya está instalado
+  ansible.builtin.command: dpkg-query -W -f=${Status} {{ docker_paquetes | join(' ') }}
+  register: docker_instalados
+  changed_when: false
+  failed_when: false
+
+- name: Leer si existe una política de arranque de servicios
+  ansible.builtin.stat:
+    path: /usr/sbin/policy-rc.d
+  register: docker_politica
+
+- name: Instalar Docker sin arrancar el servicio del sistema
+  when: docker_instalados.rc != 0 or (docker_instalados.stdout | regex_findall('install ok installed') | length) < (docker_paquetes | length)
+  block:
+    - name: Impedir que apt arranque servicios durante la instalación
+      ansible.builtin.copy:
+        content: "#!/bin/sh\nexit 101\n"
+        dest: /usr/sbin/policy-rc.d
+        owner: root
+        group: root
+        mode: "0755"
+      when: not docker_politica.stat.exists
+
+    - name: Instalar los paquetes de Docker
+      ansible.builtin.apt:
+        name: "{{ docker_paquetes }}"
+        state: present
+  always:
+    - name: Quitar la política temporal de arranque
+      ansible.builtin.file:
+        path: /usr/sbin/policy-rc.d
+        state: absent
+      when: not docker_politica.stat.exists
+
+- name: Leer el uid del usuario de servicio
+  ansible.builtin.command: id -u {{ servidor_usuario }}
+  register: docker_id
+  changed_when: false
+
+- name: Guardar el uid del usuario de servicio
+  ansible.builtin.set_fact:
+    docker_uid: "{{ docker_id.stdout }}"
+
+- name: Deshabilitar el Docker del sistema antes de la instalación sin root
+  ansible.builtin.systemd_service:
+    name: "{{ item }}"
+    enabled: false
+    state: stopped
+  loop:
+    - docker.socket
+    - docker.service
+
+- name: Permitir los espacios de usuario de rootlesskit en Ubuntu
+  ansible.builtin.template:
+    src: usr.bin.rootlesskit.j2
+    dest: /etc/apparmor.d/usr.bin.rootlesskit
+    owner: root
+    group: root
+    mode: "0644"
+  when:
+    - ansible_facts.distribution == 'Ubuntu'
+    - ansible_facts.distribution_version is version('24.04', '>=')
+    - not (servidor_contenedor_de_prueba | bool)
+  notify: Recargar apparmor
+
+- name: Aplicar el perfil de apparmor
+  ansible.builtin.meta: flush_handlers
+
+- name: Crear la carpeta de configuración de Docker sin root
+  ansible.builtin.file:
+    path: /etc/systemd/user/docker.service.d
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Dejar la red de Docker sin root en el proceso hijo de rootlesskit
+  ansible.builtin.template:
+    src: red-de-docker.conf.j2
+    dest: "{{ docker_red_sin_root }}"
+    owner: root
+    group: root
+    mode: "0644"
+  register: docker_red_conf
+
+- name: Arrancar el systemd del usuario de servicio
+  ansible.builtin.systemd_service:
+    name: user@{{ docker_uid }}.service
+    state: started
+  when: docker_sin_root | bool
+
+- name: Esperar el bus del systemd del usuario de servicio
+  ansible.builtin.wait_for:
+    path: /run/user/{{ docker_uid }}/bus
+    timeout: 60
+  when: docker_sin_root | bool
+
+- name: Instalar Docker sin root para el usuario de servicio
+  ansible.builtin.command: >-
+    runuser -u {{ servidor_usuario }} --
+    env HOME={{ servidor_raiz }} XDG_RUNTIME_DIR=/run/user/{{ docker_uid }}
+    dockerd-rootless-setuptool.sh install
+  args:
+    creates: "{{ servidor_raiz }}/.config/systemd/user/docker.service"
+  when: docker_sin_root | bool
+
+- name: Leer si Docker sin root está habilitado
+  ansible.builtin.command: >-
+    runuser -u {{ servidor_usuario }} --
+    env XDG_RUNTIME_DIR=/run/user/{{ docker_uid }}
+    systemctl --user is-enabled docker.service
+  register: docker_usuario_antes
+  changed_when: false
+  failed_when: false
+  when: docker_sin_root | bool
+
+- name: Habilitar Docker sin root
+  ansible.builtin.command: >-
+    runuser -u {{ servidor_usuario }} --
+    env XDG_RUNTIME_DIR=/run/user/{{ docker_uid }}
+    systemctl --user enable --now docker.service
+  changed_when: true
+  when:
+    - docker_sin_root | bool
+    - docker_usuario_antes.stdout | default('') != 'enabled'
+
+- name: Reiniciar Docker sin root con la configuración de red
+  ansible.builtin.command: >-
+    runuser -u {{ servidor_usuario }} --
+    env XDG_RUNTIME_DIR=/run/user/{{ docker_uid }}
+    sh -c 'systemctl --user daemon-reload && systemctl --user restart docker.service'
+  changed_when: true
+  when:
+    - docker_sin_root | bool
+    - docker_red_conf.changed
+    - docker_usuario_antes.stdout | default('') == 'enabled'

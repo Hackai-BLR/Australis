@@ -1,0 +1,102 @@
+#!/bin/bash
+set -uo pipefail
+token_curso="${CAMPUSIA_TOKEN_CURSO:-}"
+unset ANTHROPIC_AUTH_TOKEN ANTHROPIC_API_KEY ANTHROPIC_BASE_URL CLAUDE_CODE_OAUTH_TOKEN CAMPUSIA_TOKEN_CURSO
+. /usr/local/lib/campusia/entorno.sh
+
+REPO=/repo
+BASE_PLANTILLA=/opt/campusia/plantilla
+hijo=""
+
+registrar() {
+	printf 'campusia-espacio: %s\n' "$*" >&2
+}
+
+detener() {
+	[ -n "$hijo" ] || return 0
+	kill -TERM -- "-$hijo" 2>/dev/null || kill -TERM "$hijo" 2>/dev/null
+	for _ in {1..50}; do
+		kill -0 "$hijo" 2>/dev/null || break
+		esperar 0.1
+	done
+	kill -KILL -- "-$hijo" 2>/dev/null
+	wait "$hijo" 2>/dev/null
+	hijo=""
+}
+
+terminar() {
+	detener
+	exit 0
+}
+
+trap terminar TERM INT HUP
+
+huella() {
+	{
+		cat package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc 2>/dev/null
+		ls -l vendor 2>/dev/null
+		[ -f node_modules/.modules.yaml ] && echo instalado
+	} | sha256sum
+}
+
+instalar() {
+	if [ ! -e node_modules ] && [ -d "$BASE_PLANTILLA/node_modules" ]; then
+		registrar "copiando las dependencias precargadas"
+		cp -a "$BASE_PLANTILLA/node_modules" node_modules.campusia-tmp && mv node_modules.campusia-tmp node_modules || rm -rf node_modules.campusia-tmp
+	fi
+	registrar "instalando dependencias"
+	if pnpm install --frozen-lockfile --trust-lockfile; then
+		return 0
+	fi
+	registrar "el lockfile no coincide con package.json; se actualiza"
+	pnpm install --no-frozen-lockfile
+}
+
+carpetas() {
+	stat -c '%i' servidor web package.json 2>/dev/null | tr '\n' ' '
+}
+
+esperar() {
+	read -rt "$1" <> <(:) || true
+}
+
+cd "$REPO" || { registrar "no existe $REPO"; exit 1; }
+
+ultima=""
+while true; do
+	actual="$(huella)"
+	if [ "$actual" != "$ultima" ]; then
+		if ! instalar; then
+			registrar "no se pudieron instalar las dependencias"
+		fi
+		ultima="$(huella)"
+	fi
+	if [ ! -f package.json ]; then
+		registrar "falta package.json"
+		esperar 5
+		continue
+	fi
+	registrar "arrancando pnpm dev en el puerto ${PORT:-3000}"
+	CAMPUSIA_TOKEN_CURSO="$token_curso" NODE_ENV=development setsid pnpm dev &
+	hijo=$!
+	estructura="$(carpetas)"
+	while kill -0 "$hijo" 2>/dev/null; do
+		esperar 3
+		if [ "$(huella)" != "$ultima" ]; then
+			registrar "cambiaron las dependencias; se reinstalan"
+			detener
+			break
+		fi
+		if [ "$(carpetas)" != "$estructura" ]; then
+			registrar "se reemplazaron las carpetas del curso; se vuelve a arrancar"
+			detener
+			break
+		fi
+	done
+	if [ -n "$hijo" ]; then
+		wait "$hijo" 2>/dev/null
+		registrar "pnpm dev terminó; se vuelve a arrancar"
+		hijo=""
+	fi
+	esperar 2
+done

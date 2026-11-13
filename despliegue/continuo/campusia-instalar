@@ -1,0 +1,226 @@
+#!/bin/bash
+set -euo pipefail
+umask 077
+
+RUTA_FIJA=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+CONFIG=/etc/campusia/instalar.env
+CERROJO=/run/campusia-instalar.lock
+BASE=/var/lib/campusia-instalar
+ESPEJO="$BASE/repo.git"
+USUARIO_FUENTES=campusia
+
+export PATH="$RUTA_FIJA"
+export LC_ALL=C
+export HOME=/root
+export GIT_TERMINAL_PROMPT=0
+export GIT_CONFIG_NOSYSTEM=1
+export GIT_CONFIG_GLOBAL=/dev/null
+unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_OBJECT_DIRECTORY GIT_ALTERNATE_OBJECT_DIRECTORIES GIT_SSH GIT_SSH_COMMAND GIT_ASKPASS SSH_ASKPASS GIT_EXEC_PATH GIT_TEMPLATE_DIR GIT_CONFIG GIT_CONFIG_PARAMETERS GIT_CONFIG_COUNT GIT_NAMESPACE GIT_PROXY_COMMAND GIT_EXTERNAL_DIFF BASH_ENV ENV CDPATH IFS
+IFS=$' \t\n'
+
+decir() {
+  printf 'campusia-instalar: %s\n' "$*" >&2
+}
+
+falla() {
+  decir "$*"
+  exit 1
+}
+
+if [ "$(id -u)" -ne 0 ]; then
+  decir "hay que correrlo como root"
+  exit 1
+fi
+
+if [ "$#" -ne 1 ] || ! [[ "$1" =~ ^[0-9a-f]{40}$ ]]; then
+  printf 'uso: campusia-instalar <commit>\n' >&2
+  exit 64
+fi
+COMMIT="$1"
+
+INSTALAR_ORIGEN=git@github.com:ORGANIZACION/campusia.git
+INSTALAR_RAMA=main
+INSTALAR_CLAVE=/srv/campusia/.ssh/campusia_deploy
+INSTALAR_KNOWN_HOSTS=/etc/campusia/known_hosts
+DESPLIEGUE_DIR=/srv/campusia/despliegue
+
+leer_config() {
+  [ -f "$CONFIG" ] || return 0
+  local linea clave valor
+  while IFS= read -r linea || [ -n "$linea" ]; do
+    linea="${linea%$'\r'}"
+    [[ "$linea" =~ ^[[:space:]]*(#|$) ]] && continue
+    if ! [[ "$linea" =~ ^[[:space:]]*([A-Z_]+)=(.*)$ ]]; then
+      falla "línea inválida en $CONFIG"
+    fi
+    clave="${BASH_REMATCH[1]}"
+    valor="${BASH_REMATCH[2]}"
+    if [[ "$valor" =~ ^\"(.*)\"$ ]] || [[ "$valor" =~ ^\'(.*)\'$ ]]; then
+      valor="${BASH_REMATCH[1]}"
+    fi
+    case "$clave" in
+      INSTALAR_ORIGEN) INSTALAR_ORIGEN="$valor" ;;
+      INSTALAR_RAMA) INSTALAR_RAMA="$valor" ;;
+      INSTALAR_CLAVE) INSTALAR_CLAVE="$valor" ;;
+      INSTALAR_KNOWN_HOSTS) INSTALAR_KNOWN_HOSTS="$valor" ;;
+      DESPLIEGUE_DIR) DESPLIEGUE_DIR="$valor" ;;
+    esac
+  done <"$CONFIG"
+}
+
+leer_config
+
+[ -n "$INSTALAR_ORIGEN" ] && [[ "$INSTALAR_ORIGEN" != -* ]] || falla "INSTALAR_ORIGEN inválido"
+[[ "$INSTALAR_RAMA" =~ ^[A-Za-z0-9._/-]+$ ]] && git check-ref-format "refs/heads/$INSTALAR_RAMA" || falla "INSTALAR_RAMA inválida"
+[[ "$DESPLIEGUE_DIR" == /* ]] || falla "DESPLIEGUE_DIR tiene que ser una ruta absoluta"
+[[ "$INSTALAR_KNOWN_HOSTS" == /* ]] || falla "INSTALAR_KNOWN_HOSTS tiene que ser una ruta absoluta"
+
+exec 9>>"$CERROJO"
+flock 9
+
+install -d -o root -g root -m 0700 "$BASE"
+
+ssh_comando="ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=$(printf %q "$INSTALAR_KNOWN_HOSTS")"
+if [ -n "$INSTALAR_CLAVE" ] && [ -f "$INSTALAR_CLAVE" ]; then
+  ssh_comando="$ssh_comando -i $(printf %q "$INSTALAR_CLAVE") -o IdentitiesOnly=yes"
+fi
+export GIT_SSH_COMMAND="$ssh_comando"
+
+if ! [ -d "$ESPEJO" ] || [ -L "$ESPEJO" ]; then
+  rm -rf "$ESPEJO" "$ESPEJO.tmp"
+  git clone -q --mirror -- "$INSTALAR_ORIGEN" "$ESPEJO.tmp" || falla "no se pudo clonar el origen"
+  mv "$ESPEJO.tmp" "$ESPEJO"
+fi
+git --git-dir="$ESPEJO" remote set-url origin "$INSTALAR_ORIGEN"
+git --git-dir="$ESPEJO" fetch -q --prune origin || falla "no se pudo actualizar el espejo desde el origen"
+
+PUNTA="$(git --git-dir="$ESPEJO" rev-parse -q --verify "refs/heads/$INSTALAR_RAMA^{commit}" || true)"
+if ! [[ "$PUNTA" =~ ^[0-9a-f]{40}$ ]] \
+  || ! git --git-dir="$ESPEJO" cat-file -e "$COMMIT^{commit}" 2>/dev/null \
+  || ! git --git-dir="$ESPEJO" merge-base --is-ancestor "$COMMIT" "$PUNTA" 2>/dev/null; then
+  falla "el commit no está publicado en $INSTALAR_RAMA"
+fi
+
+TEMPORAL="$(mktemp -d "$BASE/instalar.XXXXXXXX")"
+trap 'rm -rf -- "$TEMPORAL"' EXIT
+
+git --git-dir="$ESPEJO" archive --format=tar "$COMMIT" despliegue | tar -x --no-same-owner -C "$TEMPORAL" \
+  || falla "no se pudo extraer despliegue/ del commit"
+[ -f "$TEMPORAL/despliegue/instalar.sh" ] || falla "el commit no tiene despliegue/instalar.sh"
+
+PLATAFORMA="$TEMPORAL/plataforma"
+install -d -m 0700 "$PLATAFORMA"
+TIENE_PLATAFORMA=1
+for carpeta in plantilla-curso sdk despliegue/espacio-trabajo; do
+  if ! git --git-dir="$ESPEJO" cat-file -e "$COMMIT:$carpeta" 2>/dev/null; then
+    TIENE_PLATAFORMA=0
+  fi
+done
+if [ "$TIENE_PLATAFORMA" = 1 ]; then
+  git --git-dir="$ESPEJO" archive --format=tar "$COMMIT" plantilla-curso sdk | tar -x --no-same-owner -C "$PLATAFORMA" \
+    || falla "no se pudo extraer la plantilla y el SDK del commit"
+  cp -R "$TEMPORAL/despliegue/espacio-trabajo" "$PLATAFORMA/espacio-trabajo"
+fi
+
+FUENTES="$DESPLIEGUE_DIR/fuentes/$COMMIT"
+
+sin_enlaces() {
+  local ruta="$1" parcial=""
+  local -a partes
+  IFS=/ read -r -a partes <<<"${ruta#/}"
+  for parte in "${partes[@]}"; do
+    parcial="$parcial/$parte"
+    if [ -L "$parcial" ]; then
+      falla "la ruta $parcial es un enlace simbólico"
+    fi
+  done
+  [ "$(readlink -f -- "$ruta")" = "$ruta" ] || falla "la ruta $ruta resuelve fuera de su lugar"
+}
+
+sin_enlaces "$FUENTES/compilado/bin/campusia-nucleo"
+sin_enlaces "$FUENTES/interfaz/dist"
+[ -f "$FUENTES/compilado/bin/campusia-nucleo" ] || falla "el binario no es un archivo regular"
+[ -d "$FUENTES/interfaz/dist" ] || falla "la interfaz no es una carpeta"
+[ -f "$FUENTES/interfaz/dist/index.html" ] && ! [ -L "$FUENTES/interfaz/dist/index.html" ] || falla "la interfaz no tiene index.html"
+if [ -n "$(find -P "$FUENTES/interfaz/dist" ! -type f ! -type d -print -quit)" ]; then
+  falla "la interfaz tiene enlaces simbólicos o archivos especiales"
+fi
+
+if [ "$TIENE_PLATAFORMA" = 1 ]; then
+  if compgen -G "$FUENTES/plantilla-curso/vendor/campusia-sdk-*.tgz" >/dev/null; then
+    sin_enlaces "$FUENTES/plantilla-curso/vendor"
+    sin_enlaces "$FUENTES/sdk/dist"
+    [ -d "$FUENTES/sdk/dist" ] || falla "el SDK no está compilado"
+    if [ -n "$(find -P "$FUENTES/plantilla-curso/vendor" "$FUENTES/sdk/dist" ! -type f ! -type d -print -quit)" ]; then
+      falla "el SDK compilado tiene enlaces simbólicos o archivos especiales"
+    fi
+  else
+    decir "las fuentes no tienen el SDK empaquetado; se conservan la plantilla, el SDK y el espacio instalados"
+    TIENE_PLATAFORMA=0
+  fi
+fi
+
+ARTEFACTOS="$TEMPORAL/artefactos"
+install -d -m 0700 "$ARTEFACTOS"
+
+leer_como_fuentes() {
+  if id -u "$USUARIO_FUENTES" >/dev/null 2>&1 && command -v runuser >/dev/null 2>&1; then
+    runuser -u "$USUARIO_FUENTES" -- "$@"
+  else
+    "$@"
+  fi
+}
+
+leer_como_fuentes tar -C "$FUENTES" --no-recursion -cf - compilado/bin/campusia-nucleo \
+  | tar -x --no-same-owner --no-same-permissions -C "$ARTEFACTOS" \
+  || falla "no se pudo copiar el binario"
+(cd "$FUENTES" && leer_como_fuentes tar -cf - interfaz/dist) \
+  | tar -x --no-same-owner --no-same-permissions -C "$ARTEFACTOS" \
+  || falla "no se pudo copiar la interfaz"
+
+if [ "$TIENE_PLATAFORMA" = 1 ]; then
+  (cd "$FUENTES" && leer_como_fuentes find -P plantilla-curso/vendor -maxdepth 1 -type f -name 'campusia-sdk-*.tgz' -print0 \
+    | leer_como_fuentes tar --null --no-recursion -T - -cf -) \
+    | tar -x --no-same-owner --no-same-permissions -C "$ARTEFACTOS" \
+    || falla "no se pudo copiar el SDK empaquetado"
+  (cd "$FUENTES" && leer_como_fuentes tar -cf - sdk/dist) \
+    | tar -x --no-same-owner --no-same-permissions -C "$ARTEFACTOS" \
+    || falla "no se pudo copiar el SDK compilado"
+fi
+
+BINARIO="$ARTEFACTOS/compilado/bin/campusia-nucleo"
+INTERFAZ="$ARTEFACTOS/interfaz/dist"
+if [ -n "$(find -P "$ARTEFACTOS" ! -type f ! -type d -print -quit)" ]; then
+  falla "los artefactos tienen enlaces simbólicos o archivos especiales"
+fi
+[ -f "$BINARIO" ] && ! [ -L "$BINARIO" ] || falla "el binario no es un archivo regular"
+[ -d "$INTERFAZ" ] && ! [ -L "$INTERFAZ" ] || falla "la interfaz no es una carpeta"
+[ -f "$INTERFAZ/index.html" ] || falla "la interfaz no tiene index.html"
+
+OPCIONES_PLATAFORMA=()
+if [ "$TIENE_PLATAFORMA" = 1 ]; then
+  compgen -G "$ARTEFACTOS/plantilla-curso/vendor/campusia-sdk-*.tgz" >/dev/null || falla "falta el SDK empaquetado"
+  [ -d "$ARTEFACTOS/sdk/dist" ] && ! [ -L "$ARTEFACTOS/sdk/dist" ] || falla "el SDK compilado no es una carpeta"
+  rm -rf -- "$PLATAFORMA/plantilla-curso/vendor" "$PLATAFORMA/sdk/dist"
+  mv "$ARTEFACTOS/plantilla-curso/vendor" "$PLATAFORMA/plantilla-curso/vendor"
+  mv "$ARTEFACTOS/sdk/dist" "$PLATAFORMA/sdk/dist"
+  if [ -n "$(find -P "$PLATAFORMA" ! -type f ! -type d -print -quit)" ]; then
+    falla "la plantilla, el SDK o el espacio tienen enlaces simbólicos o archivos especiales"
+  fi
+  chmod -R u=rwX,go=rX "$PLATAFORMA"
+  OPCIONES_PLATAFORMA=(--plantilla "$PLATAFORMA/plantilla-curso" --sdk "$PLATAFORMA/sdk" --espacio "$PLATAFORMA/espacio-trabajo")
+fi
+
+mv "$BINARIO" "$TEMPORAL/campusia-nucleo"
+mv "$INTERFAZ" "$TEMPORAL/interfaz"
+rm -rf -- "$ARTEFACTOS"
+chmod 0755 "$TEMPORAL/campusia-nucleo"
+chmod -R u=rwX,go=rX "$TEMPORAL/interfaz"
+chmod 0755 "$TEMPORAL" "$PLATAFORMA"
+
+set +e
+env -i PATH="$RUTA_FIJA" HOME=/root LC_ALL=C.UTF-8 LANG=C.UTF-8 \
+  bash "$TEMPORAL/despliegue/instalar.sh" --binario "$TEMPORAL/campusia-nucleo" --interfaz "$TEMPORAL/interfaz" "${OPCIONES_PLATAFORMA[@]}"
+CODIGO=$?
+set -e
+exit "$CODIGO"

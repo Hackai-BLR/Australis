@@ -1,0 +1,277 @@
+---
+- name: Leer la clave armada del repositorio de Caddy
+  ansible.builtin.stat:
+    path: "{{ caddy_clave_armada }}"
+  register: caddy_clave_armada_previa
+
+- name: Descargar la clave del repositorio oficial de Caddy
+  ansible.builtin.get_url:
+    url: "{{ caddy_repositorio }}/gpg.key"
+    dest: "{{ caddy_clave_armada }}"
+    owner: root
+    group: root
+    mode: "0644"
+  register: caddy_clave_descargada
+  when: not caddy_clave_armada_previa.stat.exists or caddy_clave_armada_previa.stat.size == 0
+
+- name: Leer la clave binaria del repositorio de Caddy
+  ansible.builtin.stat:
+    path: "{{ caddy_clave }}"
+  register: caddy_clave_binaria
+
+- name: Convertir la clave del repositorio de Caddy
+  ansible.builtin.shell: >-
+    set -o pipefail &&
+    gpg --dearmor < {{ caddy_clave_armada }} > {{ caddy_clave }}.nueva &&
+    chmod 0644 {{ caddy_clave }}.nueva &&
+    mv -f {{ caddy_clave }}.nueva {{ caddy_clave }}
+  args:
+    executable: /bin/bash
+  when: caddy_clave_descargada.changed or not caddy_clave_binaria.stat.exists
+  changed_when: true
+
+- name: Agregar el repositorio oficial de Caddy
+  ansible.builtin.template:
+    src: caddy-stable.list.j2
+    dest: "{{ caddy_fuente }}"
+    owner: root
+    group: root
+    mode: "0644"
+  register: caddy_repositorio_fuente
+
+- name: Preferir el paquete del repositorio oficial de Caddy
+  ansible.builtin.template:
+    src: caddy.pref.j2
+    dest: /etc/apt/preferences.d/caddy
+    owner: root
+    group: root
+    mode: "0644"
+  register: caddy_preferencia
+
+- name: Actualizar la lista de paquetes con el repositorio de Caddy
+  ansible.builtin.apt:
+    update_cache: true
+  when: caddy_repositorio_fuente.changed or caddy_preferencia.changed or caddy_clave_descargada.changed
+
+- name: Leer el origen del paquete de Caddy
+  ansible.builtin.command: apt-cache policy caddy
+  register: caddy_politica
+  changed_when: false
+
+- name: Leer la versión instalada de Caddy
+  ansible.builtin.command: dpkg-query -W -f=${Version} caddy
+  register: caddy_instalada
+  changed_when: false
+  failed_when: false
+
+- name: Leer la versión candidata de Caddy
+  ansible.builtin.set_fact:
+    caddy_candidata: "{{ caddy_politica.stdout_lines | select('search', 'Candidate:') | first | split(':', 1) | last | trim }}"
+
+- name: Instalar Caddy del repositorio oficial
+  ansible.builtin.apt:
+    name: "caddy={{ caddy_candidata }}"
+    state: present
+    allow_downgrade: true
+  when: caddy_instalada.rc != 0 or caddy_instalada.stdout != caddy_candidata
+
+- name: Leer la versión de Caddy
+  ansible.builtin.command: caddy version
+  register: caddy_version
+  changed_when: false
+
+- name: Verificar la versión de Caddy
+  ansible.builtin.assert:
+    that:
+      - caddy_version.stdout | regex_search('^v[0-9]+\.[0-9]+\.[0-9]+') is not none
+      - (caddy_version.stdout.split() | first)[1:] is version(caddy_version_minima, '>=')
+    fail_msg: "Caddy tiene que ser {{ caddy_version_minima }} o posterior del repositorio oficial ({{ caddy_version.stdout }})"
+    quiet: true
+
+- name: Crear la carpeta de certificados
+  ansible.builtin.file:
+    path: "{{ caddy_certs }}"
+    state: directory
+    owner: root
+    group: caddy
+    mode: "0750"
+
+- name: Leer la clave de origen
+  ansible.builtin.stat:
+    path: "{{ caddy_certs }}/origen.key"
+  register: caddy_key_previa
+
+- name: Leer el certificado de origen previo
+  ansible.builtin.stat:
+    path: "{{ caddy_certs }}/origen.pem"
+  register: caddy_pem_previo
+
+- name: Calcular si el Vault trae el certificado de origen
+  ansible.builtin.set_fact:
+    caddy_vault_clave: "{{ (vault_origen_clave | default('') | string | trim) ~ '\n' }}"
+    caddy_vault_certificado: "{{ (vault_origen_certificado | default('') | string | trim) ~ '\n' }}"
+    caddy_vault_valido: >-
+      {{ (vault_origen_clave | default('') | string) is search('-----BEGIN [A-Z ]*PRIVATE KEY-----')
+      and (vault_origen_certificado | default('') | string) is search('-----BEGIN CERTIFICATE-----') }}
+  no_log: true
+
+- name: Escribir la clave de origen del Vault
+  ansible.builtin.copy:
+    content: "{{ caddy_vault_clave }}"
+    dest: "{{ caddy_certs }}/origen.key"
+    owner: root
+    group: caddy
+    mode: "0640"
+    force: false
+  when:
+    - caddy_vault_valido | bool
+    - not caddy_key_previa.stat.exists
+    - not caddy_pem_previo.stat.exists
+  no_log: true
+  diff: false
+
+- name: Escribir el certificado de origen del Vault
+  ansible.builtin.copy:
+    content: "{{ caddy_vault_certificado }}"
+    dest: "{{ caddy_certs }}/origen.pem"
+    owner: root
+    group: caddy
+    mode: "0644"
+    force: false
+  when:
+    - caddy_vault_valido | bool
+    - not caddy_pem_previo.stat.exists
+    - (not caddy_key_previa.stat.exists) or (caddy_key_previa.stat.checksum | default('') == (caddy_vault_clave | hash('sha1')))
+  no_log: true
+  diff: false
+
+- name: Generar la clave de origen si no existe
+  ansible.builtin.shell: umask 077 && openssl ecparam -name prime256v1 -genkey -noout -out {{ caddy_certs }}/origen.key
+  args:
+    creates: "{{ caddy_certs }}/origen.key"
+
+- name: Generar el pedido de certificado si no existe
+  ansible.builtin.command: >-
+    openssl req -new -key {{ caddy_certs }}/origen.key -out {{ caddy_certs }}/origen.csr
+    -subj /CN={{ caddy_dominio }}
+    -addext subjectAltName=DNS:{{ caddy_dominio }},DNS:*.{{ caddy_dominio }}
+  args:
+    creates: "{{ caddy_certs }}/origen.csr"
+
+- name: Ajustar los permisos de la clave de origen
+  ansible.builtin.file:
+    path: "{{ caddy_certs }}/origen.key"
+    owner: root
+    group: caddy
+    mode: "0640"
+
+- name: Ajustar los permisos del pedido de certificado
+  ansible.builtin.file:
+    path: "{{ caddy_certs }}/origen.csr"
+    owner: root
+    group: caddy
+    mode: "0644"
+
+- name: Leer el certificado de origen
+  ansible.builtin.stat:
+    path: "{{ caddy_certs }}/origen.pem"
+  register: caddy_pem
+
+- name: Ajustar los permisos del certificado de origen
+  ansible.builtin.file:
+    path: "{{ caddy_certs }}/origen.pem"
+    owner: root
+    group: caddy
+    mode: "0644"
+  when: caddy_pem.stat.exists
+
+- name: Verificar que existe el Caddyfile del repo
+  ansible.builtin.assert:
+    that:
+      - caddy_caddyfile_origen is file
+    fail_msg: "falta {{ caddy_caddyfile_origen }}"
+    quiet: true
+
+- name: Instalar el Caddyfile validado
+  ansible.builtin.copy:
+    src: "{{ caddy_caddyfile_origen }}"
+    dest: /etc/caddy/Caddyfile
+    owner: root
+    group: root
+    mode: "0644"
+    validate: caddy validate --adapter caddyfile --config %s
+  when: caddy_pem.stat.exists
+  notify: Recargar caddy
+
+- name: Instalar el Caddyfile sin certificado
+  ansible.builtin.copy:
+    src: "{{ caddy_caddyfile_origen }}"
+    dest: /etc/caddy/Caddyfile
+    owner: root
+    group: root
+    mode: "0644"
+  when: not caddy_pem.stat.exists
+
+- name: Habilitar Caddy
+  ansible.builtin.systemd_service:
+    name: caddy
+    enabled: true
+
+- name: Arrancar Caddy
+  ansible.builtin.systemd_service:
+    name: caddy
+    state: started
+  when: caddy_pem.stat.exists
+
+- name: Detener Caddy sin certificado
+  ansible.builtin.systemd_service:
+    name: caddy
+    state: stopped
+  when: not caddy_pem.stat.exists
+
+- name: Informar que falta el certificado de origen
+  ansible.builtin.debug:
+    msg: >-
+      Falta {{ caddy_certs }}/origen.pem: Caddy queda detenido. Cargar el certificado de origen en el Vault
+      (vault_origen_clave y vault_origen_certificado) o crearlo con OpenTofu usando {{ caddy_certs }}/origen.csr,
+      copiarlo a {{ caddy_certs }}/origen.pem y volver a aplicar.
+  when: not caddy_pem.stat.exists
+
+- name: Aplicar los cambios pendientes de Caddy
+  ansible.builtin.meta: flush_handlers
+
+- name: Leer los permisos finales de los certificados
+  ansible.builtin.stat:
+    path: "{{ caddy_certs }}/{{ item }}"
+  loop:
+    - origen.key
+    - origen.pem
+  register: caddy_archivos
+
+- name: Verificar los permisos de los certificados
+  ansible.builtin.assert:
+    that:
+      - caddy_archivos.results[0].stat.pw_name == 'root'
+      - caddy_archivos.results[0].stat.gr_name == 'caddy'
+      - caddy_archivos.results[0].stat.mode == '0640'
+      - not caddy_archivos.results[1].stat.exists or (caddy_archivos.results[1].stat.gr_name == 'caddy')
+    fail_msg: los certificados de origen no tienen los permisos esperados
+    quiet: true
+
+- name: Validar el Caddyfile instalado
+  ansible.builtin.command: caddy validate --adapter caddyfile --config /etc/caddy/Caddyfile
+  changed_when: false
+  when: caddy_pem.stat.exists
+
+- name: Leer el estado de Caddy
+  ansible.builtin.systemd_service:
+    name: caddy
+  register: caddy_servicio
+
+- name: Verificar que Caddy está habilitado y activo
+  ansible.builtin.assert:
+    that:
+      - caddy_servicio.status.UnitFileState == 'enabled'
+      - (not caddy_pem.stat.exists) or caddy_servicio.status.ActiveState == 'active'
+    fail_msg: Caddy no quedó habilitado y activo
+    quiet: true

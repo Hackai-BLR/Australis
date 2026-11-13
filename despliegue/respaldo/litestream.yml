@@ -1,0 +1,12 @@
+access-key-id: ${LITESTREAM_ACCESS_KEY_ID}
+secret-access-key: ${LITESTREAM_SECRET_ACCESS_KEY}
+
+dbs:
+  - path: /srv/campusia/datos/campusia.db
+    replicas:
+      - type: s3
+        bucket: campusia-respaldos
+        path: plataforma
+        endpoint: https://<cuenta>.r2.cloudflarestorage.com
+        region: auto
+        force-path-style: true

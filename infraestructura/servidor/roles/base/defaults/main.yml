@@ -1,0 +1,24 @@
+---
+base_paquetes:
+  - apt-transport-https
+  - ca-certificates
+  - curl
+  - git
+  - gnupg
+  - gzip
+  - nftables
+  - openssl
+  - python3
+  - sqlite3
+  - sudo
+  - tar
+  - tzdata
+  - unattended-upgrades
+  - util-linux
+base_distribuciones:
+  Debian:
+    - "12"
+    - "13"
+  Ubuntu:
+    - "22.04"
+    - "24.04"

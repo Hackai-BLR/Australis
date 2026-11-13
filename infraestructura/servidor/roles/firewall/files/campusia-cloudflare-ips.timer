@@ -1,0 +1,10 @@
+[Unit]
+Description=Actualizar los rangos de Cloudflare cada semana
+
+[Timer]
+OnCalendar=weekly
+RandomizedDelaySec=1h
+Persistent=true
+
+[Install]
+WantedBy=timers.target

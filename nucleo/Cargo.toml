@@ -1,0 +1,39 @@
+[package]
+name = "campusia-nucleo"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "campusia-nucleo"
+path = "src/main.rs"
+
+[dependencies]
+axum = "0.8"
+tokio = { version = "1", features = ["full"] }
+sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio", "sqlite", "migrate", "macros"] }
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json", "stream"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+hmac = "0.12"
+sha2 = "0.10"
+hex = "0.4"
+rand = "0.8"
+base64 = "0.22"
+chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
+mime_guess = "2"
+deunicode = "1"
+async-trait = "0.1"
+url = "2"
+anyhow = "1"
+ed25519-dalek = "2"
+calamine = "0.38.0"
+encoding_rs = "0.8.44"
+futures-util = "0.3.34"
+libc = "0.2"
+hyper = { version = "1", features = ["server", "http1"] }
+hyper-util = { version = "0.1", features = ["server", "server-graceful", "tokio", "http1"] }
+http-body = "1"
+tower-service = "0.3"
+
+[profile.dev]
+debug = 1

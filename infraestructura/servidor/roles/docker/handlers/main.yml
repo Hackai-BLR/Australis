@@ -1,0 +1,8 @@
+---
+- name: Recargar systemd
+  ansible.builtin.systemd_service:
+    daemon_reload: true
+
+- name: Recargar apparmor
+  ansible.builtin.command: apparmor_parser -r /etc/apparmor.d/usr.bin.rootlesskit
+  changed_when: true

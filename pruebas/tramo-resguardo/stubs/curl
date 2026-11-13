@@ -1,0 +1,15 @@
+#!/bin/bash
+/usr/local/lib/sustitutos/registrar-como curl "$@"
+salida=""
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    -o) salida="$2"; shift 2 ;;
+    -o*) salida="${1#-o}"; shift ;;
+    *) shift ;;
+  esac
+done
+contenido='-----BEGIN PGP PUBLIC KEY BLOCK-----
+clave de prueba
+-----END PGP PUBLIC KEY BLOCK-----'
+if [ -n "$salida" ]; then printf '%s\n' "$contenido" > "$salida"; else printf '%s\n' "$contenido"; fi
+exit 0

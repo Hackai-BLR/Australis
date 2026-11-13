@@ -1,0 +1,17 @@
+[Unit]
+Description=Despliegue continuo de Campus IA
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+EnvironmentFile=-/srv/campusia/config/continuo.env
+EnvironmentFile=-/srv/campusia/config/campusia.env
+ExecStart=/srv/campusia/despliegue/bin/desplegar.sh
+SuccessExitStatus=75
+CPUQuota=150%
+MemoryMax=4G
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
+TimeoutStartSec=2h

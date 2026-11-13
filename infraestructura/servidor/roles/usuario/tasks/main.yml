@@ -1,0 +1,61 @@
+---
+- name: Crear el usuario de servicio
+  ansible.builtin.user:
+    name: "{{ servidor_usuario }}"
+    system: true
+    home: "{{ servidor_raiz }}"
+    create_home: true
+    shell: /bin/bash
+    state: present
+
+- name: Ajustar la carpeta del usuario
+  ansible.builtin.file:
+    path: "{{ servidor_raiz }}"
+    state: directory
+    owner: "{{ servidor_usuario }}"
+    group: "{{ servidor_usuario }}"
+    mode: "0750"
+
+- name: Asignar subuid y subgid
+  ansible.builtin.lineinfile:
+    path: "{{ item }}"
+    regexp: "^{{ servidor_usuario }}:"
+    line: "{{ servidor_usuario }}:{{ usuario_subid_inicio }}:{{ usuario_subid_cantidad }}"
+    create: true
+    owner: root
+    group: root
+    mode: "0644"
+  loop:
+    - /etc/subuid
+    - /etc/subgid
+
+- name: Activar linger
+  ansible.builtin.command: loginctl enable-linger {{ servidor_usuario }}
+  args:
+    creates: /var/lib/systemd/linger/{{ servidor_usuario }}
+
+- name: Leer el usuario
+  ansible.builtin.getent:
+    database: passwd
+    key: "{{ servidor_usuario }}"
+
+- name: Leer subuid y subgid
+  ansible.builtin.command: grep -Fx {{ servidor_usuario }}:{{ usuario_subid_inicio }}:{{ usuario_subid_cantidad }} /etc/subuid /etc/subgid
+  register: usuario_subid
+  changed_when: false
+
+- name: Leer el linger
+  ansible.builtin.stat:
+    path: /var/lib/systemd/linger/{{ servidor_usuario }}
+  register: usuario_linger
+
+- name: Verificar el usuario
+  ansible.builtin.assert:
+    that:
+      - (ansible_facts.getent_passwd[servidor_usuario][1] | int) < 1000
+      - ansible_facts.getent_passwd[servidor_usuario][4] == servidor_raiz
+      - ansible_facts.getent_passwd[servidor_usuario][5] == '/bin/bash'
+      - usuario_subid.stdout_lines | length == 2
+      - usuario_linger.stat.exists
+    fail_msg: el usuario de servicio no quedó como se esperaba
+    quiet: true

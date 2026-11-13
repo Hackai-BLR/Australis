@@ -1,0 +1,4 @@
+#!/bin/bash
+nombre="$1"
+shift
+printf '%s|%s|DOCKER_HOST=%s|XDG_RUNTIME_DIR=%s|%s\n' "$(id -un)" "$nombre" "${DOCKER_HOST:-}" "${XDG_RUNTIME_DIR:-}" "$*" >> /var/log/sustitutos.log
