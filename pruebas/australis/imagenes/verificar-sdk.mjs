@@ -11,8 +11,9 @@ if (!actual) throw new Error('El bloqueo de la plantilla no fija el paquete del 
 const original = actual[1];
 const coincidia = original === empaquetado;
 fs.writeFileSync(path.join(carpeta, 'bloqueo-sdk.json'), JSON.stringify({ coincidia, original, empaquetado }));
+// The image build does not decide: the checkpoint B test reads bloqueo-sdk.json and fails when it differs.
 if (!coincidia) {
   console.error(`El bloqueo de la plantilla (${original}) no coincide con el SDK empaquetado (${empaquetado}); regenerar plantilla-curso/pnpm-lock.yaml`);
-  process.exit(1);
+} else {
+  console.log(`El bloqueo de la plantilla coincide con el SDK empaquetado: ${empaquetado}`);
 }
-console.log(`El bloqueo de la plantilla coincide con el SDK empaquetado: ${empaquetado}`);

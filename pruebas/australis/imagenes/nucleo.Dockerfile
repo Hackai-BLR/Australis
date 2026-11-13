@@ -15,8 +15,7 @@ COPY sdk ./sdk
 RUN cd sdk && pnpm install --frozen-lockfile && pnpm run build
 COPY plantilla-curso ./plantilla-curso
 COPY pruebas/australis/imagenes/verificar-sdk.mjs /verificar-sdk.mjs
-RUN find sdk -path sdk/node_modules -prune -o -type f -exec chmod 644 {} + \
- && cd sdk && pnpm pack --pack-destination /empaque && node /verificar-sdk.mjs /empaque /fuentes/plantilla-curso/pnpm-lock.yaml
+RUN cd sdk && pnpm pack --pack-destination /empaque && node /verificar-sdk.mjs /empaque /fuentes/plantilla-curso/pnpm-lock.yaml
 
 FROM node:22-bookworm-slim
 RUN apt-get update \
