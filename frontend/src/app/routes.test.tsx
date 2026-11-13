@@ -99,7 +99,7 @@ describe("app routes", () => {
     renderAt("/campuses/4/students");
     expect(await screen.findByText("Estudiantes del campus")).toBeTruthy();
     const tabs = screen.getByRole("navigation", { name: "Secciones del campus" });
-    expect(tabs.querySelectorAll("a")).toHaveLength(6);
+    expect(tabs.querySelectorAll("a")).toHaveLength(7);
   });
 
   it("stays signed in and shows an error when logout fails", async () => {
