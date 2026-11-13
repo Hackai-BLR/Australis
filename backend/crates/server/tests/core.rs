@@ -959,13 +959,13 @@ async fn seeded_settings_can_be_read() {
     let app = TestApp::new().await;
     let mut conn = app.db.acquire().await.unwrap();
 
-    let scale = settings::grading_scale(&mut conn).await.unwrap();
+    let scale = settings::grading_scale(&mut conn, 1).await.unwrap();
     assert_eq!((scale.min, scale.max, scale.pass), (1.0, 10.0, 4.0));
     assert!(!scale.confirmed, "the default scale is a guess");
     assert!(scale.contains(1.0) && scale.contains(10.0));
     assert!(!scale.contains(0.5) && !scale.contains(10.5));
 
-    let rule = settings::final_rule(&mut conn).await.unwrap();
+    let rule = settings::final_rule(&mut conn, 1).await.unwrap();
     assert_eq!(rule.kind, "weighted_mean");
     assert!(!rule.confirmed);
 
@@ -1000,7 +1000,7 @@ async fn settings_are_read_from_the_table_not_from_constants() {
         .await
         .unwrap();
     let mut conn = app.db.acquire().await.unwrap();
-    let scale = settings::grading_scale(&mut conn).await.unwrap();
+    let scale = settings::grading_scale(&mut conn, 1).await.unwrap();
     assert_eq!((scale.min, scale.max, scale.pass), (0.0, 100.0, 60.0));
     assert!(scale.confirmed);
 }
@@ -1080,7 +1080,7 @@ async fn the_quota_fails_closed() {
     }
 
     // A feature with no quota setting gets nothing.
-    let err = ai::reserve(&mut conn, professor.id, "summary")
+    let err = ai::reserve(&mut conn, professor.id, "no-such-feature")
         .await
         .unwrap_err();
     assert_eq!(err.status(), StatusCode::TOO_MANY_REQUESTS);
