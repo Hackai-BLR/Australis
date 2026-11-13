@@ -28,23 +28,39 @@ pub struct AuditEntry<'a> {
     pub reason: Option<&'a str>,
 }
 
-/// Trims whitespace and invisible format characters (zero-width space, joiners, BOM, soft
-/// hyphen, bidi marks) from both ends, so a reason made only of them counts as empty.
+/// True for a character that shows nothing: whitespace, control and format characters,
+/// fillers that render as blanks (braille blank, hangul fillers), variation selectors and
+/// tag characters.
+fn is_invisible(c: char) -> bool {
+    c.is_whitespace()
+        || c.is_control()
+        || matches!(
+            c,
+            '\u{00AD}'
+                | '\u{034F}'
+                | '\u{061C}'
+                | '\u{115F}'..='\u{1160}'
+                | '\u{17B4}'..='\u{17B5}'
+                | '\u{180B}'..='\u{180F}'
+                | '\u{200B}'..='\u{200F}'
+                | '\u{202A}'..='\u{202E}'
+                | '\u{2060}'..='\u{206F}'
+                | '\u{2800}'
+                | '\u{3164}'
+                | '\u{FE00}'..='\u{FE0F}'
+                | '\u{FEFF}'
+                | '\u{FFA0}'
+                | '\u{FFF9}'..='\u{FFFB}'
+                | '\u{E0000}'..='\u{E007F}'
+                | '\u{E0100}'..='\u{E01EF}'
+        )
+}
+
+/// Trims whitespace and invisible characters (zero-width space, joiners, BOM, soft hyphen,
+/// bidi marks, braille blank, hangul fillers, variation selectors, tag characters) from both
+/// ends, so a reason made only of them counts as empty.
 pub fn trim_reason(text: &str) -> &str {
-    text.trim_matches(|c: char| {
-        c.is_whitespace()
-            || matches!(
-                c,
-                '\u{00AD}'
-                    | '\u{034F}'
-                    | '\u{061C}'
-                    | '\u{180E}'
-                    | '\u{200B}'..='\u{200F}'
-                    | '\u{202A}'..='\u{202E}'
-                    | '\u{2060}'..='\u{206F}'
-                    | '\u{FEFF}'
-            )
-    })
+    text.trim_matches(is_invisible)
 }
 
 /// Appends a row and returns its id.
@@ -167,4 +183,39 @@ pub async fn list(
             created_at: row.created_at,
         })
         .collect())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::trim_reason;
+
+    #[test]
+    fn a_reason_of_only_invisible_characters_is_empty() {
+        let cases = [
+            ("zero-width space", "\u{200B}"),
+            ("mixed format characters", "\u{FEFF}\u{2060} "),
+            ("braille blank", "\u{2800}"),
+            ("hangul filler U+3164", "\u{3164}"),
+            ("hangul choseong filler", "\u{115F}"),
+            ("hangul jungseong filler", "\u{1160}"),
+            ("halfwidth hangul filler", "\u{FFA0}"),
+            ("variation selector", "\u{FE0F}"),
+            ("variation selector supplement", "\u{E0100}\u{E01EF}"),
+            ("tag characters", "\u{E0001}\u{E0020}\u{E007F}"),
+            ("control characters", "\u{0000}\u{0007}\u{009F}"),
+            (
+                "all of them with spaces",
+                " \u{2800}\u{3164}\u{FE0F}\u{E0041} \n",
+            ),
+        ];
+        for (name, text) in cases {
+            assert_eq!(trim_reason(text), "", "{name}");
+        }
+    }
+
+    #[test]
+    fn visible_text_is_kept_and_trimmed_at_the_ends() {
+        assert_eq!(trim_reason("  error de carga \u{200B}"), "error de carga");
+        assert_eq!(trim_reason("\u{2800}a\u{3164}b\u{FE0F}"), "a\u{3164}b");
+    }
 }
