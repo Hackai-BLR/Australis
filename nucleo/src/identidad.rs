@@ -17,6 +17,29 @@ pub struct Persona<'a> {
     pub rol: &'a str,
 }
 
+pub const CURSO_AUSTRALIS: &str = "australis";
+
+pub struct PersonaAustralis<'a> {
+    pub usuario: i64,
+    pub email: &'a str,
+    pub nombre: &'a str,
+    pub rol: &'a str,
+    pub administrador: bool,
+}
+
+impl<'a> PersonaAustralis<'a> {
+    pub fn de_usuario(u: &'a crate::auth::Usuario) -> PersonaAustralis<'a> {
+        let rol = if u.owner {
+            "dueño"
+        } else if u.profesor {
+            "profesor"
+        } else {
+            "alumno"
+        };
+        PersonaAustralis { usuario: u.id, email: &u.email, nombre: &u.nombre, rol, administrador: u.administrador }
+    }
+}
+
 fn desde_semilla(semilla: &str) -> anyhow::Result<SigningKey> {
     let bytes = URL_SAFE_NO_PAD
         .decode(semilla.as_bytes())
@@ -57,17 +80,38 @@ impl Identidad {
     }
 
     pub fn firmar(&self, p: &Persona, vigencia: i64) -> String {
+        self.firmar_carga(
+            json!({
+                "v": 1,
+                "curso": p.curso,
+                "usuario": p.usuario.to_string(),
+                "email": p.email,
+                "nombre": p.nombre,
+                "rol": p.rol,
+            }),
+            vigencia,
+        )
+    }
+
+    pub fn firmar_australis(&self, p: &PersonaAustralis, vigencia: i64) -> String {
+        self.firmar_carga(
+            json!({
+                "v": 1,
+                "curso": CURSO_AUSTRALIS,
+                "usuario": p.usuario.to_string(),
+                "email": p.email,
+                "nombre": p.nombre,
+                "rol": p.rol,
+                "administrador": p.administrador,
+            }),
+            vigencia,
+        )
+    }
+
+    fn firmar_carga(&self, mut carga: serde_json::Value, vigencia: i64) -> String {
         let emitido = chrono::Utc::now().timestamp();
-        let carga = json!({
-            "v": 1,
-            "curso": p.curso,
-            "usuario": p.usuario.to_string(),
-            "email": p.email,
-            "nombre": p.nombre,
-            "rol": p.rol,
-            "emitido": emitido,
-            "vence": emitido + vigencia,
-        });
+        carga["emitido"] = json!(emitido);
+        carga["vence"] = json!(emitido + vigencia);
         let c = URL_SAFE_NO_PAD.encode(carga.to_string().as_bytes());
         let firma = self.clave.sign(c.as_bytes());
         format!("{c}.{}", URL_SAFE_NO_PAD.encode(firma.to_bytes()))

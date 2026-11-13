@@ -2,6 +2,10 @@
 //!
 //! A session is a random token in an HttpOnly, SameSite=Lax cookie named `australis_session`.
 //! Only the SHA-256 of the token is stored, so a copy of the database holds no usable session.
+//!
+//! With `AUTH_MODE=header` there is no cookie: the Campus IA core signs who the caller is
+//! (`X-Campus-Identidad`, see `contratos/identidad-australis.md`) and [`CurrentUser`]
+//! verifies it, creates the account on first sight and keeps its role in step with the core.
 
 use argon2::{
     password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString},
@@ -11,19 +15,29 @@ use axum::{
     extract::FromRequestParts,
     http::{header::COOKIE, request::Parts, HeaderMap},
 };
+use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
+use ed25519_dalek::{Signature, VerifyingKey};
 use rand::RngCore;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use sqlx::SqliteConnection;
 
 use crate::{
-    config::Argon2Cost,
+    audit::{self, AuditEntry},
+    config::{Argon2Cost, AuthMode},
     directory::{self, UserStatus},
     AppError, AppResult, AppState, Config,
 };
 
 pub const SESSION_COOKIE: &str = "australis_session";
 pub const MIN_PASSWORD_LEN: usize = 8;
+
+/// The header the Campus IA core adds to every request it forwards to Australis.
+pub const IDENTITY_HEADER: &str = "x-campus-identidad";
+/// The `curso` value of an identity issued for Australis.
+pub const IDENTITY_AUDIENCE: &str = "australis";
+const IDENTITY_MAX_LIFETIME_SECS: i64 = 120;
+const IDENTITY_CLOCK_SKEW_SECS: i64 = 30;
 
 /// The account role. A campus membership has its own role, see `directory::MemberRole`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, sqlx::Type)]
@@ -60,12 +74,197 @@ impl FromRequestParts<AppState> for CurrentUser {
     type Rejection = AppError;
 
     async fn from_request_parts(parts: &mut Parts, state: &AppState) -> Result<Self, AppError> {
-        let token = session_token(&parts.headers).ok_or(AppError::Unauthorized)?;
-        let mut conn = state.db.acquire().await?;
-        user_for_session(&mut conn, &token)
-            .await?
-            .ok_or(AppError::Unauthorized)
+        match state.config.auth_mode {
+            AuthMode::Password => {
+                let token = session_token(&parts.headers).ok_or(AppError::Unauthorized)?;
+                let mut conn = state.db.acquire().await?;
+                user_for_session(&mut conn, &token)
+                    .await?
+                    .ok_or(AppError::Unauthorized)
+            }
+            AuthMode::Header => {
+                let key = state
+                    .config
+                    .identity_key
+                    .as_ref()
+                    .ok_or(AppError::Unauthorized)?;
+                let value = parts
+                    .headers
+                    .get(IDENTITY_HEADER)
+                    .and_then(|value| value.to_str().ok())
+                    .ok_or(AppError::Unauthorized)?;
+                let identity =
+                    verify_identity(key, value, now_secs()).ok_or(AppError::Unauthorized)?;
+                user_for_identity(state, &identity).await
+            }
+        }
     }
+}
+
+/// Who the core says the caller is.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Identity {
+    pub email: String,
+    pub full_name: String,
+    pub role: Role,
+}
+
+#[derive(Deserialize)]
+struct IdentityClaims {
+    v: i64,
+    curso: String,
+    email: String,
+    #[serde(default)]
+    nombre: String,
+    rol: String,
+    #[serde(default)]
+    administrador: bool,
+    emitido: i64,
+    vence: i64,
+}
+
+fn now_secs() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|elapsed| elapsed.as_secs() as i64)
+        .unwrap_or(0)
+}
+
+/// The Australis role for a platform identity: the owner and a university administrator are
+/// the secretary, a professor mark is a professor, everyone else is a student.
+pub fn role_for_platform(rol: &str, administrador: bool) -> Role {
+    if rol == "dueño" || administrador {
+        Role::Secretary
+    } else if rol == "profesor" {
+        Role::Professor
+    } else {
+        Role::Student
+    }
+}
+
+/// Checks the signed header value (`<payload>.<signature>`, both base64url) against the
+/// core's public key. `None` for anything wrong: bad signature, wrong version or audience,
+/// expired, issued in the future, or valid for longer than 120 seconds.
+pub fn verify_identity(key: &VerifyingKey, header: &str, now: i64) -> Option<Identity> {
+    let (payload, signature) = header.split_once('.')?;
+    let signature = URL_SAFE_NO_PAD.decode(signature).ok()?;
+    let signature = Signature::from_slice(&signature).ok()?;
+    key.verify_strict(payload.as_bytes(), &signature).ok()?;
+    let claims: IdentityClaims =
+        serde_json::from_slice(&URL_SAFE_NO_PAD.decode(payload).ok()?).ok()?;
+    let valid = claims.v == 1
+        && claims.curso == IDENTITY_AUDIENCE
+        && claims.vence > now
+        && claims.vence > claims.emitido
+        && claims.vence - claims.emitido <= IDENTITY_MAX_LIFETIME_SECS
+        && claims.emitido <= now + IDENTITY_CLOCK_SKEW_SECS;
+    valid.then(|| Identity {
+        email: claims.email,
+        full_name: claims.nombre,
+        role: role_for_platform(&claims.rol, claims.administrador),
+    })
+}
+
+/// The account for a verified identity. It is created on first sight (or activated, if the
+/// roster import had already invited it) and its name and role follow the core. A suspended
+/// account has no access: 403.
+async fn user_for_identity(state: &AppState, identity: &Identity) -> AppResult<CurrentUser> {
+    let email = directory::normalize_email(&identity.email).map_err(|_| AppError::Unauthorized)?;
+    let name: String = identity.full_name.trim().chars().take(200).collect();
+    {
+        let mut conn = state.db.acquire().await?;
+        if let Some(user) = directory::find_user_by_email(&mut conn, &email).await? {
+            match user.status {
+                UserStatus::Suspended => return Err(AppError::Forbidden),
+                UserStatus::Active
+                    if user.role == identity.role
+                        && (name.is_empty() || user.full_name == name) =>
+                {
+                    return Ok(user.into());
+                }
+                _ => {}
+            }
+        }
+    }
+    let mut tx = crate::begin_write(&state.db).await?;
+    let user = match directory::find_user_by_email(&mut tx, &email).await? {
+        None => {
+            let full_name = if name.is_empty() { &email } else { &name };
+            sqlx::query(
+                "INSERT INTO core_users (email, full_name, role, password_hash, status)
+                 VALUES (?, ?, ?, NULL, 'active')",
+            )
+            .bind(&email)
+            .bind(full_name)
+            .bind(identity.role)
+            .execute(&mut *tx)
+            .await?;
+            let user = directory::find_user_by_email(&mut tx, &email)
+                .await?
+                .ok_or(AppError::NotFound)?;
+            audit::record(
+                &mut tx,
+                AuditEntry {
+                    actor_id: None,
+                    campus_id: None,
+                    entity: "user",
+                    entity_id: user.id,
+                    subject_user_id: Some(user.id),
+                    action: "create_from_identity",
+                    before: None,
+                    after: Some(serde_json::json!({ "role": user.role, "status": user.status })),
+                    reason: Some("first sign-in through the platform"),
+                },
+            )
+            .await?;
+            user
+        }
+        Some(before) => {
+            if before.status == UserStatus::Suspended {
+                return Err(AppError::Forbidden);
+            }
+            let full_name = if name.is_empty() {
+                before.full_name.clone()
+            } else {
+                name
+            };
+            sqlx::query(
+                "UPDATE core_users SET full_name = ?, role = ?, status = 'active' WHERE id = ?",
+            )
+            .bind(&full_name)
+            .bind(identity.role)
+            .bind(before.id)
+            .execute(&mut *tx)
+            .await?;
+            let user = directory::find_user_by_email(&mut tx, &email)
+                .await?
+                .ok_or(AppError::NotFound)?;
+            if before.role != user.role || before.status != user.status {
+                audit::record(
+                    &mut tx,
+                    AuditEntry {
+                        actor_id: None,
+                        campus_id: None,
+                        entity: "user",
+                        entity_id: user.id,
+                        subject_user_id: Some(user.id),
+                        action: "sync_from_identity",
+                        before: Some(
+                            serde_json::json!({ "role": before.role, "status": before.status }),
+                        ),
+                        after: Some(
+                            serde_json::json!({ "role": user.role, "status": user.status }),
+                        ),
+                        reason: Some("the platform changed the role or activated the account"),
+                    },
+                )
+                .await?;
+            }
+            user
+        }
+    };
+    tx.commit().await?;
+    Ok(user.into())
 }
 
 /// The session token carried by the request's cookies, if any.
@@ -271,6 +470,63 @@ mod tests {
         assert!(verify_password_blocking(&hash, "correct horse"));
         assert!(!verify_password_blocking(&hash, "wrong horse"));
         assert!(!verify_password_blocking("not a hash", "correct horse"));
+    }
+
+    fn signed(key: &ed25519_dalek::SigningKey, claims: serde_json::Value) -> String {
+        use ed25519_dalek::Signer;
+        let payload = URL_SAFE_NO_PAD.encode(claims.to_string());
+        let signature = URL_SAFE_NO_PAD.encode(key.sign(payload.as_bytes()).to_bytes());
+        format!("{payload}.{signature}")
+    }
+
+    fn claims(rol: &str, administrador: bool, emitido: i64, vence: i64) -> serde_json::Value {
+        serde_json::json!({
+            "v": 1, "curso": IDENTITY_AUDIENCE, "usuario": "7", "email": "ana@demo.test",
+            "nombre": "Ana", "rol": rol, "administrador": administrador,
+            "emitido": emitido, "vence": vence,
+        })
+    }
+
+    #[test]
+    fn identity_maps_platform_roles() {
+        assert_eq!(role_for_platform("dueño", false), Role::Secretary);
+        assert_eq!(role_for_platform("alumno", true), Role::Secretary);
+        assert_eq!(role_for_platform("profesor", false), Role::Professor);
+        assert_eq!(role_for_platform("alumno", false), Role::Student);
+        assert_eq!(role_for_platform("algo raro", false), Role::Student);
+    }
+
+    #[test]
+    fn identity_checks_signature_audience_and_time() {
+        let signing = ed25519_dalek::SigningKey::from_bytes(&[3u8; 32]);
+        let other = ed25519_dalek::SigningKey::from_bytes(&[4u8; 32]);
+        let key = signing.verifying_key();
+        let now = 1_000_000;
+
+        let good = signed(&signing, claims("profesor", false, now - 5, now + 60));
+        let identity = verify_identity(&key, &good, now).unwrap();
+        assert_eq!(identity.role, Role::Professor);
+        assert_eq!(identity.email, "ana@demo.test");
+
+        let forged = signed(&other, claims("dueño", false, now - 5, now + 60));
+        assert!(verify_identity(&key, &forged, now).is_none());
+        let expired = signed(&signing, claims("alumno", false, now - 100, now - 1));
+        assert!(verify_identity(&key, &expired, now).is_none());
+        let future = signed(&signing, claims("alumno", false, now + 31, now + 60));
+        assert!(verify_identity(&key, &future, now).is_none());
+        let long = signed(&signing, claims("alumno", false, now - 5, now + 200));
+        assert!(verify_identity(&key, &long, now).is_none());
+        let mut wrong_course = claims("alumno", false, now - 5, now + 60);
+        wrong_course["curso"] = "otro".into();
+        assert!(verify_identity(&key, &signed(&signing, wrong_course), now).is_none());
+        let mut wrong_version = claims("alumno", false, now - 5, now + 60);
+        wrong_version["v"] = 2.into();
+        assert!(verify_identity(&key, &signed(&signing, wrong_version), now).is_none());
+
+        let (payload, _) = good.split_once('.').unwrap();
+        assert!(verify_identity(&key, payload, now).is_none());
+        assert!(verify_identity(&key, "a.b", now).is_none());
+        assert!(verify_identity(&key, "", now).is_none());
     }
 
     #[test]
