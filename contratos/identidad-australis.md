@@ -35,3 +35,7 @@ Lo usan el núcleo (que firma y reenvía) y el backend de Australis (que verific
 - En este modo no existen `POST /api/auth/login`, `/api/auth/invites/*`, `POST /api/users` ni `POST /api/users/{id}/invite` (404), y la cookie `australis_session` no autentica a nadie.
 - `GET /api/auth/mode` responde `{"mode":"password"|"header"}`. Con `AUTH_MODE=password` (por defecto, para desarrollo local y pruebas) el encabezado se ignora.
 - El backend de Australis tiene que escuchar solo en la interfaz local: en modo `header` confía en el encabezado firmado y en nada más.
+
+## Uso en el intermediario del modelo
+
+- El núcleo también acepta esta identidad como segundo factor del token de Australis en `/modelo/v1/messages` (`modelo-australis.md`). Verifica su propia firma con las mismas reglas (`v` 1, `curso` `australis`, vencida, emitida en el futuro, vigencia máxima) y cobra a la persona del mail firmado. El token `AI_API_KEY` sin una identidad vigente no sirve para nada.
