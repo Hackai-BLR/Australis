@@ -175,10 +175,16 @@ async fn upload(
                 let raw = field.text().await?;
                 let raw = raw.trim();
                 if !raw.is_empty() {
-                    class_id =
-                        Some(raw.parse().map_err(|_| {
-                            AppError::BadRequest("class_id must be a number".into())
-                        })?);
+                    let id: i64 = raw
+                        .parse()
+                        .map_err(|_| AppError::BadRequest("class_id must be a number".into()))?;
+                    if id < 1 {
+                        return Err(AppError::Unprocessable(
+                            "class_id must be a positive id".into(),
+                        )
+                        .into());
+                    }
+                    class_id = Some(id);
                 }
             }
             _ => {}

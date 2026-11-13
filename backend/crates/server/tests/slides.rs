@@ -146,6 +146,25 @@ async fn a_pdf_upload_stores_the_file_and_counts_pages() {
 }
 
 #[tokio::test]
+async fn an_upload_with_a_non_positive_class_id_is_refused() {
+    let s = setup().await;
+    for bad in ["0", "-3"] {
+        let (status, body) = s
+            .app
+            .post_multipart(
+                &format!("/api/campuses/{}/presentations", s.campus),
+                Some(&s.professor.cookie),
+                vec![
+                    Part::text("class_id", bad),
+                    Part::file("file", "a.pdf", "application/pdf", make_pdf(1, 0)),
+                ],
+            )
+            .await;
+        assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{bad}: {body}");
+    }
+}
+
+#[tokio::test]
 async fn a_file_over_2_mb_uploads() {
     let s = setup().await;
     let pdf = make_pdf(2, 3 * 1024 * 1024);
