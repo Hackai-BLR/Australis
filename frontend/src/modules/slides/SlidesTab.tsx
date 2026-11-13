@@ -13,6 +13,7 @@ import {
   type Presentation,
 } from "./api";
 import { isBrowsing, viewPage, type LiveState } from "./follower";
+import { NotesPanel } from "./notes/NotesPanel";
 import { NotesSlot } from "./notes/NotesSlot";
 import { PdfViewer } from "./PdfViewer";
 import { POLL_MS, useLiveFollow } from "./useLiveFollow";
@@ -301,10 +302,17 @@ function FollowerView({ campusId }: { campusId: string }) {
   if (!checked && liveId === null) return <Spinner />;
   if (!live || live.status !== "live") {
     return (
-      <EmptyState
-        title={ended ? "La presentación terminó" : "No hay una presentación en vivo"}
-        description="Cuando el docente proyecte una presentación, vas a verla acá."
-      />
+      <>
+        <EmptyState
+          title={ended ? "La presentación terminó" : "No hay una presentación en vivo"}
+          description="Cuando el docente proyecte una presentación, vas a verla acá."
+        />
+        {live && ended && (
+          <Card title="Mis notas de la presentación">
+            <NotesPanel presentationId={live.presentation_id} page={viewPage(state)} />
+          </Card>
+        )}
+      </>
     );
   }
 

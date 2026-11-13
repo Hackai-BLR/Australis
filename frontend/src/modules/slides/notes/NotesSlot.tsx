@@ -1,5 +1,7 @@
+import { NotesPanel } from "./NotesPanel";
+
 /**
- * Seam for F15: replace the body with the student's private notes for the page they are on.
+ * Kickoff slot for F15: the student's private notes for the page they are on.
  * Mounted under the presentation a student follows.
  */
 export function NotesSlot({
@@ -17,7 +19,8 @@ export function NotesSlot({
       data-campus-id={campusId}
       data-presentation-id={presentationId}
       data-page={page}
-      hidden
-    />
+    >
+      <NotesPanel presentationId={presentationId} page={page} />
+    </div>
   );
 }
