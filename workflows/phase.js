@@ -185,7 +185,7 @@ if (CP !== null) {
 
 1. \`git fetch origin --prune\`. Read the "Checkpoints" section of docs/plan.md with \`git show origin/main:docs/plan.md\` (if the plan is not on main yet, try origin/merge/campusai, then origin/docs/plan). Report the ref you used.
 2. Copy verbatim, for checkpoint ${CP}: its title, its "Runs on" cell, every numbered step of its demo story, and every item of "Must be refused". Copy the numbered list "A checkpoint passes when" as well.
-3. For every id under "Needs" (expand ranges such as "F10 to F17"; an earlier checkpoint counts as done if the tag checkpoint-<letter> exists on origin), say whether it is done: its pull request is merged. Use \`gh pr list --state all --limit 200 --json number,title,state,headRefName,mergedAt\` and \`git ls-remote --tags origin\`. ${GH}
+3. For every id under "Needs" (expand ranges such as "F10 to F17"; an earlier checkpoint counts as done if the tag checkpoint-<letter> exists on origin), say whether it is done: its pull request is merged, or the plan itself states it is done. Use \`gh pr list --state all --limit 200 --json number,title,state,headRefName,mergedAt\` and \`git ls-remote --tags origin\`. ${GH}
 4. List the end-to-end test folders that exist on that ref for this checkpoint and every earlier one (pruebas/australis/checkpoint-*), and say how the folder's own files say to run them.`,
     { label: `scout:checkpoint-${CP}`, phase: 'Scout', model: CODER, effort: 'low', schema: { type: 'object', required: ['title', 'steps', 'needs'], properties: {
       plan_ref: { type: 'string' }, title: { type: 'string' }, runs_on: { type: 'string' },
@@ -221,6 +221,7 @@ ${cp.steps.map((s, i) => `${i + 1}. ${s}`).join('\n')}
 
 - ${BROWSER}
 - Use names starting "demo-${run}" for anything you create, so the other rehearsal on the same app is not disturbed.
+- Exceptions the plan records as accepted (for example a "Status" or "Decision" note in the plan) are not findings. Read the plan's notes for the phases this checkpoint closes before reporting.
 - Also note anything an audience would notice: a raw error, English text on a screen, a missing "Simulado" badge on simulated data, a dead link, a long wait.
 - Report each step, and a finding for every failed step and every such problem, with exact steps to reproduce. blocker = the story cannot continue, data is lost, or a security hole; major = a step fails or shows something wrong; minor = cosmetic.`,
     { label: `test:demo-${run}`, phase: 'Test', model: CODER, schema: WALK_SCHEMA })
