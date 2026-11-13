@@ -22,7 +22,7 @@ use australis_core::{
 };
 use axum::{
     extract::{Path, State},
-    http::StatusCode,
+    http::{HeaderMap, StatusCode},
     routing::{get, post},
     Json, Router,
 };
@@ -221,6 +221,7 @@ async fn generate(
     campus_id: i64,
     doc: &Document,
     instruction: &str,
+    identity: Option<String>,
 ) -> AppResult<Generated> {
     let deadline = Instant::now() + DEADLINE;
     let context = describe_document(doc);
@@ -235,6 +236,7 @@ async fn generate(
             instruction: instruction.into(),
             tools: ops::tools(),
             feedback: feedback.clone(),
+            identity: identity.clone(),
         };
         let remaining = deadline.saturating_duration_since(Instant::now());
         let outcome = match tokio::time::timeout(
@@ -298,6 +300,7 @@ async fn create_proposal(
     State(state): State<AppState>,
     user: CurrentUser,
     Path(id): Path<i64>,
+    headers: HeaderMap,
     Json(body): Json<CreateProposal>,
 ) -> AppResult<(StatusCode, Json<Proposal>)> {
     let instruction = body.instruction.trim().to_string();
@@ -319,7 +322,19 @@ async fn create_proposal(
             .ok_or(AppError::NotFound)?
     };
 
-    let generated = generate(&state, user.id, id, &stored.document, &instruction).await?;
+    let identity = headers
+        .get(australis_core::auth::IDENTITY_HEADER)
+        .and_then(|value| value.to_str().ok())
+        .map(str::to_string);
+    let generated = generate(
+        &state,
+        user.id,
+        id,
+        &stored.document,
+        &instruction,
+        identity,
+    )
+    .await?;
 
     let status = if generated.ops.is_empty() {
         "empty"

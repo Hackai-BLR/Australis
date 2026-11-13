@@ -94,6 +94,7 @@ fn request(instruction: &str) -> AiRequest {
             input_schema: json!({ "type": "object" }),
         }],
         feedback: vec!["title is required".into()],
+        identity: Some("payload.signature".into()),
     }
 }
 
@@ -136,6 +137,7 @@ async fn the_call_goes_to_the_proxy_with_its_token_and_the_professor_and_is_logg
         let (headers, body) = &seen[0];
         assert_eq!(headers["x-api-key"], TOKEN);
         assert_eq!(headers["x-campus-usuario"], professor.email.as_str());
+        assert_eq!(headers["x-campus-identidad"], "payload.signature");
         assert!(headers.get("authorization").is_none());
         assert_eq!(body["model"], "claude-test");
         assert_eq!(body["system"], "Sos el asistente del campus.");
@@ -308,4 +310,26 @@ async fn a_call_dropped_by_the_caller_deadline_is_still_logged() {
     }
     assert_eq!(usage.len(), 1, "the paid call has a usage row");
     assert_eq!(usage[0].status, UsageStatus::Ok);
+}
+
+#[tokio::test]
+async fn without_the_request_identity_the_token_is_never_sent_and_the_call_is_given_back() {
+    let (url, fake) = start_fake().await;
+    let app = app_with_proxy(&url).await;
+    let professor = app.login_as(Role::Professor).await;
+
+    for identity in [None, Some(String::new())] {
+        let mut req = request("agregá ética");
+        req.identity = identity;
+        let err = ai::run(&app.state, professor.id, None, &req)
+            .await
+            .unwrap_err();
+        assert_ne!(err.status(), StatusCode::OK);
+    }
+
+    assert!(
+        fake.seen.lock().unwrap().is_empty(),
+        "the proxy was not called"
+    );
+    assert_eq!(calls_used(&app, professor.id).await, 0);
 }
