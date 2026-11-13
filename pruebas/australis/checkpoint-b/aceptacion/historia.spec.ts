@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test';
 import {
   aleatorio,
+  bloqueoDelSdk,
   cantidadMails,
   dormirHasta,
   entornoDelContenedor,
@@ -192,10 +193,29 @@ test.describe('checkpoint B: la historia con el núcleo, Australis y el modelo f
     expect(dosOk.estado, dosOk.texto).toBe(200);
   });
 
-  test.fixme('5 (administrador). el administrador de la universidad ve esas inscripciones en el núcleo: lo cubre M11', async () => {
-    const r = await admin.get('/api/admin/cursos');
-    expect(r.estado).toBe(200);
-    expect(r.texto).toContain('Seminario de investigación');
+  // Known gaps, kept as expected failures so they stay visible and turn red when fixed:
+  // remove `test.fail` as soon as they pass.
+  test.fail('5 (administrador). el administrador de la universidad ve esas inscripciones en el núcleo: falta M11', async () => {
+    const lista = await admin.get('/api/admin/cursos');
+    expect(lista.estado, lista.texto).toBe(200);
+    expect(lista.texto).toContain('Seminario de investigación');
+    const inscriptos = await admin.get(`/api/cursos-modulos/${campusUno.nucleo}/inscriptos`);
+    expect(inscriptos.estado, inscriptos.texto).toBe(200);
+    const alumnos = inscriptos.json.inscriptos.filter((i: any) => i.rol === 'alumno').map((i: any) => i.email).sort();
+    expect(alumnos).toEqual(ALUMNOS.map((a) => a.correo).sort());
+  });
+
+  test.fail('6 (administrador). un administrador de la universidad abre el campus como secretaría: falta que el núcleo firme su rol (nucleo/src/identidad.rs)', async () => {
+    const r = await admin.campus('GET', `/api/campuses/${campusUno.australis}`);
+    expect(r.estado, r.texto).toBe(200);
+    expect(r.json.access).toBe('manage');
+  });
+
+  test.fail('el curso libre arranca con la plantilla tal como está en el repositorio: hoy su bloqueo no coincide con el SDK empaquetado', async () => {
+    // The test image rewrites the lockfile hash of the SDK tarball so the free course can build.
+    // The production image does not, so a free course there fails with ERR_PNPM_TARBALL_INTEGRITY.
+    const bloqueo = bloqueoDelSdk(estadoB().nucleo);
+    expect(bloqueo.coincidia, `bloqueo ${bloqueo.original} contra paquete ${bloqueo.empaquetado}`).toBe(true);
   });
 
   test('6. la secretaría abre el campus como secretaria y un alumno de otro campus no puede', async ({ browser }) => {

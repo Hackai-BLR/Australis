@@ -280,6 +280,10 @@ export function entornoDelContenedor(contenedor: string): string {
   return execFileSync('docker', ['exec', contenedor, 'sh', '-c', 'env; cat /proc/1/environ 2>/dev/null | tr "\\0" "\\n"'], { encoding: 'utf8' });
 }
 
+export function bloqueoDelSdk(contenedor: string): { coincidia: boolean; original: string; empaquetado: string } {
+  return JSON.parse(execFileSync('docker', ['exec', contenedor, 'cat', '/app/bloqueo-sdk.json'], { encoding: 'utf8' }));
+}
+
 export function inspeccionar(contenedor: string): string {
   return execFileSync('docker', ['inspect', contenedor], { encoding: 'utf8' });
 }

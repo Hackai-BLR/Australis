@@ -28,6 +28,7 @@ COPY --from=compilar /campusia-nucleo /usr/local/bin/campusia-nucleo
 COPY --from=web /fuentes/interfaz/dist /app/interfaz/dist
 COPY --from=web /fuentes/sdk /app/sdk
 COPY --from=web /fuentes/plantilla-curso /app/plantilla-curso
+COPY --from=web /empaque/bloqueo-sdk.json /app/bloqueo-sdk.json
 ENV INTERFAZ_DIR=/app/interfaz/dist \
     PLANTILLA_CURSO_DIR=/app/plantilla-curso \
     SDK_DIR=/app/sdk \
