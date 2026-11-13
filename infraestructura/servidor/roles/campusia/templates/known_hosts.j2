@@ -1,0 +1,5 @@
+{% for linea in (despliegue_known_hosts if (despliegue_known_hosts is not string) else despliegue_known_hosts.splitlines()) %}
+{% if linea | trim %}
+{{ linea | trim }}
+{% endif %}
+{% endfor %}

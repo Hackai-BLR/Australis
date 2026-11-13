@@ -1,0 +1,28 @@
+---
+docker_paquetes:
+  - docker-ce
+  - docker-ce-cli
+  - containerd.io
+  - docker-ce-rootless-extras
+  - docker-buildx-plugin
+  - uidmap
+  - dbus-user-session
+  - slirp4netns
+docker_paquetes_prohibidos:
+  - podman
+  - podman-docker
+  - docker.io
+docker_arquitecturas:
+  x86_64: amd64
+  aarch64: arm64
+  armv7l: armhf
+docker_distribucion: "{{ ansible_facts.distribution | lower }}"
+docker_version_distribucion: "{{ ansible_facts.distribution_release }}"
+docker_arquitectura: "{{ docker_arquitecturas[ansible_facts.architecture] | default(ansible_facts.architecture) }}"
+docker_paquetes_modulos:
+  - kmod
+docker_modulos:
+  - br_netfilter
+docker_archivo_modulos: /etc/modules-load.d/campusia-docker.conf
+docker_sin_root: "{{ not (servidor_contenedor_de_prueba | bool) or (servidor_docker_sin_root_en_prueba | bool) }}"
+docker_red_sin_root: /etc/systemd/user/docker.service.d/campusia-red.conf

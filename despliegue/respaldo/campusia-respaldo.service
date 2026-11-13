@@ -1,0 +1,17 @@
+[Unit]
+Description=Respaldo diario de Campus IA
+After=local-fs.target
+
+[Service]
+Type=oneshot
+User=campusia
+Group=campusia
+UMask=0077
+ExecStart=/srv/campusia/plataforma/despliegue/respaldo/respaldar.sh
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/srv/campusia/respaldos /srv/campusia/datos /srv/campusia/cursos
+Nice=10
+IOSchedulingClass=idle

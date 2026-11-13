@@ -1,0 +1,15 @@
+---
+campusia_env_extra: {}
+campusia_env_ejemplo: "{{ playbook_dir }}/../../despliegue/campusia.env.ejemplo"
+campusia_continuo_origen: "{{ playbook_dir }}/../../despliegue/continuo"
+campusia_continuo_destino: /usr/local/lib/campusia/continuo
+campusia_secretos:
+  BREVO_API_KEY: vault_brevo_api_key
+  CLAUDE_CODE_OAUTH_TOKEN: vault_claude_code_oauth_token
+  TURNSTILE_SITE_KEY: vault_turnstile_clave_sitio
+  TURNSTILE_SECRET: vault_turnstile_clave_secreta
+  SESSION_SECRET: vault_secreto_sesion
+  SECRETO_FIRMA: vault_secreto_firma
+  SECRETO_WEBHOOK: vault_secreto_webhook
+campusia_instalar_clave: "{{ servidor_raiz }}/.ssh/campusia_deploy"
+campusia_despliegue_dir: "{{ servidor_raiz }}/despliegue"

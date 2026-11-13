@@ -1,0 +1,28 @@
+#!/bin/bash
+set -uo pipefail
+token_modelo="${ANTHROPIC_AUTH_TOKEN:-}"
+unset ANTHROPIC_AUTH_TOKEN ANTHROPIC_API_KEY CLAUDE_CODE_OAUTH_TOKEN CAMPUSIA_TOKEN_CURSO CAMPUSIA_CLAVE_PUBLICA
+. /usr/local/lib/campusia/entorno.sh
+
+continuar=0
+for argumento in "$@"; do
+	case "$argumento" in
+		--continuar) continuar=1 ;;
+		*) echo "campusia-agente: opción desconocida: $argumento" >&2; exit 2 ;;
+	esac
+done
+
+cd /repo || { echo "campusia-agente: no existe /repo" >&2; exit 1; }
+
+modelo="${CAMPUSIA_MODELO:-sonnet}"
+unset CAMPUSIA_MODELO
+opciones=(-p --output-format stream-json --verbose --model "$modelo" --permission-mode acceptEdits --tools "Read,Edit,Write,Glob,Grep,Bash" --allowedTools "Read,Edit,Write,Glob,Grep,Bash")
+if [ "$continuar" = 1 ] && compgen -G "$HOME/.claude/projects/*/*.jsonl" >/dev/null; then
+	opciones+=(--continue)
+fi
+
+export CLAUDE_CODE_SHELL=/usr/local/lib/campusia/bash SHELL=/usr/local/lib/campusia/bash
+export CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1 DISABLE_TELEMETRY=1 DISABLE_ERROR_REPORTING=1 DISABLE_AUTOUPDATER=1 CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1
+export ANTHROPIC_AUTH_TOKEN="$token_modelo"
+unset token_modelo
+exec /usr/local/bin/claude "${opciones[@]}"

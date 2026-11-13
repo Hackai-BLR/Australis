@@ -1,6 +1,6 @@
 # Features
 
-Status: feature list agreed on 2026-11-10. Nothing here is built yet.
+Status: feature list agreed on 2026-11-10. The first build (features 1 to 9) is merged. The order for everything marked **Later** is in `docs/plan.md`.
 
 ## What the system is
 

@@ -1,0 +1,75 @@
+---
+- name: Instalar el servidor SSH
+  ansible.builtin.apt:
+    name: openssh-server
+    state: present
+
+- name: Agregar las claves de root
+  ansible.posix.authorized_key:
+    user: root
+    key: "{{ item }}"
+    state: present
+    manage_dir: true
+  loop: "{{ ssh_claves_root }}"
+  loop_control:
+    label: "{{ item.split() | last }}"
+
+- name: Leer las claves autorizadas de root
+  ansible.builtin.slurp:
+    src: /root/.ssh/authorized_keys
+  register: ssh_claves_actuales
+  failed_when: false
+
+- name: Exigir al menos una clave para root
+  ansible.builtin.assert:
+    that:
+      - ssh_claves_actuales.content is defined
+      - (ssh_claves_actuales.content | b64decode).splitlines() | select('search', '(^|\\s)(ssh-|ecdsa-sha2-|sk-)\\S+\\s+AAAA') | list | length > 0
+    fail_msg: root no tiene ninguna clave autorizada; no se desactivan las contraseñas para no perder el acceso
+    quiet: true
+
+- name: Crear la carpeta de privilegios de sshd
+  ansible.builtin.file:
+    path: /run/sshd
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Instalar la configuración de SSH
+  ansible.builtin.copy:
+    src: 00-campusia.conf
+    dest: /etc/ssh/sshd_config.d/00-campusia.conf
+    owner: root
+    group: root
+    mode: "0644"
+    validate: /usr/sbin/sshd -t -f %s
+  notify: Recargar ssh
+
+- name: Validar la configuración completa de SSH
+  ansible.builtin.command: /usr/sbin/sshd -t
+  changed_when: false
+
+- name: Habilitar el servicio SSH
+  ansible.builtin.systemd_service:
+    name: "{{ ssh_servicio }}"
+    enabled: true
+    state: started
+
+- name: Aplicar los cambios pendientes de SSH
+  ansible.builtin.meta: flush_handlers
+
+- name: Leer la configuración efectiva de SSH
+  ansible.builtin.command: /usr/sbin/sshd -T
+  register: ssh_efectiva
+  changed_when: false
+
+- name: Verificar SSH solo con clave
+  ansible.builtin.assert:
+    that:
+      - "'passwordauthentication no' in ssh_efectiva.stdout_lines"
+      - "'kbdinteractiveauthentication no' in ssh_efectiva.stdout_lines"
+      - "'pubkeyauthentication yes' in ssh_efectiva.stdout_lines"
+      - "('permitrootlogin without-password' in ssh_efectiva.stdout_lines) or ('permitrootlogin prohibit-password' in ssh_efectiva.stdout_lines)"
+    fail_msg: SSH sigue aceptando contraseñas
+    quiet: true

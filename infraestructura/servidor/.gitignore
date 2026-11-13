@@ -1,0 +1,4 @@
+inventario.yml
+secretos.yml
+*.retry
+.ansible/

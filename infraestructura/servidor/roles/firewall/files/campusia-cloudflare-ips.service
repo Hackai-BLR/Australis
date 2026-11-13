@@ -1,0 +1,10 @@
+[Unit]
+Description=Actualizar los rangos de Cloudflare en nftables
+Wants=network-online.target
+After=network-online.target nftables.service
+Requisite=nftables.service
+
+[Service]
+Type=oneshot
+EnvironmentFile=-/etc/default/campusia-cloudflare-ips
+ExecStart=/usr/local/sbin/campusia-cloudflare-ips

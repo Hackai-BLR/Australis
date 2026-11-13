@@ -1,0 +1,6 @@
+---
+- name: Recargar caddy
+  ansible.builtin.systemd_service:
+    name: caddy
+    state: reloaded
+  when: caddy_pem.stat.exists

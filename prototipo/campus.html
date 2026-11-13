@@ -1,0 +1,682 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Campus IA</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{--azul:#001D9C;--azul2:#1E4FD6;--azulsuave:#EEF2FD;--tinta:#16181F;--gris:#5E6270;--gris2:#8A8E9A;--linea:#E4E6EB;--fondo:#F6F7F9;--ambar:#B26A00;--ambarsuave:#FFF4E0;--verde:#1F7A4D;--verdesuave:#E6F4EC;--rojo:#B3261E}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;font-family:Inter,system-ui,sans-serif;color:var(--tinta);background:var(--fondo);font-size:14px;-webkit-font-smoothing:antialiased}
+button{font:inherit;color:inherit;cursor:pointer;background:none;border:0;padding:0}
+input,textarea,select{font:inherit;color:inherit}
+.vista{display:none;height:100%}
+.vista.activa{display:flex}
+
+.marca{display:flex;align-items:center;gap:10px;font-weight:700;font-size:16px;letter-spacing:-.01em}
+.marca i{width:26px;height:26px;border-radius:7px;background:var(--azul);display:grid;place-items:center;color:#fff;font-style:normal;font-size:13px;flex:none}
+.campo{display:block;width:100%;height:40px;border:1px solid var(--linea);border-radius:9px;padding:0 12px;background:#fff;outline:none}
+textarea.campo{height:auto;padding:10px 12px;resize:vertical;line-height:1.45}
+.campo:focus{border-color:var(--azul2);box-shadow:0 0 0 3px var(--azulsuave)}
+.btn{height:38px;border-radius:9px;padding:0 14px;font-weight:600;display:inline-flex;align-items:center;justify-content:center;gap:7px;white-space:nowrap}
+.btn.prim{background:var(--azul);color:#fff}
+.btn.prim:hover{background:#00177d}
+.btn.sec{border:1px solid var(--linea);background:#fff}
+.btn.sec:hover{background:var(--fondo)}
+.btn.chico{height:32px;padding:0 11px;font-size:13px}
+.btn.peligro{color:var(--rojo)}
+.av{width:30px;height:30px;border-radius:50%;display:grid;place-items:center;font-size:11.5px;font-weight:600;color:#fff;flex:none}
+.pill{display:inline-flex;align-items:center;height:22px;padding:0 8px;border-radius:20px;font-size:12px;font-weight:500;background:var(--fondo);color:var(--gris);white-space:nowrap}
+.pill.azul{background:var(--azulsuave);color:var(--azul)}
+.pill.verde{background:var(--verdesuave);color:var(--verde)}
+.pill.ambar{background:var(--ambarsuave);color:var(--ambar)}
+.etq{display:block;font-size:12.5px;font-weight:500;color:var(--gris);margin:14px 0 6px}
+.err{color:var(--rojo);font-size:12.5px;margin-top:8px;min-height:16px}
+
+#v-login{align-items:center;justify-content:center}
+.login{width:360px}
+.login .marca{margin-bottom:36px}
+.login h1{font-size:22px;font-weight:600;margin:0 0 6px;letter-spacing:-.02em}
+.login p{color:var(--gris);margin:0 0 22px;line-height:1.45}
+.login .btn{width:100%;margin-top:10px;height:42px}
+.login .campo{height:42px}
+.digitos{display:flex;gap:8px}
+.digitos input{width:100%;height:50px;text-align:center;font-size:20px;font-weight:600;border:1px solid var(--linea);border-radius:9px;outline:none;background:#fff}
+.digitos input:focus{border-color:var(--azul2);box-shadow:0 0 0 3px var(--azulsuave)}
+.enlace{color:var(--azul2);font-weight:500;font-size:13px}
+.sep{display:flex;align-items:center;gap:12px;color:var(--gris2);font-size:12px;margin:26px 0 12px}
+.sep:before,.sep:after{content:"";flex:1;height:1px;background:var(--linea)}
+.cuentas{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.cuenta{display:flex;align-items:center;gap:10px;padding:9px 10px;border:1px solid var(--linea);border-radius:10px;background:#fff;text-align:left}
+.cuenta:hover{border-color:#C9CDD6;background:#FBFBFC}
+.cuenta b{display:block;font-weight:600;font-size:13px}
+.cuenta small{color:var(--gris);font-size:12px}
+
+.pagina{flex-direction:column}
+.cab{height:56px;flex:none;display:flex;align-items:center;gap:14px;padding:0 20px 0 24px;background:#fff;border-bottom:1px solid var(--linea);position:relative}
+.cab .lugar{color:var(--gris);font-weight:500}
+.tabs{display:flex;gap:2px;margin-left:18px;height:100%}
+.tabs button{height:100%;padding:0 12px;color:var(--gris);font-weight:500;border-bottom:2px solid transparent}
+.tabs button.on{color:var(--tinta);border-bottom-color:var(--tinta)}
+.esp{flex:1}
+.cuerpo{flex:1;overflow:auto}
+.cont{max-width:1040px;margin:0 auto;padding:32px 28px 60px}
+.titulo{display:flex;align-items:center;gap:12px;margin-bottom:20px}
+.titulo h2{font-size:20px;font-weight:600;letter-spacing:-.02em;margin:0}
+.titulo .acciones{margin-left:auto;display:flex;gap:8px}
+.grilla{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:14px}
+.tarj{background:#fff;border:1px solid var(--linea);border-radius:12px;overflow:hidden;text-align:left;display:block;width:100%;position:relative}
+.tarj:hover{box-shadow:0 4px 16px rgba(20,24,40,.07);border-color:#D5D8DF}
+.tarj .franja{height:76px}
+.tarj .tc{padding:14px 16px}
+.tarj b{display:block;font-weight:600;font-size:15px;margin-bottom:4px}
+.tarj .sub{color:var(--gris);font-size:12.5px}
+.tarj .pill{position:absolute;top:10px;right:10px;background:rgba(255,255,255,.92)}
+.vacio{background:#fff;border:1px dashed #CDD1D9;border-radius:12px;padding:48px;text-align:center;color:var(--gris)}
+.vacio b{display:block;color:var(--tinta);font-size:15px;margin-bottom:6px}
+.vacio .btn{margin-top:16px}
+
+.caja{background:#fff;border:1px solid var(--linea);border-radius:12px}
+.tabla{width:100%;border-collapse:collapse;font-size:13.5px}
+.tabla th{font-weight:500;color:var(--gris2);font-size:12.5px;text-align:left;padding:11px 16px;border-bottom:1px solid var(--linea)}
+.tabla td{padding:11px 16px;border-bottom:1px solid var(--linea);vertical-align:middle}
+.tabla tr:last-child td{border-bottom:0}
+.tabla .per{display:flex;align-items:center;gap:10px}
+.tabla .per .av{width:28px;height:28px;font-size:11px}
+.tabla .per small{display:block;color:var(--gris);font-size:12px}
+.num{color:var(--gris);font-variant-numeric:tabular-nums}
+.barrita{display:flex;align-items:center;gap:8px}
+.barrita .bar{display:block;width:80px;height:6px;border-radius:3px;background:var(--fondo);overflow:hidden}
+.barrita .bar i{display:block;height:100%;background:var(--azul2)}
+.filtros{display:flex;gap:8px;align-items:center;margin-bottom:14px}
+.filtros .campo{width:280px;height:36px}
+.chip{height:32px;padding:0 12px;border-radius:8px;color:var(--gris);font-weight:500;font-size:13px}
+.chip.on{background:#fff;color:var(--tinta);box-shadow:0 0 0 1px var(--linea)}
+.sw{width:34px;height:20px;border-radius:20px;background:#D3D6DD;position:relative;transition:background .15s;flex:none}
+.sw:after{content:"";position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.2);transition:left .15s}
+.sw.on{background:var(--azul2)}
+.sw.on:after{left:16px}
+.sw[disabled]{opacity:.5;cursor:default}
+.bloque{margin-bottom:28px}
+.bloque h3{font-size:14px;font-weight:600;margin:0 0 4px}
+.desc{color:var(--gris);font-size:13px}
+.bloque .desc{margin:0 0 12px}
+.dominios{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.dom{display:flex;align-items:center;gap:8px;height:32px;padding:0 6px 0 12px;border-radius:8px;background:#fff;border:1px solid var(--linea);font-weight:500}
+.dom button{width:22px;height:22px;border-radius:6px;color:var(--gris2)}
+.dom button:hover{background:var(--fondo);color:var(--rojo)}
+.fila{display:flex;gap:8px;align-items:center}
+.log{padding:12px 16px;border-bottom:1px solid var(--linea);display:flex;gap:12px;align-items:baseline;font-size:13.5px}
+.log:last-child{border-bottom:0}
+.log time{color:var(--gris2);font-size:12.5px;width:110px;flex:none;font-variant-numeric:tabular-nums}
+.log span{color:var(--gris)}
+.metricas{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:24px}
+.met{background:#fff;border:1px solid var(--linea);border-radius:12px;padding:16px 18px}
+.met small{color:var(--gris);font-size:12.5px}
+.met b{display:block;font-size:24px;font-weight:600;letter-spacing:-.02em;margin-top:4px}
+.prov{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.prov .caja{padding:16px 18px}
+.prov .opciones{display:flex;gap:6px;margin-top:10px}
+
+#v-curso{flex-direction:column}
+.barra{height:48px;flex:none;display:flex;align-items:center;gap:6px;padding:0 10px 0 14px;background:#fff;border-bottom:1px solid var(--linea);position:relative;z-index:5}
+.barra .marca i{width:24px;height:24px;font-size:12px}
+.barra .div{width:1px;height:20px;background:var(--linea);margin:0 8px}
+.sel{display:flex;align-items:center;gap:8px;height:34px;padding:0 10px;border-radius:8px;font-weight:600}
+.sel:hover,.ico:hover,.acc:hover{background:var(--fondo)}
+.punto{width:9px;height:9px;border-radius:3px;flex:none}
+.flecha{width:10px;height:10px;opacity:.5}
+.modo{display:flex;background:var(--fondo);border-radius:9px;padding:3px;gap:2px;margin-right:6px}
+.modo button{height:28px;padding:0 12px;border-radius:7px;color:var(--gris);font-weight:500;font-size:13px}
+.modo button.on{background:#fff;color:var(--tinta);box-shadow:0 1px 2px rgba(0,0,0,.08)}
+.modo button.on.prueba{color:var(--ambar)}
+.acc{height:34px;padding:0 10px;border-radius:8px;color:var(--gris);font-weight:500;display:flex;align-items:center;gap:7px}
+.acc svg{width:16px;height:16px}
+.acc.on{background:var(--azulsuave);color:var(--azul)}
+.publicar{height:32px;padding:0 14px;border-radius:8px;background:var(--azul);color:#fff;font-weight:600;font-size:13px;margin-left:4px}
+.publicar[disabled]{background:#E9EBEF;color:var(--gris2);cursor:default}
+.ico{width:34px;height:34px;border-radius:50%;display:grid;place-items:center;margin-left:6px}
+.ico .av{width:28px;height:28px}
+
+.menu{position:absolute;top:44px;background:#fff;border:1px solid var(--linea);border-radius:11px;box-shadow:0 10px 30px rgba(20,24,40,.12);padding:6px;min-width:250px;display:none;z-index:20}
+.menu.abierto{display:block}
+.menu .it{display:flex;align-items:center;gap:10px;width:100%;padding:8px 10px;border-radius:7px;text-align:left}
+.menu .it:hover{background:var(--fondo)}
+.menu .it small{margin-left:auto;color:var(--gris2)}
+.menu hr{border:0;border-top:1px solid var(--linea);margin:6px 0}
+.menu .tit{padding:8px 10px 6px;font-size:12.5px;color:var(--gris)}
+.menu .tit b{display:block;color:var(--tinta);font-size:13.5px;margin-bottom:2px}
+
+.zona{flex:1;display:flex;min-height:0}
+.lienzo{flex:1;position:relative;background:#fff}
+.lienzo iframe{border:0;width:100%;height:100%;display:block}
+.lienzo.prueba:after{content:"";position:absolute;inset:0;box-shadow:inset 0 0 0 3px var(--ambar);pointer-events:none}
+.panel{width:400px;flex:none;border-left:1px solid var(--linea);background:#fff;display:none;flex-direction:column;min-height:0}
+.panel.abierto{display:flex}
+.panel .ph{height:48px;flex:none;display:flex;align-items:center;justify-content:space-between;padding:0 14px 0 18px;border-bottom:1px solid var(--linea);font-weight:600}
+.panel .ph button{width:28px;height:28px;border-radius:7px;color:var(--gris)}
+.panel .ph button:hover{background:var(--fondo)}
+.pcuerpo{flex:1;overflow:auto}
+.chat{padding:18px;display:flex;flex-direction:column;gap:14px}
+.msg{max-width:88%;line-height:1.5}
+.msg.yo{align-self:flex-end;background:var(--fondo);padding:9px 13px;border-radius:13px 13px 4px 13px}
+.msg.ag{align-self:flex-start}
+.cambio{margin-top:8px;border:1px solid var(--linea);border-radius:9px;font-size:12.5px;overflow:hidden}
+.cambio div{padding:7px 10px;display:flex;gap:8px;align-items:center}
+.cambio div+div{border-top:1px solid var(--linea)}
+.cambio em{font-style:normal;font-weight:600;font-size:11px;width:16px;text-align:center}
+.cambio .a em{color:var(--verde)}
+.cambio .m em{color:var(--ambar)}
+.compo{padding:12px;border-top:1px solid var(--linea)}
+.compo .cj{border:1px solid var(--linea);border-radius:11px;padding:10px 12px;display:flex;align-items:flex-end;gap:8px}
+.compo textarea{flex:1;border:0;outline:none;resize:none;height:44px;line-height:1.45}
+.compo .env{width:32px;height:32px;border-radius:8px;background:var(--azul);color:#fff;display:grid;place-items:center;flex:none}
+.ins-acc{display:flex;gap:6px;padding:12px 14px;border-bottom:1px solid var(--linea)}
+.ins-acc .btn{flex:1}
+.ins-form{padding:14px;border-bottom:1px solid var(--linea);background:#FBFBFC;display:none}
+.ins-form.abierto{display:block}
+.ins-form .etq{margin-top:0}
+.codigo{display:flex;align-items:center;gap:10px;background:#fff;border:1px solid var(--linea);border-radius:10px;padding:12px 14px}
+.codigo b{font-size:20px;letter-spacing:.08em;font-variant-numeric:tabular-nums}
+.codigo small{display:block;color:var(--gris);font-size:12px}
+.persona{display:flex;align-items:center;gap:10px;padding:10px 14px 10px 18px;border-bottom:1px solid var(--linea)}
+.persona .av{width:28px;height:28px;font-size:11px}
+.persona .nm{flex:1;min-width:0}
+.persona .nm b{display:block;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.persona .nm small{color:var(--gris);font-size:12px}
+.persona select{height:28px;border:1px solid var(--linea);border-radius:7px;background:#fff;padding:0 6px;font-size:12.5px}
+.persona .x{width:26px;height:26px;border-radius:7px;color:var(--gris2)}
+.persona .x:hover{background:var(--fondo);color:var(--rojo)}
+.persona.conf{background:#FFF6F5}
+.ver{padding:12px 18px;border-bottom:1px solid var(--linea);display:flex;gap:12px}
+.ver .lin{width:9px;height:9px;border-radius:50%;background:#C9CDD6;margin-top:5px;flex:none}
+.ver.pub .lin{background:var(--azul)}
+.ver.pru .lin{background:var(--ambar)}
+.ver b{font-weight:600;display:block}
+.ver span{color:var(--gris);font-size:12.5px}
+.ver button{margin-left:auto;color:var(--azul2);font-weight:500;font-size:12.5px;align-self:center}
+
+.velo{position:fixed;inset:0;background:rgba(18,20,28,.38);display:none;align-items:center;justify-content:center;z-index:50}
+.velo.abierto{display:flex}
+.modal{width:440px;background:#fff;border-radius:14px;box-shadow:0 20px 60px rgba(0,0,0,.2);padding:24px}
+.modal h3{margin:0 0 4px;font-size:17px;font-weight:600}
+.modal .desc{color:var(--gris);margin:0 0 6px;font-size:13px;line-height:1.45}
+.modal .pie{display:flex;justify-content:flex-end;gap:8px;margin-top:22px}
+.sufijo{display:flex;align-items:center;border:1px solid var(--linea);border-radius:9px;background:#fff;overflow:hidden}
+.sufijo input{border:0;outline:none;height:38px;padding:0 0 0 12px;flex:1;min-width:0}
+.sufijo span{color:var(--gris2);padding:0 12px 0 2px}
+.aviso{position:fixed;bottom:22px;left:50%;transform:translateX(-50%) translateY(20px);background:var(--tinta);color:#fff;padding:10px 16px;border-radius:10px;font-weight:500;opacity:0;transition:all .2s;pointer-events:none;z-index:60}
+.aviso.ver{opacity:1;transform:translateX(-50%)}
+</style>
+</head>
+<body>
+
+<section class="vista activa" id="v-login">
+  <div class="login">
+    <div class="marca"><i>C</i>Campus IA</div>
+    <div id="paso-mail">
+      <h1>Entrar</h1>
+      <p>Con tu mail de la universidad.</p>
+      <input class="campo" id="mail" type="email" placeholder="nombre@austral.edu.ar" autocomplete="email">
+      <div class="err" id="err-mail"></div>
+      <button class="btn prim" id="enviar">Enviar código</button>
+    </div>
+    <div id="paso-codigo" style="display:none">
+      <h1>Revisá tu mail</h1>
+      <p>Mandamos un código de 6 dígitos a <b id="mail-enviado"></b>.</p>
+      <div class="digitos" id="digitos"><input maxlength="1" inputmode="numeric"><input maxlength="1" inputmode="numeric"><input maxlength="1" inputmode="numeric"><input maxlength="1" inputmode="numeric"><input maxlength="1" inputmode="numeric"><input maxlength="1" inputmode="numeric"></div>
+      <div class="err" id="err-codigo"></div>
+      <button class="btn prim" id="verificar">Entrar</button>
+      <div style="display:flex;justify-content:space-between;margin-top:16px"><button class="enlace" id="otro-mail">Usar otro mail</button><button class="enlace" id="reenviar">Reenviar código</button></div>
+    </div>
+    <div class="sep">cuentas de prueba</div>
+    <div class="cuentas" id="cuentas"></div>
+  </div>
+</section>
+
+<section class="vista pagina" id="v-cursos">
+  <div class="cab">
+    <button class="marca" data-ir="cursos"><i>C</i>Campus IA</button>
+    <span class="esp"></span>
+    <button class="ico" data-menu="m-perfil-c"><span class="av js-av"></span></button>
+    <div class="menu js-perfil" id="m-perfil-c" style="right:16px;top:50px"></div>
+  </div>
+  <div class="cuerpo"><div class="cont">
+    <div class="titulo"><h2>Mis cursos</h2><div class="acciones"><button class="btn sec" data-accion="unirse">Unirme con código</button><button class="btn prim solo-marca-prof" data-accion="crear">Crear curso</button></div></div>
+    <div id="grilla"></div>
+  </div></div>
+</section>
+
+<section class="vista pagina" id="v-admin">
+  <div class="cab">
+    <button class="marca" data-ir="cursos"><i>C</i>Campus IA</button>
+    <span class="lugar js-uni"></span>
+    <div class="tabs" id="tabs-admin"><button class="on" data-tab="personas">Personas</button><button data-tab="cursos">Cursos</button><button data-tab="config">Configuración</button><button data-tab="actividad">Actividad</button></div>
+    <span class="esp"></span>
+    <button class="ico" data-menu="m-perfil-a"><span class="av js-av"></span></button>
+    <div class="menu js-perfil" id="m-perfil-a" style="right:16px;top:50px"></div>
+  </div>
+  <div class="cuerpo"><div class="cont" id="admin-cont"></div></div>
+</section>
+
+<section class="vista pagina" id="v-owner">
+  <div class="cab">
+    <button class="marca" data-ir="owner"><i>C</i>Campus IA</button>
+    <span class="lugar">Owner</span>
+    <div class="tabs" id="tabs-owner"><button class="on" data-otab="unis">Universidades</button><button data-otab="uso">Uso y proveedores</button></div>
+    <span class="esp"></span>
+    <button class="ico" data-menu="m-perfil-o"><span class="av js-av"></span></button>
+    <div class="menu js-perfil" id="m-perfil-o" style="right:16px;top:50px"></div>
+  </div>
+  <div class="cuerpo"><div class="cont" id="owner-cont"></div></div>
+</section>
+
+<section class="vista" id="v-curso">
+  <div class="barra">
+    <button class="marca" data-ir="cursos" title="Mis cursos"><i>C</i></button>
+    <span class="div"></span>
+    <button class="sel" data-menu="m-cursos"><span class="punto js-punto"></span><span class="js-nombre"></span><svg class="flecha" viewBox="0 0 10 10"><path d="M2 3.5l3 3 3-3" fill="none" stroke="currentColor" stroke-width="1.5"/></svg></button>
+    <span class="esp"></span>
+    <div class="solo-prof modo"><button class="on" data-modo="publicado">Publicado</button><button data-modo="prueba">Prueba</button></div>
+    <button class="solo-prof acc" data-panel="p-agente"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 1.5l1.6 3.9 3.9 1.6-3.9 1.6L8 12.5 6.4 8.6 2.5 7l3.9-1.6z"/></svg>Editar</button>
+    <button class="solo-prof acc" data-panel="p-inscriptos"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="6" cy="5.5" r="2.5"/><path d="M1.5 13.5c.6-2.4 2.3-3.5 4.5-3.5s3.9 1.1 4.5 3.5M11 3.2a2.4 2.4 0 010 4.6M12.5 10.2c1 .5 1.7 1.6 2 3.3"/></svg>Inscriptos</button>
+    <button class="solo-prof acc" data-panel="p-versiones"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="6"/><path d="M8 4.5V8l2.5 1.5"/></svg>Versiones</button>
+    <button class="solo-prof publicar" id="publicar" disabled>Publicar</button>
+    <button class="ico" data-menu="m-perfil"><span class="av js-av"></span></button>
+    <div class="menu" id="m-cursos" style="left:48px"></div>
+    <div class="menu js-perfil" id="m-perfil" style="right:8px"></div>
+  </div>
+  <div class="zona">
+    <div class="lienzo" id="lienzo"><iframe id="curso" sandbox="allow-scripts"></iframe></div>
+    <aside class="panel" id="p-agente">
+      <div class="ph">Editar con el agente<button data-cerrar>&#x2715;</button></div>
+      <div class="pcuerpo"><div class="chat" id="chat"></div></div>
+      <div class="compo"><div class="cj"><textarea id="pedido" placeholder="Pedile un cambio al curso"></textarea><button class="env" id="enviar-pedido" aria-label="Enviar"><svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="#fff" stroke-width="1.8"><path d="M7 12V2M2.5 6.5L7 2l4.5 4.5"/></svg></button></div></div>
+    </aside>
+    <aside class="panel" id="p-inscriptos">
+      <div class="ph"><span id="ins-tit">Inscriptos</span><button data-cerrar>&#x2715;</button></div>
+      <div class="ins-acc"><button class="btn sec chico" data-insf="f-mails">Agregar</button><button class="btn sec chico" data-insf="f-siu">Importar del SIU</button><button class="btn sec chico" data-insf="f-codigo">Código</button></div>
+      <div class="ins-form" id="f-mails">
+        <label class="etq">Mails, uno por línea o separados por coma</label>
+        <textarea class="campo" id="ins-mails" rows="3" placeholder="ana.perez@austral.edu.ar"></textarea>
+        <div class="fila" style="margin-top:10px"><select class="campo" id="ins-rol" style="height:34px;width:auto"><option value="alumno">Como alumnos</option><option value="profesor">Como profesores</option></select><span class="esp"></span><button class="btn prim chico" id="ins-agregar">Agregar</button></div>
+        <div class="err" id="ins-err"></div>
+      </div>
+      <div class="ins-form" id="f-siu">
+        <label class="etq">Listado de inscriptos exportado del SIU (CSV o Excel)</label>
+        <label class="btn sec chico" style="width:100%;height:56px;border-style:dashed">Elegir archivo<input type="file" id="ins-archivo" accept=".csv,.xlsx,.xls" hidden></label>
+      </div>
+      <div class="ins-form" id="f-codigo">
+        <label class="etq">Quien tenga el código entra como alumno</label>
+        <div class="codigo"><div style="flex:1"><b id="cod-valor"></b><small id="cod-vence"></small></div><button class="btn sec chico" id="cod-nuevo">Generar otro</button></div>
+        <div class="fila" style="margin-top:10px"><button class="sw on" id="cod-sw"></button><span style="font-size:13px">Código activo</span></div>
+      </div>
+      <div class="pcuerpo" id="ins-lista"></div>
+    </aside>
+    <aside class="panel" id="p-versiones">
+      <div class="ph">Versiones<button data-cerrar>&#x2715;</button></div>
+      <div class="pcuerpo" id="ver-lista"></div>
+    </aside>
+  </div>
+</section>
+
+<div class="velo" id="velo"><div class="modal" id="modal"></div></div>
+<div class="aviso" id="aviso"></div>
+
+<script>
+const UNIS=[
+  {id:'austral',nombre:'Universidad Austral',dominios:['austral.edu.ar','mail.austral.edu.ar','iae.edu.ar'],limite:40},
+  {id:'demo',nombre:'Universidad de Prueba',dominios:['demo.edu.ar'],limite:20}
+];
+const COLORES=['#1F7A4D','#A4492A','#6E4BA8','#A87400','#5B7A1E','#9C2F6A','#2E6A8E'];
+const AVC=['#2E5BBA','#7A4FB0','#1F7A4D','#A4492A','#9C2F6A','#2E6A8E','#A87400','#5B7A1E'];
+let PERSONAS=[
+  {id:'owner',nombre:'Equipo Campus IA',email:'hola@campusia.app',uni:null,owner:true},
+  {id:'ana',nombre:'Ana Morales',email:'ana.morales@austral.edu.ar',uni:'austral',admin:true,ultimo:'hoy 09:12'},
+  {id:'lucia',nombre:'Lucía Fernández',email:'lfernandez@austral.edu.ar',uni:'austral',profesor:true,ultimo:'hoy 10:40'},
+  {id:'diego',nombre:'Diego Herrera',email:'dherrera@austral.edu.ar',uni:'austral',profesor:true,ultimo:'ayer'},
+  {id:'pablo',nombre:'Pablo Méndez',email:'pmendez@austral.edu.ar',uni:'austral',profesor:true,ultimo:'3 nov'},
+  {id:'tomas',nombre:'Tomás García',email:'tgarcia@mail.austral.edu.ar',uni:'austral',ultimo:'hoy 11:02'}
+];
+['Abril Romero','Bautista Díaz','Camila Sosa','Delfina Ruiz','Facundo Paz','Joaquín Ríos','Julieta Vega','Lautaro Gómez','Martina López','Mateo Castro','Sofía Herrera','Valentina Ortiz'].forEach((n,i)=>{
+  const [a,b]=n.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').split(' ');
+  PERSONAS.push({id:'al'+i,nombre:n,email:a[0]+b+'@mail.austral.edu.ar',uni:'austral',ultimo:['hoy','ayer','2 nov','hoy','31 oct'][i%5]});
+});
+let CURSOS=[
+  {id:'redes',nombre:'Redes de Computadoras',sub:'Ingeniería · 2.º cuatrimestre 2026',color:'#1F7A4D',uni:'austral',version:12,codigo:'RED-4K7P',codOn:true,uso:31,
+   miembros:{lucia:'dueño',diego:'profesor',tomas:'alumno',al0:'alumno',al1:'alumno',al2:'alumno',al3:'alumno',al4:'alumno',al5:'alumno',al6:'alumno',al7:'alumno'}},
+  {id:'algo',nombre:'Algoritmos y Estructuras de Datos',sub:'Ingeniería · 2.º cuatrimestre 2026',color:'#A4492A',uni:'austral',version:7,codigo:'ALG-9QWX',codOn:true,uso:28,
+   miembros:{lucia:'dueño',tomas:'alumno',al8:'alumno',al9:'alumno',al10:'alumno'}},
+  {id:'etica',nombre:'Ética Profesional',sub:'Ingeniería · anual 2026',color:'#6E4BA8',uni:'austral',version:4,codigo:'ETI-2MHD',codOn:false,uso:9,
+   miembros:{pablo:'dueño',lucia:'alumno',tomas:'alumno',al11:'alumno',al2:'alumno'}}
+];
+const AUDIT=[
+  ['hoy 11:02','Tomás García','entró','desde 181.47.x.x'],
+  ['hoy 10:41','Lucía Fernández','publicó','Redes de Computadoras v12'],
+  ['hoy 10:12','Lucía Fernández','inscribió a 8 alumnos','en Redes de Computadoras'],
+  ['hoy 09:15','Ana Morales','marcó como profesor','a Pablo Méndez'],
+  ['hoy 09:12','Ana Morales','entró','desde 200.5.x.x'],
+  ['ayer 18:40','Diego Herrera','volvió a la versión','v11 de Redes de Computadoras'],
+  ['ayer 16:03','Pablo Méndez','creó el curso','Ética Profesional']
+];
+let yo=null,curso=null,modo='publicado',tabAdmin='personas',tabOwner='unis',filtro='todos',busca='',confirmar=null;
+const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
+const P=id=>PERSONAS.find(p=>p.id===id);
+const ini=n=>n.split(' ').filter(Boolean).slice(0,2).map(w=>w[0]).join('').toUpperCase();
+const avc=id=>AVC[[...id].reduce((a,c)=>a+c.charCodeAt(0),0)%AVC.length];
+const avatar=p=>`<span class="av" style="background:${p.owner?'#16181F':avc(p.id)}">${p.owner?'CI':ini(p.nombre)}</span>`;
+const uniDe=p=>UNIS.find(u=>u.id===p.uni);
+const misCursos=()=>CURSOS.filter(c=>c.miembros[yo.id]);
+const rolEn=c=>c.miembros[yo.id];
+const esProfDe=c=>['dueño','profesor'].includes(rolEn(c));
+const slug=s=>s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').split('-').slice(0,2).join('-');
+function aviso(t){const a=$('#aviso');a.textContent=t;a.classList.add('ver');clearTimeout(a._t);a._t=setTimeout(()=>a.classList.remove('ver'),2200)}
+
+function ver(id){$$('.vista').forEach(v=>v.classList.toggle('activa',v.id==='v-'+id));cerrarMenus();if(id==='cursos')pintarCursos();if(id==='admin')pintarAdmin();if(id==='owner')pintarOwner()}
+function cerrarMenus(){$$('.menu').forEach(m=>m.classList.remove('abierto'))}
+
+function pintarCuentas(){
+  const demo=[['owner','Owner'],['ana','Administradora'],['lucia','Profesora'],['tomas','Alumno']];
+  $('#cuentas').innerHTML=demo.map(([id,r])=>{const p=P(id);return `<button class="cuenta" data-entrar="${id}">${avatar(p)}<span><b>${p.nombre.split(' ')[0]}</b><small>${r}</small></span></button>`}).join('');
+}
+function entrar(id){
+  yo=P(id);
+  $$('.js-av').forEach(a=>{a.outerHTML=avatar(yo).replace('class="av"','class="av js-av"')});
+  const u=uniDe(yo);
+  $$('.js-perfil').forEach(m=>m.innerHTML=`<div class="tit"><b>${yo.nombre}</b>${yo.email}</div><hr>`+
+    (yo.owner?'':'<button class="it" data-ir="cursos">Mis cursos</button>')+
+    (yo.admin?`<button class="it" data-ir="admin">Administración${u?'<small>'+u.nombre.replace('Universidad ','')+'</small>':''}</button>`:'')+
+    (yo.owner?'<button class="it" data-ir="owner">Owner</button>':'')+
+    '<hr><button class="it" data-salir>Cerrar sesión</button>');
+  $$('.js-uni').forEach(e=>e.textContent=u?u.nombre:'');
+  ver(yo.owner?'owner':yo.admin?'admin':'cursos');
+}
+
+function pintarCursos(){
+  $$('.solo-marca-prof').forEach(e=>e.style.display=yo.profesor?'':'none');
+  const mios=misCursos();
+  if(!mios.length){$('#grilla').innerHTML=`<div class="vacio"><b>Todavía no estás en ningún curso</b>Si tu profesor te pasó un código, usalo para entrar.<br><button class="btn prim" data-accion="unirse">Unirme con código</button></div>`;return}
+  $('#grilla').innerHTML='<div class="grilla">'+mios.map(c=>{const r=c.miembros[yo.id];return `<button class="tarj" data-curso="${c.id}"><div class="franja" style="background:${c.color}"></div>${r!=='alumno'?`<span class="pill azul">${r==='dueño'?'Dueño':'Profesor'}</span>`:''}<div class="tc"><b>${c.nombre}</b><span class="sub">${c.sub}</span></div></button>`}).join('')+'</div>';
+}
+
+function abrirCurso(id){
+  curso=CURSOS.find(c=>c.id===id);
+  $('.js-nombre').textContent=curso.nombre;$('.js-punto').style.background=curso.color;
+  const prof=esProfDe(curso);
+  $$('.solo-prof').forEach(e=>e.style.display=prof?'':'none');
+  $('#m-cursos').innerHTML='<div class="tit">Mis cursos</div>'+misCursos().map(c=>`<button class="it" data-curso="${c.id}"><span class="punto" style="background:${c.color}"></span>${c.nombre}${c.id===id?'<small>&#x2713;</small>':''}</button>`).join('')+(yo.profesor?'<hr><button class="it" data-accion="crear">+ Crear curso</button>':'');
+  cerrarPaneles();ponerModo('publicado');pintarChat();pintarVersiones();ver('curso');
+}
+function ponerModo(m){
+  modo=m;$$('[data-modo]').forEach(b=>b.classList.toggle('on',b.dataset.modo===m));
+  $('[data-modo="prueba"]').classList.toggle('prueba',m==='prueba');
+  $('#lienzo').classList.toggle('prueba',m==='prueba');
+  $('#publicar').disabled=!(m==='prueba'&&curso.cambios);
+  const nf=document.createElement('iframe');nf.id='curso';nf.setAttribute('sandbox','allow-scripts');nf.srcdoc=contenido(curso,m==='prueba');$('#curso').replaceWith(nf);
+}
+function cerrarPaneles(){$$('.panel').forEach(p=>p.classList.remove('abierto'));$$('[data-panel]').forEach(b=>b.classList.remove('on'));$$('.ins-form').forEach(f=>f.classList.remove('abierto'))}
+
+function pintarChat(){
+  const c=curso;
+  if(!c.chat)c.chat=c.id==='redes'?[['yo','Agregá la clase 4 sobre subredes con 5 ejercicios de práctica.'],['ag','Listo. La agregué en la versión de prueba.',['+clases/04-subredes','+practica/subredes (5 ejercicios)','~inicio: lista de clases']]]:[];
+  if(c.id==='redes'&&c.cambios===undefined)c.cambios=true;
+  $('#chat').innerHTML=c.chat.map(([q,t,ch])=>`<div class="msg ${q}">${t}${ch?'<div class="cambio">'+ch.map(x=>`<div class="${x[0]==='+'?'a':'m'}"><em>${x[0]}</em>${x.slice(1)}</div>`).join('')+'</div>':''}</div>`).join('')||'<div class="msg ag">¿Qué querés cambiar del curso?</div>';
+}
+function pintarVersiones(){
+  const c=curso,v=c.version;
+  $('#ver-lista').innerHTML=(c.cambios?`<div class="ver pru"><span class="lin"></span><div><b>Prueba</b><span>Cambios sin publicar</span></div></div>`:'')+
+    `<div class="ver pub"><span class="lin"></span><div><b>Publicada · v${v}</b><span>${v>1?'Última publicación':'Primera versión'}</span></div></div>`+
+    Array.from({length:Math.min(v-1,4)},(_,i)=>`<div class="ver"><span class="lin"></span><div><b>v${v-1-i}</b><span>${['3 nov','27 oct','20 oct','13 oct'][i]}</span></div><button data-volver="${v-1-i}">Volver a esta</button></div>`).join('');
+}
+
+function pintarInscriptos(){
+  const c=curso,dueno=rolEn(c)==='dueño';
+  const ids=Object.keys(c.miembros).sort((a,b)=>({'dueño':0,profesor:1,alumno:2}[c.miembros[a]]-{'dueño':0,profesor:1,alumno:2}[c.miembros[b]])||P(a).nombre.localeCompare(P(b).nombre));
+  const nal=ids.filter(i=>c.miembros[i]==='alumno').length,npr=ids.length-nal;
+  $('#ins-tit').textContent=`Inscriptos · ${nal} alumnos, ${npr} ${npr===1?'profesor':'profesores'}`;
+  $('#ins-rol').querySelector('[value=profesor]').disabled=!dueno;
+  $('#cod-valor').textContent=c.codigo;$('#cod-vence').textContent=c.codOn?'Vence el 30 de noviembre':'Desactivado';
+  $('#cod-sw').classList.toggle('on',c.codOn);
+  $('#ins-lista').innerHTML=ids.map(id=>{
+    const p=P(id),r=c.miembros[id],soy=id===yo.id;
+    let ctl;
+    if(r==='dueño')ctl='<span class="pill azul">Dueño</span>';
+    else if(soy||!dueno&&r==='profesor')ctl=`<span class="pill">${r==='profesor'?'Profesor':'Alumno'}</span>`;
+    else ctl=`<select data-rol="${id}"><option value="alumno"${r==='alumno'?' selected':''}>Alumno</option><option value="profesor"${r==='profesor'?' selected':''}${!dueno||!p.profesor?' disabled':''}>Profesor</option></select>`;
+    const puedeQuitar=r!=='dueño'&&!soy&&(dueno||r==='alumno');
+    if(confirmar===id)return `<div class="persona conf">${avatar(p)}<div class="nm"><b>¿Quitar a ${p.nombre}?</b><small>Deja de ver el curso</small></div><button class="btn sec chico" data-noquitar>No</button><button class="btn chico peligro" data-siquitar="${id}">Quitar</button></div>`;
+    return `<div class="persona">${avatar(p)}<div class="nm"><b>${p.nombre}</b><small>${p.email}</small></div>${ctl}${puedeQuitar?`<button class="x" data-quitar="${id}" title="Quitar">&#x2715;</button>`:'<span style="width:26px"></span>'}</div>`;
+  }).join('');
+}
+
+function pintarAdmin(){
+  $$('#tabs-admin button').forEach(b=>b.classList.toggle('on',b.dataset.tab===tabAdmin));
+  const u=uniDe(yo),gente=PERSONAS.filter(p=>p.uni===u.id),cursos=CURSOS.filter(c=>c.uni===u.id);
+  let h='';
+  if(tabAdmin==='personas'){
+    const lista=gente.filter(p=>(filtro==='todos'||filtro==='prof'&&p.profesor||filtro==='admin'&&p.admin)&&(p.nombre+p.email).toLowerCase().includes(busca.toLowerCase()));
+    h=`<div class="titulo"><h2>Personas</h2><span class="pill">${gente.length}</span><div class="acciones"><button class="btn sec" data-accion="invitar-admin">Invitar administrador</button><button class="btn prim" data-accion="invitar-prof">Invitar profesor</button></div></div>
+    <div class="filtros"><input class="campo" id="busca" placeholder="Buscar por nombre o mail" value="${busca}"><button class="chip ${filtro==='todos'?'on':''}" data-filtro="todos">Todos</button><button class="chip ${filtro==='prof'?'on':''}" data-filtro="prof">Profesores</button><button class="chip ${filtro==='admin'?'on':''}" data-filtro="admin">Administradores</button></div>
+    <div class="caja"><table class="tabla"><thead><tr><th>Persona</th><th>Profesor</th><th>Cursos</th><th>Último ingreso</th></tr></thead><tbody>${lista.map(p=>{const n=CURSOS.filter(c=>c.miembros[p.id]).length;return `<tr><td><div class="per">${avatar(p)}<div>${p.nombre}${p.admin?' <span class="pill azul">Administrador</span>':''}${p.pendiente?' <span class="pill ambar">Invitación enviada</span>':''}<small>${p.email}</small></div></div></td><td><button class="sw ${p.profesor?'on':''}" data-marca="${p.id}"></button></td><td class="num">${n}</td><td class="num">${p.ultimo||'—'}</td></tr>`}).join('')}</tbody></table></div>`;
+  }else if(tabAdmin==='cursos'){
+    h=`<div class="titulo"><h2>Cursos</h2><span class="pill">${cursos.length}</span></div>
+    <div class="caja"><table class="tabla"><thead><tr><th>Curso</th><th>Dueño</th><th>Profesores</th><th>Alumnos</th><th>Estado</th><th>Uso del agente este mes</th></tr></thead><tbody>${cursos.map(c=>{const m=Object.entries(c.miembros),d=P(m.find(x=>x[1]==='dueño')[0]);return `<tr><td><div class="per"><span class="punto" style="background:${c.color};width:10px;height:10px"></span><div>${c.nombre}<small>${c.id}.campusia.app</small></div></div></td><td>${d.nombre}</td><td class="num">${m.filter(x=>x[1]!=='alumno').length}</td><td class="num">${m.filter(x=>x[1]==='alumno').length}</td><td>${c.version?`<span class="pill verde">Publicado · v${c.version}</span>`:'<span class="pill">Sin publicar</span>'}</td><td><div class="barrita"><span class="bar"><i style="width:${Math.min(100,c.uso/u.limite*100)}%"></i></span><span class="num">USD ${c.uso} de ${u.limite}</span></div></td></tr>`}).join('')}</tbody></table></div>`;
+  }else if(tabAdmin==='config'){
+    h=`<div class="titulo"><h2>Configuración</h2></div>
+    <div class="bloque"><h3>Dominios de mail habilitados</h3><p class="desc">Quien tenga un mail de estos dominios puede entrar. La cuenta se crea la primera vez.</p><div class="dominios">${u.dominios.map(d=>`<span class="dom">@${d}<button data-quitardom="${d}">&#x2715;</button></span>`).join('')}<div class="fila"><input class="campo" id="nuevo-dom" placeholder="ejemplo.edu.ar" style="width:180px;height:32px"><button class="btn sec chico" data-accion="agregar-dom">Agregar</button></div></div></div>
+    <div class="bloque"><h3>Límite de uso del agente por curso</h3><p class="desc">Por mes. Al llegar al límite, el profesor no puede pedir más cambios hasta el mes siguiente.</p><div class="sufijo" style="width:200px"><span style="padding:0 0 0 12px">USD</span><input id="limite" value="${u.limite}" style="padding-left:6px"><span>por mes</span></div></div>`;
+  }else{
+    h=`<div class="titulo"><h2>Actividad</h2></div><div class="caja">${AUDIT.map(a=>`<div class="log"><time>${a[0]}</time><div><b style="font-weight:500">${a[1]}</b> ${a[2]} <span>${a[3]}</span></div></div>`).join('')}</div>`;
+  }
+  $('#admin-cont').innerHTML=h;
+}
+
+function pintarOwner(){
+  $$('#tabs-owner button').forEach(b=>b.classList.toggle('on',b.dataset.otab===tabOwner));
+  let h='';
+  if(tabOwner==='unis'){
+    h=`<div class="titulo"><h2>Universidades</h2><div class="acciones"><button class="btn prim" data-accion="nueva-uni">Nueva universidad</button></div></div>
+    <div class="caja"><table class="tabla"><thead><tr><th>Universidad</th><th>Administradores</th><th>Profesores</th><th>Personas</th><th>Cursos</th><th></th></tr></thead><tbody>${UNIS.map(u=>{const g=PERSONAS.filter(p=>p.uni===u.id),ad=g.filter(p=>p.admin);return `<tr><td>${u.nombre}<small style="display:block;color:var(--gris);font-size:12px">${u.dominios.map(d=>'@'+d).join(' · ')}</small></td><td>${ad.length?ad.map(p=>p.nombre+(p.pendiente?' <span class="pill ambar">Invitación enviada</span>':'')).join('<br>'):'<span class="num">—</span>'}</td><td class="num">${g.filter(p=>p.profesor).length}</td><td class="num">${g.length}</td><td class="num">${CURSOS.filter(c=>c.uni===u.id).length}</td><td style="text-align:right"><button class="btn sec chico" data-invadmin="${u.id}">Invitar administrador</button></td></tr>`}).join('')}</tbody></table></div>`;
+  }else{
+    const tot=CURSOS.reduce((a,c)=>a+c.uso,0);
+    h=`<div class="titulo"><h2>Uso y proveedores</h2></div>
+    <div class="metricas"><div class="met"><small>Personas</small><b>${PERSONAS.length-1}</b></div><div class="met"><small>Cursos</small><b>${CURSOS.length}</b></div><div class="met"><small>Agente este mes</small><b>USD ${tot}</b></div><div class="met"><small>Mails hoy</small><b>37 / 300</b></div></div>
+    <div class="prov">
+      <div class="caja"><h3 style="margin:0;font-size:14px">Modelo del agente</h3><div class="opciones" id="op-modelo"><button class="chip on" data-op="modelo">API</button><button class="chip" data-op="modelo">Suscripción del equipo</button></div></div>
+      <div class="caja"><h3 style="margin:0;font-size:14px">Envío de mails</h3><p class="desc" style="margin:4px 0 0">Códigos de ingreso desde no-responder@campusia.app.</p><div class="opciones" id="op-mail"><button class="chip on" data-op="mail">Brevo</button><button class="chip" data-op="mail">Resend</button></div></div>
+    </div>
+    <div class="caja" style="margin-top:24px"><table class="tabla"><thead><tr><th>Universidad</th><th>Cursos</th><th>Agente este mes</th></tr></thead><tbody>${UNIS.map(u=>{const cs=CURSOS.filter(c=>c.uni===u.id);return `<tr><td>${u.nombre}</td><td class="num">${cs.length}</td><td class="num">USD ${cs.reduce((a,c)=>a+c.uso,0)}</td></tr>`}).join('')}</tbody></table></div>`;
+  }
+  $('#owner-cont').innerHTML=h;
+}
+
+function modal(html){$('#modal').innerHTML=html;$('#velo').classList.add('abierto');setTimeout(()=>{const i=$('#modal input');i&&i.focus()},30)}
+function cerrarModal(){$('#velo').classList.remove('abierto')}
+function modalCrear(){
+  modal(`<h3>Crear curso</h3><p class="desc">Después lo armás con el agente. Nadie lo ve hasta que lo publiques.</p>
+  <label class="etq">Nombre</label><input class="campo" id="c-nombre" placeholder="Sistemas Operativos">
+  <label class="etq">Dirección</label><div class="sufijo"><input id="c-sub" placeholder="sistemas-operativos"><span>.campusia.app</span></div>
+  <label class="etq">Período</label><select class="campo" id="c-per"><option>2.º cuatrimestre 2026</option><option>1.er cuatrimestre 2027</option><option>Anual 2027</option></select>
+  <div class="err" id="c-err"></div>
+  <div class="pie"><button class="btn sec" data-cerrarmodal>Cancelar</button><button class="btn prim" data-accion="crear-ok">Crear</button></div>`);
+  $('#c-nombre').addEventListener('input',e=>{if(!$('#c-sub').dataset.tocado)$('#c-sub').value=slug(e.target.value)});
+  $('#c-sub').addEventListener('input',e=>e.target.dataset.tocado=1);
+}
+function modalUnirse(){
+  modal(`<h3>Unirme a un curso</h3><p class="desc">Escribí el código que te pasó tu profesor.</p><input class="campo" id="u-cod" placeholder="RED-4K7P" style="text-transform:uppercase;letter-spacing:.06em"><div class="err" id="u-err"></div><div class="pie"><button class="btn sec" data-cerrarmodal>Cancelar</button><button class="btn prim" data-accion="unirse-ok">Unirme</button></div>`);
+}
+function modalInvitar(tipo,uniId){
+  const t={prof:['Invitar profesor','Le llega un mail para entrar. Ya queda marcado como profesor y puede crear cursos.'],admin:['Invitar administrador','Puede marcar profesores y ver todos los cursos y personas de la universidad.']}[tipo];
+  modal(`<h3>${t[0]}</h3><p class="desc">${t[1]}</p><label class="etq">Mail</label><input class="campo" id="i-mail" placeholder="nombre@${(UNIS.find(u=>u.id===uniId)||UNIS[0]).dominios[0]}"><div class="err" id="i-err"></div><div class="pie"><button class="btn sec" data-cerrarmodal>Cancelar</button><button class="btn prim" data-invok="${tipo}" data-uni="${uniId}">Enviar invitación</button></div>`);
+}
+function modalUni(){
+  modal(`<h3>Nueva universidad</h3><label class="etq">Nombre</label><input class="campo" id="n-nombre" placeholder="Universidad de ..."><label class="etq">Dominio de mail</label><input class="campo" id="n-dom" placeholder="universidad.edu.ar"><label class="etq">Mail del primer administrador</label><input class="campo" id="n-admin" placeholder="nombre@universidad.edu.ar"><div class="err" id="n-err"></div><div class="pie"><button class="btn sec" data-cerrarmodal>Cancelar</button><button class="btn prim" data-accion="uni-ok">Crear</button></div>`);
+}
+function personaPorMail(mail,uni){
+  let p=PERSONAS.find(x=>x.email===mail);
+  if(!p){const n=mail.split('@')[0].replace(/[._]/g,' ').replace(/\b\w/g,c=>c.toUpperCase());p={id:'p'+Date.now()+Math.random().toString(36).slice(2,6),nombre:n,email:mail,uni,pendiente:true};PERSONAS.push(p)}
+  return p;
+}
+const dominioOk=(mail,u)=>u.dominios.some(d=>mail.endsWith('@'+d));
+
+function contenido(c,prueba){
+  if(c.id!=='redes'){
+    const vacio=!c.version;
+    return `<!doctype html><html><body style="margin:0;font-family:Georgia,serif;display:grid;place-items:center;height:100vh;background:#FAF8F3;color:#2A2620"><div style="text-align:center"><div style="font-size:13px;letter-spacing:.12em;text-transform:uppercase;color:#8A7F6E">${vacio?'Curso nuevo':'Curso'}</div><h1 style="font-weight:400;font-size:40px;margin:10px 0">${c.nombre}</h1>${vacio?'<p style="color:#8A7F6E;font-family:system-ui">Todavía sin contenido</p>':''}</div></body></html>`;
+  }
+  const clases=[['1','Modelo OSI y TCP/IP','25 ago'],['2','Capa de enlace y Ethernet','1 sep'],['3','Direccionamiento IP','8 sep']];
+  if(prueba&&c.cambios||c.version>12)clases.push(['4','Subredes y máscaras','15 sep']);
+  const nueva=prueba&&c.cambios;
+  return `<!doctype html><html><head><meta charset="utf-8"><link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Source+Sans+3:wght@400;600&display=swap" rel="stylesheet"><style>
+  body{margin:0;font-family:'Source Sans 3',sans-serif;color:#1B2A22;background:#F4F7F2;font-size:16px}
+  .hero{background:#14402C;color:#EAF3EC;padding:56px 64px 48px}
+  .hero small{letter-spacing:.14em;text-transform:uppercase;font-size:12px;color:#9CC7AE}
+  .hero h1{font-family:Fraunces,serif;font-weight:600;font-size:46px;margin:10px 0 8px;letter-spacing:-.01em}
+  .hero p{margin:0;color:#BFD9C8;font-size:17px}
+  main{display:grid;grid-template-columns:1fr 300px;gap:40px;padding:40px 64px;max-width:1200px}
+  h2{font-family:Fraunces,serif;font-weight:500;font-size:24px;margin:0 0 16px}
+  .clase{display:flex;align-items:center;gap:18px;background:#fff;border-radius:12px;padding:16px 20px;margin-bottom:10px;border:1px solid #DFE7DE}
+  .n{font-family:Fraunces,serif;font-size:28px;color:#2E7D5B;width:34px}
+  .clase b{display:block;font-size:17px;font-weight:600}
+  .clase span{color:#5D6F64;font-size:14px}
+  .nuevo{border-color:#2E7D5B;box-shadow:0 0 0 3px #D7EBDF}
+  .tag{margin-left:auto;font-size:12px;background:#E3F1E8;color:#1F6B47;padding:3px 9px;border-radius:20px}
+  aside div{background:#fff;border:1px solid #DFE7DE;border-radius:12px;padding:18px 20px;margin-bottom:12px}
+  aside b{display:block;font-size:13px;color:#5D6F64;font-weight:600;margin-bottom:6px}
+  </style></head><body>
+  <div class="hero"><small>Ingeniería · 2.º cuatrimestre 2026</small><h1>Redes de Computadoras</h1><p>Martes y jueves 14:00 · Aula 204 · Prof. Lucía Fernández</p></div>
+  <main><section><h2>Clases</h2>${clases.map(k=>`<div class="clase ${k[0]==='4'&&nueva?'nuevo':''}"><div class="n">${k[0]}</div><div><b>${k[1]}</b><span>${k[2]}</span></div>${k[0]==='4'?'<span class="tag">5 ejercicios</span>':''}</div>`).join('')}</section>
+  <aside><div><b>Próximo</b>Parcial 1 · jueves 2 oct</div><div><b>Entregas</b>TP1 Wireshark · vence 19 sep</div><div><b>Consultas</b>Miércoles 18:00 · Teams</div></aside></main>
+  </body></html>`;
+}
+
+let mailPend=null;
+function pedirCodigo(){
+  const m=$('#mail').value.trim().toLowerCase();
+  const u=UNIS.find(u=>dominioOk(m,u));
+  if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(m)){$('#err-mail').textContent='Revisá el mail.';return}
+  if(!u&&!PERSONAS.find(p=>p.email===m)){$('#err-mail').textContent='Ese dominio no está habilitado. Usá el mail de tu universidad.';return}
+  mailPend=m;$('#err-mail').textContent='';$('#mail-enviado').textContent=m;
+  $('#paso-mail').style.display='none';$('#paso-codigo').style.display='';
+  $$('#digitos input').forEach(i=>i.value='');$('#digitos input').focus();
+}
+function verificarCodigo(){
+  const c=$$('#digitos input').map(i=>i.value).join('');
+  if(c.length<6){$('#err-codigo').textContent='Faltan dígitos.';return}
+  let p=PERSONAS.find(x=>x.email===mailPend);
+  if(!p){const u=UNIS.find(u=>dominioOk(mailPend,u));p=personaPorMail(mailPend,u.id)}
+  p.pendiente=false;p.ultimo='ahora';
+  $('#paso-codigo').style.display='none';$('#paso-mail').style.display='';$('#mail').value='';
+  entrar(p.id);
+}
+$('#enviar').onclick=pedirCodigo;
+$('#mail').addEventListener('keydown',e=>{if(e.key==='Enter')pedirCodigo()});
+$('#verificar').onclick=verificarCodigo;
+$('#otro-mail').onclick=()=>{$('#paso-codigo').style.display='none';$('#paso-mail').style.display=''};
+$('#reenviar').onclick=()=>aviso('Te mandamos otro código');
+$$('#digitos input').forEach((inp,i,all)=>{
+  inp.addEventListener('input',()=>{inp.value=inp.value.replace(/\D/g,'').slice(-1);if(inp.value&&all[i+1])all[i+1].focus();if(all.every(x=>x.value))verificarCodigo()});
+  inp.addEventListener('keydown',e=>{if(e.key==='Backspace'&&!inp.value&&all[i-1])all[i-1].focus()});
+  inp.addEventListener('paste',e=>{const t=(e.clipboardData.getData('text')||'').replace(/\D/g,'').slice(0,6);if(t.length){e.preventDefault();all.forEach((x,j)=>x.value=t[j]||'');if(t.length===6)verificarCodigo()}});
+});
+
+document.addEventListener('input',e=>{
+  if(e.target.id==='busca'){busca=e.target.value;const pos=e.target.selectionStart;pintarAdmin();const b=$('#busca');b.focus();b.setSelectionRange(pos,pos)}
+  if(e.target.id==='limite'){const v=parseInt(e.target.value);if(v>0)uniDe(yo).limite=v}
+});
+document.addEventListener('change',e=>{
+  const t=e.target;
+  if(t.dataset.rol){curso.miembros[t.dataset.rol]=t.value;pintarInscriptos();aviso(`${P(t.dataset.rol).nombre.split(' ')[0]} ahora es ${t.value}`)}
+  if(t.id==='ins-archivo'&&t.files.length){
+    const nuevos=PERSONAS.filter(p=>p.uni===curso.uni&&!curso.miembros[p.id]&&!p.profesor&&!p.admin);
+    nuevos.forEach(p=>curso.miembros[p.id]='alumno');
+    t.value='';$('#f-siu').classList.remove('abierto');pintarInscriptos();aviso(nuevos.length?`${nuevos.length} alumnos importados del SIU`:'Todos los del listado ya estaban inscriptos');
+  }
+});
+$('#velo').addEventListener('click',e=>{if(e.target.id==='velo')cerrarModal()});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'){cerrarModal();cerrarMenus()}});
+
+document.addEventListener('click',e=>{
+  const t=e.target.closest('button');
+  if(!e.target.closest('.menu')&&!(t&&t.dataset.menu))cerrarMenus();
+  if(!t)return;
+  const d=t.dataset;
+  if(d.entrar)entrar(d.entrar);
+  else if(d.curso)abrirCurso(d.curso);
+  else if(d.ir)ver(d.ir);
+  else if(d.menu){const m=$('#'+d.menu),ab=m.classList.contains('abierto');cerrarMenus();if(!ab)m.classList.add('abierto')}
+  else if(d.modo)ponerModo(d.modo);
+  else if(d.panel){const p=$('#'+d.panel),ab=p.classList.contains('abierto');cerrarPaneles();if(!ab){p.classList.add('abierto');t.classList.add('on');if(d.panel==='p-agente')ponerModo('prueba');if(d.panel==='p-inscriptos'){confirmar=null;pintarInscriptos()}}}
+  else if(t.hasAttribute('data-cerrar'))cerrarPaneles();
+  else if(t.hasAttribute('data-salir')){yo=null;ver('login')}
+  else if(t.id==='publicar'){curso.version++;curso.cambios=false;pintarVersiones();ponerModo('publicado');cerrarPaneles();aviso(`Publicada la v${curso.version}`)}
+  else if(d.volver){curso.version++;curso.cambios=false;pintarVersiones();ponerModo('publicado');aviso(`Volviste a la v${d.volver}. Se publicó como v${curso.version}`)}
+  else if(t.id==='enviar-pedido'){const v=$('#pedido').value.trim();if(!v)return;curso.chat.push(['yo',v]);curso.chat.push(['ag','Hecho. Lo podés ver en la versión de prueba.',['~inicio']]);curso.cambios=true;$('#pedido').value='';pintarChat();pintarVersiones();ponerModo('prueba')}
+  else if(d.insf){const f=$('#'+d.insf),ab=f.classList.contains('abierto');$$('.ins-form').forEach(x=>x.classList.remove('abierto'));if(!ab){f.classList.add('abierto');const i=f.querySelector('textarea');i&&i.focus()}}
+  else if(t.id==='ins-agregar'){
+    const u=UNIS.find(x=>x.id===curso.uni),rol=$('#ins-rol').value;
+    const mails=$('#ins-mails').value.split(/[\s,;]+/).map(s=>s.trim().toLowerCase()).filter(Boolean);
+    const malos=mails.filter(m=>!dominioOk(m,u));
+    if(!mails.length)return;
+    if(malos.length){$('#ins-err').textContent=`No son de la universidad: ${malos.join(', ')}`;return}
+    const ps=mails.map(m=>personaPorMail(m,u.id));
+    if(rol==='profesor'){const np=ps.filter(p=>!p.profesor);if(np.length){$('#ins-err').textContent=`No están marcados como profesores: ${np.map(p=>p.email).join(', ')}`;return}}
+    ps.forEach(p=>{if(curso.miembros[p.id]!=='dueño')curso.miembros[p.id]=rol});
+    $('#ins-mails').value='';$('#ins-err').textContent='';$('#f-mails').classList.remove('abierto');pintarInscriptos();aviso(`${ps.length} ${ps.length===1?'persona agregada':'personas agregadas'}`);
+  }
+  else if(t.id==='cod-nuevo'){const a='ABCDEFGHJKMNPQRSTUVWXYZ23456789';curso.codigo=curso.id.slice(0,3).toUpperCase()+'-'+Array.from({length:4},()=>a[Math.floor(Math.random()*a.length)]).join('');curso.codOn=true;pintarInscriptos();aviso('El código anterior dejó de funcionar')}
+  else if(t.id==='cod-sw'){curso.codOn=!curso.codOn;pintarInscriptos()}
+  else if(d.quitar){confirmar=d.quitar;pintarInscriptos()}
+  else if(t.hasAttribute('data-noquitar')){confirmar=null;pintarInscriptos()}
+  else if(d.siquitar){delete curso.miembros[d.siquitar];confirmar=null;pintarInscriptos()}
+  else if(d.tab){tabAdmin=d.tab;pintarAdmin()}
+  else if(d.otab){tabOwner=d.otab;pintarOwner()}
+  else if(d.filtro){filtro=d.filtro;pintarAdmin()}
+  else if(d.marca){const p=P(d.marca);p.profesor=!p.profesor;pintarAdmin();aviso(p.profesor?`${p.nombre} ahora puede crear cursos`:`${p.nombre} ya no puede crear cursos`)}
+  else if(d.quitardom){const u=uniDe(yo);u.dominios=u.dominios.filter(x=>x!==d.quitardom);pintarAdmin()}
+  else if(d.op){t.parentNode.querySelectorAll('.chip').forEach(c=>c.classList.toggle('on',c===t))}
+  else if(d.invadmin)modalInvitar('admin',d.invadmin);
+  else if(d.invok){
+    const m=$('#i-mail').value.trim().toLowerCase(),u=UNIS.find(x=>x.id===d.uni);
+    if(!dominioOk(m,u)){$('#i-err').textContent=`Tiene que ser un mail de ${u.dominios.map(x=>'@'+x).join(', ')}`;return}
+    const p=personaPorMail(m,u.id);if(d.invok==='prof')p.profesor=true;else p.admin=true;
+    cerrarModal();yo.owner?pintarOwner():pintarAdmin();aviso(`Invitación enviada a ${m}`);
+  }
+  else if(t.hasAttribute('data-cerrarmodal'))cerrarModal();
+  else if(d.accion){
+    const a=d.accion;
+    if(a==='crear')modalCrear();
+    else if(a==='unirse')modalUnirse();
+    else if(a==='invitar-prof')modalInvitar('prof',yo.uni);
+    else if(a==='invitar-admin')modalInvitar('admin',yo.uni);
+    else if(a==='nueva-uni')modalUni();
+    else if(a==='agregar-dom'){const v=$('#nuevo-dom').value.trim().toLowerCase().replace(/^@/,'');if(/^[a-z0-9.-]+\.[a-z]{2,}$/.test(v)&&!uniDe(yo).dominios.includes(v)){uniDe(yo).dominios.push(v);pintarAdmin()}}
+    else if(a==='crear-ok'){
+      const n=$('#c-nombre').value.trim(),s=$('#c-sub').value.trim()||slug(n);
+      if(!n){$('#c-err').textContent='Ponele un nombre.';return}
+      if(CURSOS.some(c=>c.id===s)){$('#c-err').textContent='Esa dirección ya está en uso.';return}
+      const c={id:s,nombre:n,sub:$('#c-per').value,color:COLORES[CURSOS.length%COLORES.length],uni:yo.uni,version:0,codigo:s.slice(0,3).toUpperCase()+'-7HQ2',codOn:false,uso:0,miembros:{[yo.id]:'dueño'},cambios:false,
+        chat:[['ag',`Creé <b>${n}</b>. ¿Cómo querés que sea? Podés contarme la materia, pegar el programa o subir el material que ya tenés.`]]};
+      CURSOS.push(c);cerrarModal();abrirCurso(c.id);$('[data-panel=p-agente]').click();
+    }
+    else if(a==='unirse-ok'){
+      const cod=$('#u-cod').value.trim().toUpperCase(),c=CURSOS.find(x=>x.codigo===cod&&x.codOn);
+      if(!c){$('#u-err').textContent='Ese código no existe o ya no está activo.';return}
+      if(!c.miembros[yo.id])c.miembros[yo.id]='alumno';
+      cerrarModal();abrirCurso(c.id);aviso(`Entraste a ${c.nombre}`);
+    }
+    else if(a==='uni-ok'){
+      const n=$('#n-nombre').value.trim(),dm=$('#n-dom').value.trim().toLowerCase().replace(/^@/,''),am=$('#n-admin').value.trim().toLowerCase();
+      if(!n||!dm||!am.endsWith('@'+dm)){$('#n-err').textContent='Completá todo. El mail del administrador tiene que ser de ese dominio.';return}
+      const u={id:slug(n)||'u'+UNIS.length,nombre:n,dominios:[dm],limite:20};UNIS.push(u);const p=personaPorMail(am,u.id);p.admin=true;
+      cerrarModal();pintarOwner();aviso(`${n} creada. Invitación enviada a ${am}`);
+    }
+  }
+});
+
+pintarCuentas();
+</script>
+</body>
+</html>

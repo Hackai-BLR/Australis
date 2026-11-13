@@ -1,18 +1,47 @@
 # Rust
 backend/target/
+target/
 
 # Node
-frontend/node_modules/
-frontend/dist/
+node_modules/
+dist/
 frontend/*.tsbuildinfo
+test-results/
+playwright-report/
+plantilla-curso/vendor/*.tgz
+sdk/*.tgz
 
 # SQLite
 *.db
 *.db-shm
 *.db-wal
+*.db-journal
+*.db-*
+*.sqlite
+*.sqlite3
+*.sqlite-*
 
 # Uploaded files (UPLOAD_DIR)
 uploads/
 
-# Env
+# Env and secrets
 .env
+.env.*
+*.env
+campusia.env
+!.env.example
+!*.env.ejemplo
+
+# Python
+__pycache__/
+*.pyc
+
+# Build and backup artefacts
+*.jsonl
+*.bundle
+*.tar
+*.tar.gz
+*.tgz
+
+# Claude Code agent worktrees
+.claude/worktrees/

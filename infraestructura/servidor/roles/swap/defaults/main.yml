@@ -1,0 +1,4 @@
+---
+swap_tamano_mb: 4096
+swap_archivo: /swapfile
+swap_swappiness: 20

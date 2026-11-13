@@ -1,0 +1,7 @@
+#!/bin/bash
+/usr/local/lib/sustitutos/registrar-como docker "$@"
+case "${1:-}" in
+  info) echo "rootless"; echo " Cgroup Version: 2" ;;
+  run) echo "Hello from Docker!" ;;
+esac
+exit 0

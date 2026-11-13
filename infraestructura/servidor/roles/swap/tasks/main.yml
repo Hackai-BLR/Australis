@@ -1,0 +1,132 @@
+---
+- name: Leer el archivo de swap
+  ansible.builtin.stat:
+    path: "{{ swap_archivo }}"
+  register: swap_estado
+
+- name: Leer las áreas de swap activas
+  ansible.builtin.slurp:
+    src: /proc/swaps
+  register: swap_activas
+
+- name: Leer la firma del swap
+  ansible.builtin.command: dd if={{ swap_archivo }} bs=1 skip=4086 count=10 status=none
+  register: swap_firma
+  changed_when: false
+  failed_when: false
+
+- name: Calcular el estado del swap
+  ansible.builtin.set_fact:
+    swap_bytes: "{{ (swap_tamano_mb | int) * 1048576 }}"
+    swap_en_uso: >-
+      {{ not (servidor_contenedor_de_prueba | bool)
+      and ((swap_activas.content | b64decode).splitlines() | select('match', '^' ~ swap_archivo ~ '\\s') | list | length > 0) }}
+
+- name: Calcular si hay que rehacer el swap
+  ansible.builtin.set_fact:
+    swap_rehacer: "{{ not swap_estado.stat.exists or swap_estado.stat.size != (swap_bytes | int) or swap_firma.stdout != 'SWAPSPACE2' }}"
+
+- name: Rehacer el archivo de swap
+  when: swap_rehacer | bool
+  block:
+    - name: Desactivar el swap anterior
+      ansible.builtin.command: swapoff {{ swap_archivo }}
+      when: swap_en_uso | bool
+      changed_when: true
+
+    - name: Crear el archivo de swap nuevo
+      ansible.builtin.command: dd if=/dev/zero of={{ swap_archivo }}.nuevo bs=1M count={{ swap_tamano_mb | int }} status=none
+      changed_when: true
+
+    - name: Proteger el archivo de swap nuevo
+      ansible.builtin.file:
+        path: "{{ swap_archivo }}.nuevo"
+        owner: root
+        group: root
+        mode: "0600"
+
+    - name: Formatear el archivo de swap nuevo
+      ansible.builtin.command: mkswap {{ swap_archivo }}.nuevo
+      changed_when: true
+
+    - name: Reemplazar el archivo de swap
+      ansible.builtin.command: mv -f {{ swap_archivo }}.nuevo {{ swap_archivo }}
+      changed_when: true
+
+- name: Ajustar los permisos del swap
+  ansible.builtin.file:
+    path: "{{ swap_archivo }}"
+    owner: root
+    group: root
+    mode: "0600"
+
+- name: Registrar el swap en fstab
+  ansible.builtin.lineinfile:
+    path: /etc/fstab
+    regexp: "^{{ swap_archivo }}\\s"
+    line: "{{ swap_archivo }} none swap sw 0 0"
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Configurar swappiness
+  ansible.builtin.copy:
+    content: "vm.swappiness = {{ swap_swappiness }}\n"
+    dest: /etc/sysctl.d/90-campusia.conf
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Activar el swap
+  ansible.builtin.shell: |
+    set -eu
+    if swapon --show=NAME --noheadings | grep -qx '{{ swap_archivo }}'; then
+      echo ya-activo
+    else
+      swapon '{{ swap_archivo }}'
+      echo activado
+    fi
+  register: swap_activacion
+  when: not (servidor_contenedor_de_prueba | bool)
+  changed_when: "'activado' in swap_activacion.stdout"
+
+- name: Leer swappiness
+  ansible.builtin.slurp:
+    src: /proc/sys/vm/swappiness
+  register: swap_swappiness_actual
+  when: not (servidor_contenedor_de_prueba | bool)
+
+- name: Aplicar swappiness
+  ansible.builtin.command: sysctl -w vm.swappiness={{ swap_swappiness }}
+  when:
+    - not (servidor_contenedor_de_prueba | bool)
+    - (swap_swappiness_actual.content | b64decode | trim | int) != (swap_swappiness | int)
+  changed_when: true
+
+- name: Leer el estado final del swap
+  ansible.builtin.stat:
+    path: "{{ swap_archivo }}"
+  register: swap_final
+
+- name: Leer las áreas de swap activas al final
+  ansible.builtin.slurp:
+    src: /proc/swaps
+  register: swap_activas_final
+
+- name: Leer la configuración de sysctl
+  ansible.builtin.slurp:
+    src: /etc/sysctl.d/90-campusia.conf
+  register: swap_sysctl
+
+- name: Verificar el swap
+  vars:
+    swap_activo_final: "{{ (swap_activas_final.content | b64decode).splitlines() | select('match', '^' ~ swap_archivo ~ '\\s') | list }}"
+  ansible.builtin.assert:
+    that:
+      - swap_final.stat.size == (swap_bytes | int)
+      - swap_final.stat.mode == '0600'
+      - swap_final.stat.pw_name == 'root'
+      - (swap_sysctl.content | b64decode) is search('(?m)^vm\.swappiness = ' ~ swap_swappiness ~ '$')
+      - (servidor_contenedor_de_prueba | bool) or swap_activo_final | length > 0
+    fail_msg: el swap no quedó como se esperaba
+    quiet: true

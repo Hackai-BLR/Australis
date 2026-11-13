@@ -1,0 +1,9 @@
+---
+caddy_caddyfile_origen: "{{ playbook_dir }}/../../despliegue/Caddyfile"
+caddy_dominio: campusia.tech
+caddy_certs: /etc/caddy/certs
+caddy_repositorio: https://dl.cloudsmith.io/public/caddy/stable
+caddy_clave_armada: /usr/share/keyrings/caddy-stable-archive-keyring.asc
+caddy_clave: /usr/share/keyrings/caddy-stable-archive-keyring.gpg
+caddy_fuente: /etc/apt/sources.list.d/caddy-stable.list
+caddy_version_minima: "2.8.0"

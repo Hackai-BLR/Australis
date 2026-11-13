@@ -1,0 +1,410 @@
+:root {
+  --verde-oscuro: #14402C;
+  --verde: #2E7D5B;
+  --verde-claro: #E3F1E8;
+  --verde-texto: #1F6B47;
+  --fondo: #F4F7F2;
+  --tinta: #1B2A22;
+  --tenue: #5D6F64;
+  --borde: #DFE7DE;
+  --crema: #FAF8F3;
+  --serif: Fraunces, 'Iowan Old Style', 'Palatino Linotype', Palatino, 'Book Antiqua', Georgia, 'DejaVu Serif', 'Liberation Serif', 'Times New Roman', serif;
+  --texto: 'Source Sans 3', 'Segoe UI', system-ui, -apple-system, Roboto, 'Helvetica Neue', Arial, sans-serif;
+}
+
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: var(--texto);
+  font-size: 16px;
+  line-height: 1.45;
+  color: var(--tinta);
+  background: var(--fondo);
+  overflow-wrap: anywhere;
+}
+
+h1, h2 {
+  font-family: var(--serif);
+}
+
+.hero {
+  background: var(--verde-oscuro);
+  color: #EAF3EC;
+  padding: 56px 64px 48px;
+}
+
+.hero-interior {
+  max-width: 1072px;
+}
+
+.hero-arriba {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+}
+
+.hero-periodo {
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  font-size: 12px;
+  color: #9CC7AE;
+}
+
+.rol {
+  font-size: 12px;
+  line-height: 1;
+  padding: 4px 10px;
+  border-radius: 20px;
+  border: 1px solid rgba(156, 199, 174, .45);
+  color: #CFE6D7;
+}
+
+.hero h1 {
+  font-weight: 600;
+  font-size: 46px;
+  line-height: 1.1;
+  margin: 10px 0 8px;
+  letter-spacing: -.01em;
+}
+
+.hero-docentes {
+  margin: 0;
+  color: #BFD9C8;
+  font-size: 17px;
+}
+
+.cuerpo {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  gap: 40px;
+  padding: 40px 64px;
+  max-width: 1200px;
+}
+
+h2 {
+  font-weight: 500;
+  font-size: 24px;
+  margin: 0 0 16px;
+}
+
+.lista-clases {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.clase {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  background: #fff;
+  border: 1px solid var(--borde);
+  border-radius: 12px;
+  padding: 16px 20px;
+  margin-bottom: 10px;
+}
+
+.clase-numero {
+  font-family: var(--serif);
+  font-size: 28px;
+  color: var(--verde);
+  min-width: 34px;
+  flex-shrink: 0;
+}
+
+.clase-texto {
+  min-width: 0;
+}
+
+.clase-texto b {
+  display: block;
+  font-size: 17px;
+  font-weight: 600;
+}
+
+.clase-texto time {
+  color: var(--tenue);
+  font-size: 14px;
+}
+
+.vacio {
+  background: var(--crema);
+  border: 1px dashed var(--borde);
+  border-radius: 12px;
+  padding: 40px 24px;
+  text-align: center;
+  font-family: var(--serif);
+  color: #2A2620;
+}
+
+.vacio-etiqueta {
+  font-size: 13px;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: #8A7F6E;
+}
+
+.vacio p {
+  margin: 8px 0 0;
+  font-family: var(--texto);
+  color: #8A7F6E;
+}
+
+.lateral .caja {
+  background: #fff;
+  border: 1px solid var(--borde);
+  border-radius: 12px;
+  padding: 18px 20px;
+  margin-bottom: 12px;
+}
+
+.lateral b {
+  display: block;
+  font-size: 13px;
+  color: var(--tenue);
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+
+.docentes {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.aviso {
+  min-height: 100vh;
+  display: grid;
+  place-content: center;
+  text-align: center;
+  padding: 24px;
+  background: var(--crema);
+  color: #8A7F6E;
+}
+
+.aviso p {
+  margin: 4px 0;
+}
+
+.aviso-titulo {
+  font-family: var(--serif);
+  font-size: 22px;
+  color: #2A2620;
+}
+
+@media (max-width: 860px) {
+  .hero {
+    padding: 40px 24px 32px;
+  }
+
+  .hero h1 {
+    font-size: 36px;
+  }
+
+  .cuerpo {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 24px;
+    padding: 28px 24px;
+  }
+}
+
+@media (max-width: 480px) {
+  .hero {
+    padding: 32px 16px 28px;
+  }
+
+  .hero h1 {
+    font-size: 30px;
+  }
+
+  .cuerpo {
+    padding: 24px 16px;
+  }
+
+  .clase {
+    gap: 14px;
+    padding: 14px 16px;
+  }
+}
+
+.principal {
+  min-width: 0;
+}
+
+.entregas {
+  margin-top: 40px;
+}
+
+h3 {
+  font-family: var(--serif);
+  font-weight: 500;
+  font-size: 19px;
+  margin: 24px 0 10px;
+}
+
+.tenue {
+  color: var(--tenue);
+}
+
+.error {
+  color: #9B2C2C;
+  margin: 0;
+  font-size: 14px;
+}
+
+.formulario-entrega {
+  display: grid;
+  gap: 12px;
+  background: #fff;
+  border: 1px solid var(--borde);
+  border-radius: 12px;
+  padding: 18px 20px;
+  margin-bottom: 16px;
+}
+
+.formulario-entrega label {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.formulario-entrega label span {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--tenue);
+}
+
+input[type='text'],
+textarea {
+  width: 100%;
+  min-width: 0;
+  font: inherit;
+  color: var(--tinta);
+  background: var(--crema);
+  border: 1px solid var(--borde);
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+
+textarea {
+  resize: vertical;
+}
+
+input[type='file'] {
+  max-width: 100%;
+  font: inherit;
+  font-size: 14px;
+}
+
+input:focus,
+textarea:focus {
+  outline: 2px solid var(--verde);
+  outline-offset: 1px;
+}
+
+button {
+  font: inherit;
+  font-weight: 600;
+  color: #fff;
+  background: var(--verde);
+  border: 0;
+  border-radius: 8px;
+  padding: 8px 16px;
+  cursor: pointer;
+  justify-self: start;
+}
+
+button:disabled {
+  opacity: .6;
+  cursor: default;
+}
+
+.lista-entregas,
+.lista-notas,
+.lista-historial {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.entrega {
+  background: #fff;
+  border: 1px solid var(--borde);
+  border-radius: 12px;
+  padding: 14px 18px;
+  margin-bottom: 10px;
+}
+
+.entrega-arriba {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 12px;
+}
+
+.entrega-arriba b {
+  font-size: 17px;
+}
+
+.entrega-persona {
+  color: var(--verde-texto);
+  font-weight: 600;
+}
+
+.entrega-arriba time {
+  color: var(--tenue);
+  font-size: 14px;
+  margin-left: auto;
+}
+
+.entrega-texto {
+  margin: 6px 0 0;
+  white-space: pre-wrap;
+}
+
+.entrega-archivo {
+  display: inline-block;
+  margin-top: 6px;
+  color: var(--verde-texto);
+}
+
+.calificar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.calificar input {
+  width: 96px;
+}
+
+.calificar .error {
+  flex-basis: 100%;
+}
+
+.lista-notas li,
+.lista-historial li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--borde);
+}
+
+.lista-notas li span {
+  flex: 1;
+}
+
+.historial-persona {
+  font-weight: 600;
+}

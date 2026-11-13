@@ -1,0 +1,166 @@
+{
+  "universidades": [
+    {
+      "nombre": "Universidad Austral",
+      "dominios": [
+        "austral.edu.ar",
+        "mail.austral.edu.ar"
+      ],
+      "limite_usd": 40
+    },
+    {
+      "nombre": "Universidad de Prueba",
+      "dominios": [
+        "demo.edu.ar"
+      ],
+      "limite_usd": 20
+    }
+  ],
+  "usuarios": [
+    {
+      "email": "ana.morales@austral.edu.ar",
+      "nombre": "Ana Morales",
+      "universidad": "Universidad Austral",
+      "administrador": true
+    },
+    {
+      "email": "lfernandez@austral.edu.ar",
+      "nombre": "Lucía Fernández",
+      "universidad": "Universidad Austral",
+      "profesor": true
+    },
+    {
+      "email": "dherrera@austral.edu.ar",
+      "nombre": "Diego Herrera",
+      "universidad": "Universidad Austral",
+      "profesor": true
+    },
+    {
+      "email": "tgarcia@mail.austral.edu.ar",
+      "nombre": "Tomás García",
+      "universidad": "Universidad Austral"
+    },
+    {
+      "email": "cpendiente@austral.edu.ar",
+      "nombre": "Carla Pendiente",
+      "universidad": "Universidad Austral",
+      "profesor": true,
+      "pendiente": true
+    },
+    {
+      "email": "admin@demo.edu.ar",
+      "nombre": "Admin Demo",
+      "universidad": "Universidad de Prueba",
+      "administrador": true
+    },
+    {
+      "email": "profe@demo.edu.ar",
+      "nombre": "Profe Demo",
+      "universidad": "Universidad de Prueba",
+      "profesor": true
+    },
+    {
+      "email": "alumno@demo.edu.ar",
+      "nombre": "Alumno Demo",
+      "universidad": "Universidad de Prueba"
+    },
+    {
+      "email": "mruiz@austral.edu.ar",
+      "nombre": "Martín Ruiz",
+      "universidad": "Universidad Austral",
+      "profesor": true
+    },
+    {
+      "email": "slopez@mail.austral.edu.ar",
+      "nombre": "Sofía López",
+      "universidad": "Universidad Austral"
+    },
+    {
+      "email": "psinmarca@austral.edu.ar",
+      "nombre": "Pablo Sin Marca",
+      "universidad": "Universidad Austral"
+    }
+  ],
+  "cursos": [
+    {
+      "id": "redes",
+      "nombre": "Redes de Computadoras",
+      "periodo": "2.º cuatrimestre 2026",
+      "color": "#1F7A4D",
+      "universidad": "Universidad Austral",
+      "version_publicada": 12,
+      "uso_usd_mes": 31,
+      "inscripciones": [
+        {
+          "email": "lfernandez@austral.edu.ar",
+          "rol": "dueño"
+        },
+        {
+          "email": "dherrera@austral.edu.ar",
+          "rol": "profesor"
+        },
+        {
+          "email": "tgarcia@mail.austral.edu.ar",
+          "rol": "alumno"
+        }
+      ]
+    },
+    {
+      "id": "algoritmos",
+      "nombre": "Algoritmos y Estructuras de Datos",
+      "periodo": "2.º cuatrimestre 2026",
+      "color": "#A4492A",
+      "universidad": "Universidad Austral",
+      "version_publicada": 7,
+      "uso_usd_mes": 28,
+      "inscripciones": [
+        {
+          "email": "lfernandez@austral.edu.ar",
+          "rol": "dueño"
+        },
+        {
+          "email": "tgarcia@mail.austral.edu.ar",
+          "rol": "alumno"
+        }
+      ]
+    },
+    {
+      "id": "etica",
+      "nombre": "Ética Profesional",
+      "periodo": "Anual 2026",
+      "color": "#6E4BA8",
+      "universidad": "Universidad Austral",
+      "version_publicada": null,
+      "uso_usd_mes": 9,
+      "inscripciones": [
+        {
+          "email": "dherrera@austral.edu.ar",
+          "rol": "dueño"
+        },
+        {
+          "email": "lfernandez@austral.edu.ar",
+          "rol": "alumno"
+        }
+      ]
+    },
+    {
+      "id": "quimica",
+      "nombre": "Química General",
+      "periodo": "1.er cuatrimestre 2027",
+      "color": "#2E6A8E",
+      "universidad": "Universidad de Prueba",
+      "version_publicada": 3,
+      "uso_usd_mes": 5,
+      "inscripciones": [
+        {
+          "email": "profe@demo.edu.ar",
+          "rol": "dueño"
+        },
+        {
+          "email": "alumno@demo.edu.ar",
+          "rol": "alumno"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,9 @@
+{
+  "name": "pruebas-tramo-plantilla-sdk",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "hono": "4.13.17",
+    "playwright-core": "1.56.1"
+  }
+}

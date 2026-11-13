@@ -1,0 +1,94 @@
+---
+- name: Verificar la distribución
+  ansible.builtin.assert:
+    that:
+      - ansible_facts.distribution in base_distribuciones
+      - (ansible_facts.distribution_version | string) in base_distribuciones[ansible_facts.distribution]
+        or (ansible_facts.distribution_major_version | string) in base_distribuciones[ansible_facts.distribution]
+    fail_msg: >-
+      distribución no soportada: {{ ansible_facts.distribution }} {{ ansible_facts.distribution_version }}.
+      Se necesita Debian 12 o 13, o Ubuntu 22.04 o 24.04
+    quiet: true
+
+- name: Actualizar la lista de paquetes
+  ansible.builtin.apt:
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Actualizar los paquetes instalados
+  ansible.builtin.apt:
+    upgrade: dist
+    autoremove: false
+
+- name: Instalar los paquetes base
+  ansible.builtin.apt:
+    name: "{{ base_paquetes }}"
+    state: present
+
+- name: Activar las actualizaciones automáticas
+  ansible.builtin.copy:
+    src: 20auto-upgrades
+    dest: /etc/apt/apt.conf.d/20auto-upgrades
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Leer la configuración de apt
+  ansible.builtin.command: apt-config dump
+  register: base_apt_config
+  changed_when: false
+
+- name: Verificar las actualizaciones automáticas
+  ansible.builtin.assert:
+    that:
+      - "'APT::Periodic::Unattended-Upgrade \"1\";' in base_apt_config.stdout"
+      - "'APT::Periodic::Update-Package-Lists \"1\";' in base_apt_config.stdout"
+    fail_msg: las actualizaciones automáticas no quedaron activas
+    quiet: true
+
+- name: Verificar los paquetes base
+  ansible.builtin.command: dpkg-query -W -f='${Status}\n' {{ base_paquetes | join(' ') }}
+  register: base_dpkg
+  changed_when: false
+  failed_when: base_dpkg.rc != 0 or (base_dpkg.stdout_lines | reject('equalto', 'install ok installed') | list | length) > 0
+
+- name: Verificar que existe la zona horaria
+  ansible.builtin.stat:
+    path: /usr/share/zoneinfo/{{ servidor_zona_horaria }}
+  register: base_zona
+  failed_when: not base_zona.stat.exists or base_zona.stat.isdir
+
+- name: Fijar la zona horaria
+  ansible.builtin.file:
+    src: /usr/share/zoneinfo/{{ servidor_zona_horaria }}
+    dest: /etc/localtime
+    state: link
+    force: true
+    owner: root
+    group: root
+
+- name: Leer si la distribución usa /etc/timezone
+  ansible.builtin.stat:
+    path: /etc/timezone
+  register: base_timezone
+
+- name: Escribir /etc/timezone
+  ansible.builtin.copy:
+    content: "{{ servidor_zona_horaria }}\n"
+    dest: /etc/timezone
+    owner: root
+    group: root
+    mode: "0644"
+  when: base_timezone.stat.exists
+
+- name: Leer la zona horaria
+  ansible.builtin.command: readlink -f /etc/localtime
+  register: base_localtime
+  changed_when: false
+
+- name: Verificar la zona horaria
+  ansible.builtin.assert:
+    that:
+      - base_localtime.stdout == (base_zona.stat.lnk_source if base_zona.stat.islnk else '/usr/share/zoneinfo/' ~ servidor_zona_horaria)
+    fail_msg: "/etc/localtime no apunta a {{ servidor_zona_horaria }}"
+    quiet: true
