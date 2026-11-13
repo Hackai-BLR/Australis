@@ -6,8 +6,8 @@ use std::sync::Arc;
 
 use anyhow::bail;
 use australis_core::{
-    auth,
     ai::{AiProvider, ProxyAi},
+    auth,
     config::{AuthMode, PLACEHOLDER_PROVIDER, PROXY_PROVIDER},
     http, AppError, AppState, Config,
 };

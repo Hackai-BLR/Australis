@@ -38,7 +38,9 @@ async fn messages(
     if let Some(message) = fake.refuse.lock().unwrap().clone() {
         return (
             StatusCode::TOO_MANY_REQUESTS,
-            Json(json!({ "type": "error", "error": { "type": "rate_limit_error", "message": message } })),
+            Json(
+                json!({ "type": "error", "error": { "type": "rate_limit_error", "message": message } }),
+            ),
         );
     }
     (
@@ -105,7 +107,10 @@ async fn the_call_goes_to_the_proxy_with_its_token_and_the_professor_and_is_logg
         .await
         .unwrap();
 
-    assert!(!outcome.simulated, "no Simulado badge with the proxy provider");
+    assert!(
+        !outcome.simulated,
+        "no Simulado badge with the proxy provider"
+    );
     assert_eq!(outcome.reply.text, "Listo, agregué la sección.");
     assert_eq!(outcome.reply.model, "claude-test");
     assert_eq!(outcome.reply.input_tokens, 110);
@@ -117,19 +122,21 @@ async fn the_call_goes_to_the_proxy_with_its_token_and_the_professor_and_is_logg
     );
     assert_eq!(outcome.reply.tool_calls[0].name, "add_section");
 
-    let seen = fake.seen.lock().unwrap();
-    assert_eq!(seen.len(), 1);
-    let (headers, body) = &seen[0];
-    assert_eq!(headers["x-api-key"], TOKEN);
-    assert_eq!(headers["x-campus-usuario"], professor.email.as_str());
-    assert!(headers.get("authorization").is_none());
-    assert_eq!(body["model"], "claude-test");
-    assert_eq!(body["system"], "Sos el asistente del campus.");
-    assert_eq!(body["tools"][0]["name"], "add_section");
-    let text = body["messages"][0]["content"].as_str().unwrap();
-    assert!(text.contains("Semana 1: Introducción"));
-    assert!(text.contains("agregá ética"));
-    assert!(text.contains("title is required"));
+    {
+        let seen = fake.seen.lock().unwrap();
+        assert_eq!(seen.len(), 1);
+        let (headers, body) = &seen[0];
+        assert_eq!(headers["x-api-key"], TOKEN);
+        assert_eq!(headers["x-campus-usuario"], professor.email.as_str());
+        assert!(headers.get("authorization").is_none());
+        assert_eq!(body["model"], "claude-test");
+        assert_eq!(body["system"], "Sos el asistente del campus.");
+        assert_eq!(body["tools"][0]["name"], "add_section");
+        let text = body["messages"][0]["content"].as_str().unwrap();
+        assert!(text.contains("Semana 1: Introducción"));
+        assert!(text.contains("agregá ética"));
+        assert!(text.contains("title is required"));
+    }
 
     let mut conn = app.db.acquire().await.unwrap();
     let usage = ai::list_usage(
@@ -166,7 +173,11 @@ async fn the_daily_quota_stays_as_a_second_limit_before_the_proxy_is_called() {
         .unwrap_err();
 
     assert_eq!(err.status(), StatusCode::TOO_MANY_REQUESTS);
-    assert_eq!(fake.seen.lock().unwrap().len(), 1, "the proxy was not called");
+    assert_eq!(
+        fake.seen.lock().unwrap().len(),
+        1,
+        "the proxy was not called"
+    );
 }
 
 #[tokio::test]
@@ -236,13 +247,10 @@ async fn the_proxy_provider_is_chosen_only_when_configured_completely() {
         .unwrap();
     assert!(placeholder.ai.is_placeholder());
 
-    let proxy = australis_server::build_state(config(
-        "proxy",
-        Some("http://127.0.0.1:9"),
-        Some(TOKEN),
-    ))
-    .await
-    .unwrap();
+    let proxy =
+        australis_server::build_state(config("proxy", Some("http://127.0.0.1:9"), Some(TOKEN)))
+            .await
+            .unwrap();
     assert!(!proxy.ai.is_placeholder());
     assert_eq!(proxy.ai.name(), "proxy");
 
