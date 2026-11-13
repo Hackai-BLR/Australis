@@ -8,7 +8,7 @@ use australis_core::{
 };
 use axum::http::StatusCode;
 use common::TestApp;
-use serde_json::{json, Value};
+use serde_json::Value;
 
 fn names(list: &Value, key: &str) -> Vec<String> {
     list.as_array()
