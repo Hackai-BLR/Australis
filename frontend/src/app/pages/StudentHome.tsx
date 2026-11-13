@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 import { TodayClass } from "../../modules/classes";
 import { Badge, Card, EmptyState, Spinner } from "../../shared/ui";
+import { NextStep } from "./NextStep";
 import { useLoad } from "./useLoad";
 import "./home.css";
 
@@ -89,6 +90,7 @@ function GradesSummary() {
 export function StudentHome() {
   return (
     <div className="au-stack">
+      <NextStep />
       <TodayClass />
       <GradesSummary />
       <Courses />
