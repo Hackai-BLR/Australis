@@ -10,7 +10,11 @@ function message(err: unknown): string {
 }
 
 /** Private notes for the page being shown. Saved when the field loses focus or the page changes. */
-export function NotesPanel({ presentationId, page }: Props) {
+export function NotesPanel(props: Props) {
+  return <NotesEditor key={props.presentationId} {...props} />;
+}
+
+function NotesEditor({ presentationId, page }: Props) {
   const toast = useToast();
   const [saved, setSaved] = useState<Record<number, string>>({});
   const [draft, setDraft] = useState("");
@@ -18,7 +22,6 @@ export function NotesPanel({ presentationId, page }: Props) {
   const savedRef = useRef(saved);
   savedRef.current = saved;
   const draftRef = useRef({ page, text: "" });
-  draftRef.current = { page, text: draft };
 
   useEffect(() => {
     let cancelled = false;
@@ -36,7 +39,9 @@ export function NotesPanel({ presentationId, page }: Props) {
   }, [presentationId]);
 
   useEffect(() => {
-    setDraft(savedRef.current[page] ?? "");
+    const text = savedRef.current[page] ?? "";
+    draftRef.current = { page, text };
+    setDraft(text);
   }, [page, loaded]);
 
   async function persist(forPage: number, text: string) {
@@ -70,7 +75,10 @@ export function NotesPanel({ presentationId, page }: Props) {
         maxLength={10000}
         value={draft}
         disabled={!loaded}
-        onChange={(e) => setDraft(e.target.value)}
+        onChange={(e) => {
+          draftRef.current = { page, text: e.target.value };
+          setDraft(e.target.value);
+        }}
         onBlur={() => void persist(page, draft)}
       />
       <p className="slides-muted">Solo vos ves estas notas.</p>
