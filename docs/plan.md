@@ -36,7 +36,7 @@ A phase is open when its kickoff branch is published. The kickoff does the work 
 
 | Phase | Name | Depends on | Status |
 |---|---|---|---|
-| 0 | Join Australis and Campus IA | First build, the CampusAi merge | Round 2 open: M9 to M12, found by checkpoint B. Then checkpoint B again, then M6 |
+| 0 | Join Australis and Campus IA | First build, the CampusAi merge | M9 to M12 merged (2026-11-13). Round 3 open: M13 and M14. Then checkpoint B again, then M6 |
 | 1 | Test and stabilise the first build | First build | Done. Checkpoint A passed and is tagged `checkpoint-a` (2026-11-13) |
 | 2 | Records and staff basics | Phase 1 | Not open |
 | 3 | Follow-up and closing | Phase 2 | Not open |
@@ -97,7 +97,7 @@ Phases 0 and 1 do not depend on each other, so A and B can be reached in either 
 
 ### Checkpoint B: one product, live
 
-- **Needs:** checkpoint A, M1 to M5, M7, M9 to M12. It passes first on a test stack that runs the core and Australis together. Then M6 switches production, and steps 1, 2 and 6 are repeated on `campusia.tech`.
+- **Needs:** checkpoint A, M1 to M5, M7, M9 to M14. It passes first on a test stack that runs the core and Australis together. Then M6 switches production, and steps 1, 2 and 6 are repeated on `campusia.tech`.
 - **Demo story:**
   1. A person signs in at `campusia.tech` with an email code. There is no password anywhere.
   2. The course list shows a campus with modules and a free course side by side, with the same look.
@@ -170,6 +170,7 @@ CampusAi merge
   <- M5 one visual design
   <- M8 browser tests                   <- checkpoint A
   <- M9 joint stack and tests, M10 enrolments, M11 administrator views, M12 flaky test  <- checkpoint B
+  <- M13 administrator is secretary of their university, M14 course template lockfile   <- checkpoint B
   <- M7 CI for the Campus IA folders    <- M6 switch production to this repository
 M4 real AI <- F11 class summary and F33 study help stop being simulated (they can still be built on the placeholder)
 
@@ -201,7 +202,7 @@ How they fit together:
 - **A course has a kind.** "Campus with modules" is an Australis campus (gradebook, classes, recordings, slides, AI proposals). "Free course" is a Campus IA container shaped by the agent. Both appear in the same course list.
 - **One model access.** Australis's `AiProvider` gets a real implementation that calls the core's model proxy, so the token quotas and usage records are shared. The placeholder stays for development and tests.
 
-**Status: M1, M2, M3, M4, M5, M7 and M8 are merged (2026-11-13).** Checkpoint B was run once and did not pass; M9 to M12 are what it found. M6 is done by a person after checkpoint B passes on a local stack.
+**Status: M1, M2, M3, M4, M5, M7 and M8 are merged (2026-11-13).** Checkpoint B was run once and did not pass; M9 to M12 are what it found, and they are merged. Building M9 showed two more gaps, M13 and M14. M6 is done by a person after checkpoint B passes on a local stack.
 
 There is no kickoff. The tasks own different folders, except where a dependency is listed.
 
@@ -219,6 +220,8 @@ There is no kickoff. The tasks own different folders, except where a dependency 
 | M10 | Enrolments reach the core on every change | M3 | `backend/crates/modules/roster/src/**`, `nucleo/src/cursos/modulos/**` |
 | M11 | Administrator and owner see campuses with modules | M3, M10 | `nucleo/src/cursos/modulos/**`, `nucleo/src/admin.rs`, `interfaz/src/Admin.tsx` |
 | M12 | Stop the flaky AI proxy deadline test | M4 | `backend/crates/server/tests/ai_proxy.rs`, `backend/crates/core/src/ai.rs` |
+| M13 | The administrator is secretary of their own university | M2, M11 | `contratos/identidad-australis.md`, `nucleo/src/identidad.rs` and `enrutador.rs`, `backend/crates/core/src/auth.rs`, `access.rs` and `directory.rs`, a core migration, `backend/crates/modules/campus/src/lib.rs`, `tests/identity.rs`, `pruebas/australis/checkpoint-b/**` |
+| M14 | The course template installs with the SDK it was locked to | M9 | `plantilla-curso/pnpm-lock.yaml`, `sdk/package.json`, `despliegue/continuo/desplegar.sh`, `.github/workflows/campusia.yml`, `pruebas/australis/imagenes/**`, `pruebas/australis/checkpoint-b/**` |
 
 - **M1 Deploy.** A second systemd service for the Australis backend on its own local port (the core already uses 8080), with its database and uploads under `/srv/campusia`. The continuous deploy builds, tests and installs `backend/` and `frontend/` next to the core, checks health, and rolls both back together. The daily backup and Litestream include the Australis database and uploads. Ansible installs all of it. Tests in the style of the existing infrastructure tests.
 - **M2 One sign-in.** The core reserves one address for Australis, forwards to it, strips cookies and adds the signed identity header with the person's platform role. Australis gets a second way to identify the caller: verify the header (Ed25519 public key from the environment), create the account on first sight, and map roles (owner and university administrator to secretary, professor mark to professor, everyone else to student). A setting chooses the mode; password sign-in stays for local development and the tests. In header mode the password routes and invites are off. An account that is suspended or disabled in the core has no access in Australis.
@@ -227,6 +230,8 @@ There is no kickoff. The tasks own different folders, except where a dependency 
 - **M5 One design.** The Australis design tokens take the palette, type and bar of `prototipo/campus.html`, so moving between the two does not look like changing product.
 - **M6 Switch production.** Point the server's deploy at this repository (deploy key, webhook, `despliegue_origen` in Ansible). After this, every merge to `main` is live within 5 minutes, so it comes last and only when M1 and M7 are merged.
 - **M7 CI.** GitHub jobs for `nucleo` (cargo test), `interfaz`, `sdk` and `plantilla-curso` (pnpm build and test), and a check that no secret is committed (`pruebas/tramo-infraestructura/test_secretos.py`).
+- **M13 The administrator is secretary of their own university.** Today the core signs a university administrator as a student for Australis, because Australis does not know universities and a secretary there can act on every campus (`contratos/identidad-australis.md`). That breaks the agreed decision that the administrator is the secretary. Fix both sides: the identity payload carries the person's university and whether they administer it; a campus in Australis records the university it belongs to (set when it is created through the core); and access gives an administrator the secretary's rights only on campuses of that university, while the owner keeps them everywhere. Secretary-only screens that list across campuses show an administrator only their university. Update the contract, and turn the two expected-failure tests in `pruebas/australis/checkpoint-b/` for steps 5 and 6 into normal tests. Add attack tests: an administrator of one university is refused on another university's campus, through the screens and the API.
+- **M14 The course template installs with the SDK it was locked to.** The integrity hash for `vendor/campusia-sdk-0.3.0.tgz` in `plantilla-curso/pnpm-lock.yaml` does not match the SDK that is packed at build time, and `plantilla-curso/Containerfile` installs with `--frozen-lockfile`. The checkpoint B test image rewrites the hash to get past this (`pruebas/australis/imagenes/fijar-sdk.mjs`), and the CI job installs with `--no-frozen-lockfile`, so nothing shows whether a free course can be built from a fresh checkout. Find out first, in a local container built the way `despliegue/continuo/desplegar.sh` builds it, whether a free course starts today. Then make it hold: the packed SDK is the same bytes every time or the lock is regenerated when the SDK changes, CI installs the template with `--frozen-lockfile`, the test image stops rewriting the hash, and the expected-failure test about the lockfile becomes a normal test.
 - **M9 Joint stack and tests for checkpoint B.** One command starts the core, Australis and the fake model together on a fresh database, the way production wires them (the core in front, the signed identity header, the model proxy). The fake model gets a script that answers a campus-shaping request with real operations, so the preview can be shown without a model credential. The test image has `pnpm`, so a free course starts. Playwright tests in `pruebas/australis/checkpoint-b/` cover steps 1 to 6 of the checkpoint B story (`aceptacion/`) and its refusals (`ataque/`). Pull request #36 is closed in favour of fixing the image.
 - **M10 Enrolments on every change.** Pull request #34 makes a confirmed import write the enrolments to the core. Finish the rest: suspending, reactivating, re-inviting and adding a guest teacher in Australis reach the core in the same request, and a failure to reach the core is shown, not swallowed. Start from `main` after #34 is merged.
 - **M11 Administrator and owner views.** Finish pull request #33: start by merging `origin/fix/cb-campus`, then fix what its review left open (an owner with no university gets 403 or 404; the Australis backend checks fail). The administrator sees the campuses with modules of the university and their enrolments; the owner sees them for every university.
