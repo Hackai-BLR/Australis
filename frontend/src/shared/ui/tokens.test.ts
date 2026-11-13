@@ -8,6 +8,7 @@ const fs = (await import(/* @vite-ignore */ nodeFs)) as {
 };
 const cwd = (globalThis as unknown as { process: { cwd(): string } }).process.cwd();
 const tokens = fs.readFileSync(`${cwd}/src/shared/ui/tokens.css`, "utf8").toLowerCase();
+const ui = fs.readFileSync(`${cwd}/src/shared/ui/ui.css`, "utf8");
 
 function proto(name: string): string {
   const match = new RegExp(`--${name}:(#[0-9a-fA-F]{6})`).exec(prototype);
@@ -38,5 +39,19 @@ describe("design tokens follow the Campus IA prototype", () => {
 
   it("uses the 56px bar", () => {
     expect(tokens).toContain("--bar-height: 3.5rem");
+  });
+
+  it("loads no font or other resource from an outside host", () => {
+    expect(tokens).not.toMatch(/https?:\/\//);
+    expect(ui).not.toMatch(/https?:\/\//);
+  });
+
+  it("renders the 56px top bar with the brand, navigation and user box", () => {
+    const shell = /\.au-shell\s*\{[^}]*\}/.exec(ui)?.[0] ?? "";
+    expect(shell).toMatch(/grid-template-rows:\s*var\(--bar-height\)/);
+    expect(/\.au-sidebar\s*\{[^}]*\}/.exec(ui)?.[0]).toMatch(/display:\s*contents/);
+    const brand = /\.au-brand,\s*\.au-nav,\s*\.au-user\s*\{[^}]*\}/.exec(ui)?.[0] ?? "";
+    expect(brand).toMatch(/border-bottom:\s*1px solid var\(--color-border\)/);
+    expect(/\.au-main\s*\{[^}]*\}/.exec(ui)?.[0]).toMatch(/grid-column:\s*1\s*\/\s*-1/);
   });
 });

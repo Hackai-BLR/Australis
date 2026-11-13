@@ -398,54 +398,25 @@ a {
   color: var(--color-text-muted);
 }
 
-/* App shell */
+/* App shell: a 56px top bar (brand, navigation, user box) above the page, as in prototipo/campus.html.
+   The sidebar element is flattened so its three children sit in the bar row of the shell grid. */
 .au-shell {
   display: grid;
-  grid-template-columns: var(--sidebar-width) 1fr;
+  grid-template-columns: auto 1fr auto;
+  grid-template-rows: var(--bar-height) 1fr;
   min-height: 100vh;
 }
 .au-sidebar {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-5);
-  padding: var(--space-5) var(--space-4);
-  background: var(--color-surface);
-  border-right: 1px solid var(--color-border);
+  display: contents;
 }
-.au-brand {
-  display: flex;
-  align-items: center;
-  min-height: var(--bar-height);
-  font-size: var(--text-lg);
-  letter-spacing: -0.01em;
-  font-weight: var(--weight-bold);
-  color: var(--color-primary);
-  text-decoration: none;
-}
-.au-nav {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-}
-.au-nav a {
-  padding: var(--space-2) var(--space-3);
-  border-radius: var(--radius-md);
-  color: var(--color-text);
-  text-decoration: none;
-  font-weight: var(--weight-medium);
-}
-.au-nav a:hover {
-  background: var(--color-surface-muted);
-}
-.au-nav a.active {
-  background: var(--color-primary-soft);
-  color: var(--color-primary);
-}
+.au-brand,
+.au-nav,
 .au-user {
-  margin-top: auto;
   display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
+  flex-direction: row;
+  align-items: center;
+  gap: var(--space-3);
+  padding: 0 var(--space-5);
   font-size: var(--text-sm);
 }
 .au-user__name {
@@ -456,6 +427,7 @@ a {
   color: var(--color-danger);
 }
 .au-main {
+  grid-column: 1 / -1;
   padding: var(--space-6);
   min-width: 0;
 }
@@ -471,15 +443,19 @@ a {
 
 @media (max-width: 48rem) {
   .au-shell {
-    grid-template-columns: 1fr;
+    grid-template-columns: 1fr auto;
+    grid-template-rows: var(--bar-height) var(--bar-height) 1fr;
   }
-  .au-sidebar {
-    border-right: 0;
-    border-bottom: 1px solid var(--color-border);
+  .au-brand {
+    padding: 0 var(--space-4);
   }
   .au-nav {
-    flex-direction: row;
-    flex-wrap: wrap;
+    grid-row: 2;
+    grid-column: 1 / -1;
+    padding: 0 var(--space-3);
+  }
+  .au-user {
+    padding: 0 var(--space-3);
   }
   .au-main {
     padding: var(--space-4);
