@@ -412,6 +412,44 @@ a {
 .au-brand,
 .au-nav,
 .au-user {
+  grid-row: 1;
+  align-self: stretch;
+  background: var(--color-surface);
+  border-bottom: 1px solid var(--color-border);
+}
+.au-brand {
+  display: flex;
+  align-items: center;
+  height: var(--bar-height);
+  padding: 0 var(--space-5) 0 var(--space-6);
+  font-size: var(--text-lg);
+  letter-spacing: -0.01em;
+  font-weight: var(--weight-bold);
+  color: var(--color-primary);
+  text-decoration: none;
+}
+.au-nav {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: var(--space-1);
+  overflow-x: auto;
+}
+.au-nav a {
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  color: var(--color-text);
+  text-decoration: none;
+  font-weight: var(--weight-medium);
+}
+.au-nav a:hover {
+  background: var(--color-surface-muted);
+}
+.au-nav a.active {
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+}
+.au-user {
   display: flex;
   flex-direction: row;
   align-items: center;
