@@ -29,7 +29,7 @@ export function MyGradesView({ campusId }: { campusId?: number }) {
       />
     );
   }
-  const { scale } = data;
+  const scaleOf = (course: (typeof courses)[number]) => course.scale ?? data.scale;
   return (
     <div className="au-stack">
       {courses.map((course) => (
@@ -46,7 +46,7 @@ export function MyGradesView({ campusId }: { campusId?: number }) {
             course.final === null ? (
               <Badge>Sin nota final</Badge>
             ) : (
-              <Badge tone={course.final >= scale.pass ? "success" : "danger"}>
+              <Badge tone={course.final >= scaleOf(course).pass ? "success" : "danger"}>
                 Final: {formatScore(course.final)}
               </Badge>
             )
@@ -76,7 +76,7 @@ export function MyGradesView({ campusId }: { campusId?: number }) {
           )}
         </Card>
       ))}
-      {scale.confirmed === false && (
+      {courses.some((course) => scaleOf(course).confirmed === false) && (
         <p className="grades-hint">La escala de notas todavía no fue confirmada por el programa.</p>
       )}
     </div>

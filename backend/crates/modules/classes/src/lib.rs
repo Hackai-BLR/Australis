@@ -22,7 +22,9 @@ use time::{
     OffsetDateTime, PrimitiveDateTime,
 };
 
+mod attendance;
 pub mod recordings;
+mod summary;
 
 const DB_TIME: &[FormatItem<'static>] =
     format_description!("[year]-[month]-[day] [hour]:[minute]:[second]");
@@ -40,6 +42,8 @@ pub fn router() -> Router<AppState> {
         .route("/classes/today", get(today))
         .route("/classes/{cid}", get(get_class).patch(update_class))
         .merge(recordings::router())
+        .merge(attendance::router())
+        .merge(summary::router())
 }
 
 // ---------------------------------------------------------------------------------------

@@ -2,7 +2,9 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
+import { MemoryRouter } from "react-router-dom";
 import { GradeGrid } from "./GradeGrid";
+import { MyGradesView } from "./MyGrades";
 import { moveCell } from "./nav";
 import {
   formatScore,
@@ -226,5 +228,41 @@ describe("itemHasGrades", () => {
     expect(itemHasGrades(entries, 1)).toBe(true);
     expect(itemHasGrades(entries, 2)).toBe(false);
     expect(itemHasGrades(entries, 3)).toBe(false);
+  });
+});
+
+describe("MyGradesView", () => {
+  const course = (campus_id: number, final: number, pass: number, confirmed: boolean) => ({
+    campus_id,
+    campus_name: `Curso ${campus_id}`,
+    final,
+    scale: { min: 0, max: 100, pass, confirmed },
+    items: [],
+  });
+
+  it("judges each course against its own scale and notes an unconfirmed one", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response(
+            JSON.stringify({
+              scale: { min: 1, max: 10, pass: 4, confirmed: true },
+              courses: [course(1, 55, 60, true), course(2, 55, 50, false)],
+            }),
+            { status: 200, headers: { "Content-Type": "application/json" } },
+          ),
+      ),
+    );
+    render(
+      <MemoryRouter>
+        <MyGradesView />
+      </MemoryRouter>,
+    );
+    const badges = await screen.findAllByText("Final: 55");
+    expect(badges).toHaveLength(2);
+    // 55 fails a pass mark of 60 and passes one of 50: the two courses differ.
+    expect(badges[0].className).not.toEqual(badges[1].className);
+    expect(screen.getByText(/todavía no fue confirmada/)).toBeTruthy();
   });
 });

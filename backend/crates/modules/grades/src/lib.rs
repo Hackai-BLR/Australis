@@ -22,6 +22,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use sqlx::SqliteConnection;
 
+mod submission;
+
 pub fn router() -> Router<AppState> {
     Router::new()
         .route("/campuses/{id}/gradebook", get(gradebook))
@@ -31,6 +33,7 @@ pub fn router() -> Router<AppState> {
         .route("/gradebook/items/{iid}", patch(update_item))
         .route("/gradebook/items/{iid}/archive", post(archive_item))
         .route("/grades/mine", get(mine))
+        .merge(submission::router())
 }
 
 #[derive(Debug, Clone, Serialize, sqlx::FromRow)]
@@ -143,8 +146,8 @@ async fn gradebook(
 ) -> AppResult<Json<Value>> {
     let mut conn = state.db.acquire().await?;
     require_campus(&mut conn, &user, campus_id, Access::Teach).await?;
-    let scale = settings::grading_scale(&mut conn).await?;
-    let rule = settings::final_rule(&mut conn).await?;
+    let scale = settings::grading_scale(&mut conn, campus_id).await?;
+    let rule = settings::final_rule(&mut conn, campus_id).await?;
     let items = items_of(&mut conn, campus_id).await?;
     let students: Vec<StudentRow> = directory::list_members(&mut conn, campus_id)
         .await?
@@ -411,7 +414,7 @@ async fn put_entries(
     let reason = clean_reason(&body.reason);
     let mut tx = begin_write(&state.db).await?;
     require_campus(&mut tx, &user, campus_id, Access::Teach).await?;
-    let scale: GradingScale = settings::grading_scale(&mut tx).await?;
+    let scale: GradingScale = settings::grading_scale(&mut tx, campus_id).await?;
 
     let items: HashMap<i64, Item> = items_of(&mut tx, campus_id)
         .await?
@@ -564,14 +567,17 @@ struct MineRow {
 
 async fn mine(State(state): State<AppState>, user: CurrentUser) -> AppResult<Json<Value>> {
     let mut conn = state.db.acquire().await?;
-    let scale = settings::grading_scale(&mut conn).await?;
-    let rule = settings::final_rule(&mut conn).await?;
+    // The scale of each course is its own (a campus may override it); the top-level one is
+    // the program default, for a screen that has no course.
+    let default_scale: GradingScale = settings::get(&mut conn, settings::GRADING_SCALE).await?;
     let campuses = directory::campuses_for_user(&mut conn, &user).await?;
     let mut courses = Vec::new();
     for campus in campuses
         .into_iter()
         .filter(|c| c.member_role == Some(MemberRole::Student))
     {
+        let scale = settings::grading_scale(&mut conn, campus.id).await?;
+        let rule = settings::final_rule(&mut conn, campus.id).await?;
         let rows = sqlx::query_as::<_, MineRow>(
             "SELECT i.id AS item_id, i.title, i.weight, e.score
              FROM grades_items i
@@ -591,10 +597,11 @@ async fn mine(State(state): State<AppState>, user: CurrentUser) -> AppResult<Jso
             "campus_id": campus.id,
             "campus_name": campus.name,
             "final": compute_final(&rule.kind, &scored)?,
+            "scale": scale,
             "items": rows.iter().map(|r| json!({
                 "item_id": r.item_id, "title": r.title, "weight": r.weight, "score": r.score,
             })).collect::<Vec<_>>(),
         }));
     }
-    Ok(Json(json!({ "scale": scale, "courses": courses })))
+    Ok(Json(json!({ "scale": default_scale, "courses": courses })))
 }

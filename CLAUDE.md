@@ -68,7 +68,8 @@ docker-compose.dev.yml       dev: cargo watch + Vite dev server, hot reload via 
 - Each module owns its tables. Prefix table names with the module name.
 - **Kernel tables** (`core_` prefix: users, sessions, invites, campuses, members, audit log, settings, AI usage, AI quota) belong to `australis-core`. Modules reach them only through `australis_core` functions, never with their own SQL. A module table may have foreign keys only to `core_` tables; a reference to another module's row is a plain integer. One exception: a module migration may seed its own default settings with `INSERT OR IGNORE INTO core_settings`.
 - Kernel database functions take `&mut SqliteConnection`; outside a transaction they take the write lock up front (`BEGIN IMMEDIATE`), inside one they join it. `app()` rewrites every non-JSON 4xx/5xx body (axum rejections, 405, 413) to `{"error": ...}`, so handlers can use plain `axum::Json`/`Path`/`Multipart`.
-- The modules `auth`, `campus`, `roster`, `grades`, `classes` and `slides` already exist as skeletons: registered in the workspace, the server crate and `app()`, with their full `[dependencies]`. A feature package only fills in `src/`.
+- The modules `auth`, `campus`, `roster`, `grades`, `classes`, `slides`, `admin` and `support` already exist as skeletons: registered in the workspace, the server crate and `app()`, with their full `[dependencies]`. A feature package only fills in `src/`.
+- **Seams (phase 2).** A feature that shares a crate with another owns one folder with an empty `router()` already merged into the crate router: `classes/attendance`, `classes/summary`, `grades/submission`, `campus/settings`, `slides/notes` (backend `src/<seam>/mod.rs`, frontend `<seam>/`). The page that will show it already mounts a placeholder from that folder (`*Slot.tsx`, `SettingsTab.tsx`); replace its body, keep its props. Phase 3 and 4 kickoffs add their own seams the same way.
 - **Frozen shared files.** After the kernel and frontend-shell packages, these change only when a package truly cannot finish otherwise (smallest change, reported as a deviation): `backend/Cargo.toml`, `Cargo.lock`, every crate's `Cargo.toml`, `crates/server/src/**`, `crates/core/**`, `tests/common/**`, `frontend/package.json` and its lockfile, `frontend/src/app/**`, `frontend/src/shared/**`, `nginx.conf`, the compose files and CI. Feature packages add no dependencies.
 - **Migration ranges.** core 0001-0049, auth 0050-0099, campus 0100-0149, campus AI shaping 0150-0199, roster 0200-0299, grades 0300-0399, classes 0400-0449, recordings 0450-0499, slides 0500-0599. sqlx applies a lower-numbered file added after a higher one (`tests/migrations.rs` proves it), so branches cannot collide. Never edit a migration that is already on the branch you started from: sqlx refuses to start when a checksum changes. Add a new file instead.
 - **After the first build** each feature `F<NN>` in `docs/plan.md` has its own migration range, `0600 + (NN - 10) * 10` and the nine numbers after it. Only a phase kickoff (`phase/<N>`) edits the frozen shared files.
@@ -77,15 +78,15 @@ docker-compose.dev.yml       dev: cargo watch + Vite dev server, hot reload via 
   2. Add it to `[workspace.dependencies]` and to `crates/server/Cargo.toml`.
   3. Merge its `router()` in `app()` in `crates/server/src/lib.rs`.
 - Routes use axum 0.8 syntax `/{id}` (`/:id` panics at startup). Errors are `AppError`, sent as `{"error": "<message>"}`.
-- Frontend modules import other modules only through their `index.ts` (enforced by ESLint `no-restricted-imports`).
+- Frontend modules import other modules only through their `index.ts` (enforced by ESLint `no-restricted-imports`). A module's `index.ts` may also export `globalWidgets` (a `GlobalWidget[]`, see `shared/routing.ts`): the app shell shows them on every signed-in page (`support` uses it for the "report a problem" button).
 - Backend and frontend modules share names (e.g. `health` ↔ `health`).
 
 ## Kernel (`australis-core`)
 - `auth`: Argon2id passwords, `sign_in`, sessions, the `CurrentUser` extractor (401 without a valid `australis_session` cookie), `Role`.
 - `access`: `require_role`, and `require_campus(conn, &user, campus_id, Access::Manage | Teach | View)`. Manage: the secretary, or a professor member. Teach: Manage plus a guest member. View: Teach plus an active student member. Suspended means no access.
-- `directory`: users, campuses, members (add, suspend, reactivate; never delete), invites (only for an account with no password).
+- `directory`: users, campuses, members (add, suspend, reactivate; never delete), invites (only for an account with no password). For the secretary's lists: `list_campus_summaries` (every campus with member counts) and `list_memberships_of_user`; both scope a university administrator to their own university.
 - `audit`: call `audit::record(&mut tx, ...)` in the same transaction as the change. The table is append-only.
-- `settings`: grading scale, final-grade rule, AI quota, UTC offset. Never constants. The seeded grading rules are unconfirmed guesses (`"confirmed": false`); the screens must say so.
+- `settings`: grading scale, final-grade rule, attendance rule, AI quotas, UTC offset. Never constants. The seeded grading and attendance rules are unconfirmed guesses (`"confirmed": false`); the screens must say so. A campus may override the scale, the final rule and the attendance rule (scope `campus:<id>`): read them with `settings::grading_scale(conn, campus_id)`, `final_rule`, `attendance_rule` or `get_for_campus`, which fall back to the global value; write with `set_for_campus` / `clear_for_campus`, which validate the value and audit the change in the same transaction.
 - `ai`: modules call the AI through `ai::run(...)`. It reserves the per-user daily quota (fails closed, 429), calls the provider and writes the usage log. A provider cannot be called without a quota reservation.
 - `files` (`FileStore` under `UPLOAD_DIR`), `live` (`LiveHub` pub/sub), `http::upload_body_limit()` (layer for upload routes).
 - Database functions take `&mut SqliteConnection`: pass `&mut conn` from `state.db.acquire()`, or `&mut tx` from `australis_core::begin_write(&state.db)` for a transaction that writes.
@@ -96,7 +97,7 @@ Nothing in this build calls an outside service. Each provider is a trait in core
 | Trait | Placeholder | What it returns |
 |---|---|---|
 | `AiProvider` (`state.ai`) | `PlaceholderAi` | Scripted replies from `crates/core/scripts/*.json`, matched by keyword; a fixed reply for anything else |
-| `ZoomProvider` (`state.zoom`) | `PlaceholderZoom` | A made-up meeting whose links point at the app, and a sample recording with the transcript in `crates/core/samples/` |
+| `ZoomProvider` (`state.zoom`) | `PlaceholderZoom` | A made-up meeting whose links point at the app, and a sample recording with the transcript in `crates/core/samples/`, and `fetch_participants(meeting_id, invitees)`: a made-up list built from the campus members the caller passes (a real provider ignores them) |
 | `SlideConverter` (`state.slides`) | `NoConverter` | "Not configured": upload a PDF instead of a `.pptx` |
 
 `ZOOM_PROVIDER` accepts only `placeholder`. `AI_PROVIDER` is `placeholder` (default) or `proxy`: `ProxyAi` calls the Campus IA core's model proxy (`AI_PROXY_URL`, `AI_API_KEY` = a `cmt_` token that only works there, `AI_MODEL`), the core counts the tokens against the professor's monthly quota, and the "Simulado" badge disappears only then. The other keys in `.env.example` are reserved for real providers.
