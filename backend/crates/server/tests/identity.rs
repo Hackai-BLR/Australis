@@ -781,3 +781,46 @@ async fn an_administrator_cannot_see_or_act_on_the_owner_of_the_same_university(
         .unwrap();
     assert_eq!(user.status, UserStatus::Active);
 }
+
+#[tokio::test]
+async fn a_guest_teacher_can_be_added_in_header_mode() {
+    let app = header_app().await;
+    let owner = sign(&claims("owner@demo.test", "Dueña", "profesor", false));
+    let colleague = sign(&claims("colega@demo.test", "Colega", "profesor", false));
+    let created = call(
+        &app,
+        Method::POST,
+        "/api/campuses",
+        Some(&owner),
+        None,
+        Some(json!({ "name": "Campus", "template_key": "weekly_topics" })),
+    )
+    .await;
+    assert_eq!(created.status, StatusCode::CREATED, "{}", created.json());
+    let campus = created.json()["id"].as_i64().unwrap();
+    let url = format!("/api/campuses/{campus}/teachers");
+
+    let unknown = call(
+        &app,
+        Method::POST,
+        &url,
+        Some(&owner),
+        None,
+        Some(json!({ "email": "colega@demo.test" })),
+    )
+    .await;
+    assert_eq!(unknown.status, StatusCode::NOT_FOUND);
+
+    assert_eq!(me(&app, Some(&colleague)).await.status, StatusCode::OK);
+    let added = call(
+        &app,
+        Method::POST,
+        &url,
+        Some(&owner),
+        None,
+        Some(json!({ "email": "colega@demo.test" })),
+    )
+    .await;
+    assert_eq!(added.status, StatusCode::CREATED, "{}", added.json());
+    assert_eq!(added.json()["role"], "guest");
+}
