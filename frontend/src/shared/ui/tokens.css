@@ -1,5 +1,7 @@
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap");
+
 /*
- * Design tokens. Calm, readable and accessible: body text on surfaces meets WCAG AA (4.5:1) or
+ * Design tokens. Palette, type and bar taken from prototipo/campus.html (Campus IA). Calm, readable and accessible: body text on surfaces meets WCAG AA (4.5:1) or
  * better, and every interactive colour meets 3:1 against its background. Change values here,
  * never in components.
  */
@@ -8,28 +10,28 @@
   --color-bg: #f6f7f9;
   --color-surface: #ffffff;
   --color-surface-muted: #eef1f5;
-  --color-border: #d5dbe3;
+  --color-border: #e4e6eb;
   --color-border-strong: #9aa5b4;
-  --color-text: #1c2430; /* 15.2:1 on surface */
-  --color-text-muted: #4a5566; /* 7.4:1 on surface */
+  --color-text: #16181f; /* 17:1 on surface */
+  --color-text-muted: #5e6270; /* 6:1 on surface */
   --color-text-inverse: #ffffff;
 
-  /* Brand: a deep southern-sky blue */
-  --color-primary: #1f4e8c; /* 8.2:1 with white text */
-  --color-primary-hover: #183e70;
-  --color-primary-soft: #e3ecf8;
-  --color-focus: #2f6fd0;
+  /* Brand: the Campus IA blue */
+  --color-primary: #001d9c; /* 14:1 with white text */
+  --color-primary-hover: #00177d;
+  --color-primary-soft: #eef2fd;
+  --color-focus: #1e4fd6;
 
   /* Status (text colours meet 4.5:1 on their soft backgrounds) */
-  --color-success: #1d6b3a;
-  --color-success-soft: #e2f3e8;
-  --color-warning: #7a4a00;
-  --color-warning-soft: #fdf1d8;
-  --color-danger: #a4262c;
-  --color-danger-hover: #861f24;
+  --color-success: #1f7a4d;
+  --color-success-soft: #e6f4ec;
+  --color-warning: #8f5400;
+  --color-warning-soft: #fff4e0;
+  --color-danger: #b3261e;
+  --color-danger-hover: #8f1e18;
   --color-danger-soft: #fbe5e6;
-  --color-info: #1f4e8c;
-  --color-info-soft: #e3ecf8;
+  --color-info: #001d9c;
+  --color-info-soft: #eef2fd;
   /* Placeholder ("Simulado") data: violet, distinct from every status colour */
   --color-simulated: #5b2a86;
   --color-simulated-soft: #f0e7f8;
@@ -45,7 +47,8 @@
 
   /* Type */
   --font-sans:
-    system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif;
+    Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans",
+    sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   --text-xs: 0.75rem;
   --text-sm: 0.875rem;
@@ -60,7 +63,7 @@
 
   /* Shape and depth */
   --radius-sm: 4px;
-  --radius-md: 8px;
+  --radius-md: 9px;
   --radius-lg: 12px;
   --shadow-sm: 0 1px 2px rgb(16 24 40 / 0.06);
   --shadow-md: 0 4px 12px rgb(16 24 40 / 0.1);
@@ -70,6 +73,7 @@
   --sidebar-width: 15rem;
   --content-max: 72rem;
   --control-height: 2.5rem;
+  --bar-height: 3.5rem;
 }
 
 @media (prefers-reduced-motion: reduce) {

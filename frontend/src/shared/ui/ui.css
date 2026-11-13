@@ -221,7 +221,7 @@ a {
 .au-tab {
   padding: var(--space-2) var(--space-4);
   border: 0;
-  border-bottom: 3px solid transparent;
+  border-bottom: 2px solid transparent;
   background: none;
   color: var(--color-text-muted);
   font: inherit;
@@ -235,8 +235,8 @@ a {
 }
 .au-tab[aria-selected="true"],
 .au-tab.active {
-  color: var(--color-primary);
-  border-bottom-color: var(--color-primary);
+  color: var(--color-text);
+  border-bottom-color: var(--color-text);
 }
 .au-tabpanel {
   padding-top: var(--space-5);
@@ -413,7 +413,11 @@ a {
   border-right: 1px solid var(--color-border);
 }
 .au-brand {
-  font-size: var(--text-xl);
+  display: flex;
+  align-items: center;
+  min-height: var(--bar-height);
+  font-size: var(--text-lg);
+  letter-spacing: -0.01em;
   font-weight: var(--weight-bold);
   color: var(--color-primary);
   text-decoration: none;
