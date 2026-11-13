@@ -1,6 +1,6 @@
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use base64::Engine;
-use ed25519_dalek::{Signer, SigningKey};
+use ed25519_dalek::{Signature, Signer, SigningKey};
 use rand::RngCore;
 use serde_json::json;
 use sqlx::sqlite::SqlitePool;
@@ -18,6 +18,8 @@ pub struct Persona<'a> {
 }
 
 pub const CURSO_AUSTRALIS: &str = "australis";
+const TOLERANCIA_FUTURO_SEG: i64 = 30;
+const VIGENCIA_MAXIMA_SEG: i64 = 120;
 
 pub struct PersonaAustralis<'a> {
     pub usuario: i64,
@@ -110,6 +112,24 @@ impl Identidad {
         )
     }
 
+    pub fn verificar_australis(&self, valor: &str, ahora: i64) -> Option<String> {
+        let (carga, firma) = valor.split_once('.')?;
+        let firma = Signature::from_slice(&URL_SAFE_NO_PAD.decode(firma).ok()?).ok()?;
+        self.clave.verifying_key().verify_strict(carga.as_bytes(), &firma).ok()?;
+        let c: serde_json::Value = serde_json::from_slice(&URL_SAFE_NO_PAD.decode(carga).ok()?).ok()?;
+        let emitido = c["emitido"].as_i64()?;
+        let vence = c["vence"].as_i64()?;
+        if c["v"].as_i64()? != 1
+            || c["curso"].as_str()? != CURSO_AUSTRALIS
+            || vence <= ahora
+            || emitido > ahora + TOLERANCIA_FUTURO_SEG
+            || vence - emitido > VIGENCIA_MAXIMA_SEG
+        {
+            return None;
+        }
+        Some(c["email"].as_str()?.to_string())
+    }
+
     fn firmar_carga(&self, mut carga: serde_json::Value, vigencia: i64) -> String {
         let emitido = chrono::Utc::now().timestamp();
         carga["emitido"] = json!(emitido);
@@ -117,5 +137,38 @@ impl Identidad {
         let c = URL_SAFE_NO_PAD.encode(carga.to_string().as_bytes());
         let firma = self.clave.sign(c.as_bytes());
         format!("{c}.{}", URL_SAFE_NO_PAD.encode(firma.to_bytes()))
+    }
+}
+
+#[cfg(test)]
+mod pruebas {
+    use super::*;
+
+    fn identidad() -> Identidad {
+        Identidad { clave: SigningKey::from_bytes(&[7u8; 32]) }
+    }
+
+    fn persona() -> PersonaAustralis<'static> {
+        PersonaAustralis { usuario: 1, email: "a@b.test", nombre: "N", rol: "profesor", universidad: Some(1), administrador: false }
+    }
+
+    #[test]
+    fn verifica_la_propia_firma_dentro_de_la_vigencia() {
+        let i = identidad();
+        let v = i.firmar_australis(&persona(), 60);
+        let ahora = chrono::Utc::now().timestamp();
+        assert_eq!(i.verificar_australis(&v, ahora).as_deref(), Some("a@b.test"));
+        assert_eq!(i.verificar_australis(&v, ahora + 61), None);
+        assert_eq!(i.verificar_australis(&v, ahora - 31), None);
+        assert!(i.verificar_australis(&v, ahora - 29).is_some());
+    }
+
+    #[test]
+    fn rechaza_vigencia_excesiva_y_otro_destino() {
+        let i = identidad();
+        let ahora = chrono::Utc::now().timestamp();
+        assert_eq!(i.verificar_australis(&i.firmar_australis(&persona(), 121), ahora), None);
+        let curso = i.firmar(&Persona { curso: "x", usuario: 1, email: "a@b.test", nombre: "N", rol: "profesor" }, 60);
+        assert_eq!(i.verificar_australis(&curso, ahora), None);
     }
 }
