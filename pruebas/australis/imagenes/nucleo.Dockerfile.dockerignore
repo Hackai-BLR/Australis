@@ -7,4 +7,4 @@
 **/target
 **/dist
 **/*.tgz
-!pruebas/australis/imagenes/fijar-sdk.mjs
+!pruebas/australis/imagenes/verificar-sdk.mjs
