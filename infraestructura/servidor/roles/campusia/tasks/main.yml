@@ -37,6 +37,54 @@
     quiet: true
   no_log: true
 
+- name: Leer si existe la base del núcleo
+  ansible.builtin.stat:
+    path: "{{ servidor_raiz }}/datos/campusia.db"
+  register: campusia_base_nucleo
+
+- name: Leer la clave de identidad guardada en la base del núcleo
+  ansible.builtin.command:
+    argv:
+      - sqlite3
+      - -readonly
+      - "{{ servidor_raiz }}/datos/campusia.db"
+      - SELECT valor FROM configuracion WHERE clave = 'identidad_clave_privada'
+  register: campusia_identidad_guardada
+  changed_when: false
+  check_mode: false
+  when: campusia_base_nucleo.stat.exists
+  no_log: true
+
+- name: Verificar que el Vault no cambia la clave de identidad del núcleo
+  ansible.builtin.assert:
+    that:
+      - not campusia_base_nucleo.stat.exists
+        or (campusia_identidad_guardada.stdout | trim) in ['', vault_identidad_clave_privada]
+    fail_msg: >-
+      la base del núcleo ya tiene otra clave de identidad (tabla configuracion, clave identidad_clave_privada):
+      copiala al Vault como vault_identidad_clave_privada para no invalidar las identidades firmadas
+    quiet: true
+
+- name: Calcular la clave pública de la identidad del núcleo
+  ansible.builtin.command:
+    argv:
+      - "{{ ansible_playbook_python }}"
+      - -c
+      - >-
+        import base64, sys;
+        from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey;
+        from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat;
+        s = sys.stdin.read().strip();
+        k = Ed25519PrivateKey.from_private_bytes(base64.urlsafe_b64decode(s + '=' * (-len(s) % 4)));
+        print(base64.urlsafe_b64encode(k.public_key().public_bytes(Encoding.Raw, PublicFormat.Raw)).decode().rstrip('='))
+    stdin: "{{ vault_identidad_clave_privada }}"
+  delegate_to: localhost
+  become: false
+  register: campusia_identidad_publica
+  changed_when: false
+  check_mode: false
+  no_log: true
+
 - name: Verificar que existe el ejemplo de australis.env
   ansible.builtin.assert:
     that:
@@ -50,7 +98,8 @@
       {{ lookup('ansible.builtin.file', campusia_australis_env_ejemplo).splitlines()
       | map('trim') | select('match', '^[A-Za-z_][A-Za-z0-9_]*=')
       | map('split', '=', 1) | community.general.dict
-      | combine(campusia_australis_env_extra) }}
+      | combine(campusia_australis_env_extra)
+      | combine({'IDENTITY_PUBLIC_KEY': campusia_identidad_publica.stdout | trim}) }}
 
 - name: Verificar las variables de australis.env
   ansible.builtin.assert:
@@ -59,7 +108,10 @@
       - campusia_australis_env_valores.values() | map('string') | select('search', '\n') | list | length == 0
       - campusia_australis_env_valores.keys() | reject('match', '^[A-Za-z_][A-Za-z0-9_]*$') | list | length == 0
       - campusia_australis_env_valores.keys() | select('in', ['DATABASE_URL', 'BIND_ADDR', 'UPLOAD_DIR']) | list | length == 0
-    fail_msg: australis.env quedaría con valores sin completar o inválidos, o fija DATABASE_URL, BIND_ADDR o UPLOAD_DIR (los fija la unidad)
+      - campusia_australis_env_valores['IDENTITY_PUBLIC_KEY'] is match('^[A-Za-z0-9_-]{43}$')
+    fail_msg: >-
+      australis.env quedaría con valores sin completar o inválidos, fija DATABASE_URL, BIND_ADDR o UPLOAD_DIR (los fija la unidad)
+      o no tiene IDENTITY_PUBLIC_KEY
     quiet: true
 
 - name: Armar las variables del despliegue continuo

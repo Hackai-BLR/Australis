@@ -147,3 +147,69 @@ def test_el_despliegue_continuo_construye_prueba_y_comprueba_australis():
         "/api/health",
     ):
         assert pieza in texto, f"desplegar.sh no tiene: {pieza}"
+
+
+def sitio_local_de_australis():
+    texto = (DESPLIEGUE / "Caddyfile").read_text()
+    bloque = re.search(r"(?ms)^:8091 \{\n(.*?)^\}", texto)
+    assert bloque, "falta el sitio :8091 de Australis en despliegue/Caddyfile"
+    return bloque.group(1)
+
+
+@pytest.mark.aceptacion
+def test_el_nucleo_reenvia_australis_al_sitio_que_sirve_la_interfaz_y_la_api():
+    nucleo = leer_entorno(DESPLIEGUE / "campusia.env.ejemplo")
+    assert nucleo["AUSTRALIS_URL"] == "http://127.0.0.1:8091"
+    cuerpo = sitio_local_de_australis()
+    assert re.search(r"(?ms)handle /api/\* \{\s*reverse_proxy 127\.0\.0\.1:8090\s*\}", cuerpo)
+    assert "root * /srv/campusia/australis/frontend" in cuerpo
+    assert "try_files {path} /index.html" in cuerpo
+
+
+@pytest.mark.ataque
+def test_el_sitio_de_australis_solo_escucha_en_la_interfaz_local():
+    assert re.search(r"(?m)^\s*bind 127\.0\.0\.1$", sitio_local_de_australis())
+
+
+@pytest.mark.aceptacion
+def test_australis_en_produccion_confia_solo_en_la_identidad_del_nucleo():
+    ejemplo = leer_entorno(DESPLIEGUE / "australis.env.ejemplo")
+    assert ejemplo["AUTH_MODE"] == "header"
+    assert ejemplo["APP_BASE_URL"] == "https://campus.campusia.tech"
+    assert "IDENTITY_PUBLIC_KEY" not in ejemplo
+
+
+@pytest.mark.aceptacion
+def test_la_clave_de_identidad_sale_del_vault_y_ansible_deriva_la_publica():
+    defaults = yaml.safe_load((SERVIDOR / "roles" / "campusia" / "defaults" / "main.yml").read_text())
+    assert defaults["campusia_secretos"]["IDENTIDAD_CLAVE_PRIVADA"] == "vault_identidad_clave_privada"
+    assert leer_entorno(DESPLIEGUE / "campusia.env.ejemplo")["IDENTIDAD_CLAVE_PRIVADA"] == "completar"
+    tareas = tareas_del_rol()
+    nombres = [t.get("name") for t in tareas]
+    assert nombres.index("Calcular la clave pública de la identidad del núcleo") < nombres.index(
+        "Armar las variables de australis.env"
+    )
+    armar = [t for t in tareas if t.get("name") == "Armar las variables de australis.env"][0]
+    assert "IDENTITY_PUBLIC_KEY" in armar["ansible.builtin.set_fact"]["campusia_australis_env_valores"]
+
+
+@pytest.mark.aceptacion
+def test_la_clave_publica_derivada_es_la_de_ed25519():
+    pytest.importorskip("cryptography")
+    import subprocess
+    import sys
+
+    tarea = [t for t in tareas_del_rol() if t.get("name") == "Calcular la clave pública de la identidad del núcleo"][0]
+    argv = tarea["ansible.builtin.command"]["argv"]
+    r = subprocess.run(
+        [sys.executable, *argv[1:]], input="A" * 43, capture_output=True, text=True, check=True
+    )
+    assert r.stdout.strip() == "O2onvM62pC1io6jQKm8Nc2UyFXcd4kOmOsBIoYtZ2ik"
+
+
+@pytest.mark.ataque
+def test_ansible_no_reemplaza_una_clave_de_identidad_ya_guardada():
+    nombres = [t.get("name") for t in tareas_del_rol()]
+    assert nombres.index("Verificar que el Vault no cambia la clave de identidad del núcleo") < nombres.index(
+        "Generar campusia.env"
+    )

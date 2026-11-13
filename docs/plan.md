@@ -36,9 +36,9 @@ A phase is open when its kickoff branch is published. The kickoff does the work 
 
 | Phase | Name | Depends on | Status |
 |---|---|---|---|
-| 0 | Join Australis and Campus IA | First build, the CampusAi merge | M9 to M12 merged (2026-11-13). Round 3 open: M13 and M14. Then checkpoint B again, then M6 |
+| 0 | Join Australis and Campus IA | First build, the CampusAi merge | Code done: M1 to M5 and M7 to M14 merged, checkpoint B tagged `checkpoint-b` (2026-11-13). Only M6 is left (a person, see "M6 runbook") |
 | 1 | Test and stabilise the first build | First build | Done. Checkpoint A passed and is tagged `checkpoint-a` (2026-11-13) |
-| 2 | Records and staff basics | Phase 1 | Open. Kickoff `phase/2` published (2026-11-13) |
+| 2 | Records and staff basics | Phase 1 | Done. Checkpoint C passed and is tagged `checkpoint-c` (2026-11-13) |
 | 3 | Follow-up and closing | Phase 2 | Not open |
 | 4 | Student extras | Phase 3 | Not open |
 | 5 | Integrations and polish | Phase 4 | Not open |
@@ -231,6 +231,24 @@ There is no kickoff. The tasks own different folders, except where a dependency 
 - **M4 Real AI.** An `AiProvider` that calls the core's model proxy with a token that only works there, so no model credential enters Australis. Usage counts against the professor's token quota in the core; the Australis daily quota stays as a second limit. The "Simulado" badge disappears only when this provider is the one configured.
 - **M5 One design.** The Australis design tokens take the palette, type and bar of `prototipo/campus.html`, so moving between the two does not look like changing product.
 - **M6 Switch production.** Point the server's deploy at this repository (deploy key, webhook, `despliegue_origen` in Ansible). After this, every merge to `main` is live within 5 minutes, so it comes last and only when M1 and M7 are merged.
+
+### M6 runbook
+
+What `main` already prepares for production (2026-11-13):
+
+- **Traffic.** Caddy serves `campus.campusia.tech` through the core, which checks the session and forwards to `AUSTRALIS_URL=http://127.0.0.1:8091`. That is a local Caddy site (`despliegue/Caddyfile`) that serves `/srv/campusia/australis/frontend` and passes `/api/*` to `australis-server` on `127.0.0.1:8090`. `australis-server` alone answers only `/api`, so the core must never point at 8090. `instalar.sh` leaves `/srv/campusia/australis` at `0751` so Caddy can reach the frontend; `datos/` and `archivos/` stay closed.
+- **Sign-in.** `australis.env` has `AUTH_MODE=header`. The core's identity key is `IDENTIDAD_CLAVE_PRIVADA` from the Vault (`vault_identidad_clave_privada`), and Ansible derives `IDENTITY_PUBLIC_KEY` from it for `australis.env`.
+- **AI stays simulated** (`AI_PROVIDER=placeholder`, "Simulado" badge). The core's model proxy listens only on the gateway of the spaces Docker network, which Docker assigns on the server.
+
+Steps, by the person with the credentials:
+
+1. Copy the identity key the core already uses into the Vault, so that course containers and sessions keep working: `sqlite3 -readonly /srv/campusia/datos/campusia.db "SELECT valor FROM configuracion WHERE clave = 'identidad_clave_privada'"`, then `ansible-vault edit` and set `vault_identidad_clave_privada` to that value. With no row (a new server), generate one: `openssl rand 32 | basenc --base64url | tr -d '='`. The role refuses a Vault key that differs from the stored one.
+2. Set `despliegue_origen` in `servidor/inventario.yml` to this repository, add the deploy key and the webhook on GitHub (`infraestructura/README.md`).
+3. Run the playbook. It renders `campusia.env` (with `AUSTRALIS_URL` and the identity key) and `australis.env` (with the public key), and installs the Caddyfile.
+4. Check: `curl -s http://127.0.0.1:8090/api/health` and `curl -sI http://127.0.0.1:8091/` on the server, then sign in at `campusia.tech` and open `campus.campusia.tech`.
+5. Repeat steps 1, 2 and 6 of the checkpoint B story on `campusia.tech`.
+
+Real AI later: on the server read the gateway with `docker network inspect campusia-espacios -f '{{(index .IPAM.Config 0).Gateway}}'`, generate a `cmt_` token (`echo "cmt_$(openssl rand 32 | basenc --base64url | tr -d '=')"`), set it as `AUSTRALIS_TOKEN_MODELO` for the core and as `AI_API_KEY` for Australis (both secrets), and set `AI_PROVIDER=proxy` and `AI_PROXY_URL=http://<gateway>:8082` in `campusia_australis_env_extra`.
 - **M7 CI.** GitHub jobs for `nucleo` (cargo test), `interfaz`, `sdk` and `plantilla-curso` (pnpm build and test), and a check that no secret is committed (`pruebas/tramo-infraestructura/test_secretos.py`).
 - **M13 The administrator is secretary of their own university.** Today the core signs a university administrator as a student for Australis, because Australis does not know universities and a secretary there can act on every campus (`contratos/identidad-australis.md`). That breaks the agreed decision that the administrator is the secretary. Fix both sides: the identity payload carries the person's university and whether they administer it; a campus in Australis records the university it belongs to (set when it is created through the core); and access gives an administrator the secretary's rights only on campuses of that university, while the owner keeps them everywhere. Secretary-only screens that list across campuses show an administrator only their university. Update the contract, and turn the two expected-failure tests in `pruebas/australis/checkpoint-b/` for steps 5 and 6 into normal tests. Add attack tests: an administrator of one university is refused on another university's campus, through the screens and the API.
 - **M14 The course template installs with the SDK it was locked to.** The integrity hash for `vendor/campusia-sdk-0.3.0.tgz` in `plantilla-curso/pnpm-lock.yaml` does not match the SDK that is packed at build time, and `plantilla-curso/Containerfile` installs with `--frozen-lockfile`. The checkpoint B test image rewrites the hash to get past this (`pruebas/australis/imagenes/fijar-sdk.mjs`), and the CI job installs with `--no-frozen-lockfile`, so nothing shows whether a free course can be built from a fresh checkout. Find out first, in a local container built the way `despliegue/continuo/desplegar.sh` builds it, whether a free course starts today. Then make it hold: the packed SDK is the same bytes every time or the lock is regenerated when the SDK changes, CI installs the template with `--frozen-lockfile`, the test image stops rewriting the hash, and the expected-failure test about the lockfile becomes a normal test.

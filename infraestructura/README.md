@@ -61,6 +61,7 @@ Para cambiar un valor después: `ansible-vault edit --vault-password-file ~/.con
 | `vault_secreto_sesion` | `SESSION_SECRET` (32 caracteres o más) |
 | `vault_secreto_firma` | `SECRETO_FIRMA` |
 | `vault_secreto_webhook` | `SECRETO_WEBHOOK` (el mismo secreto que se carga en el webhook de GitHub) |
+| `vault_identidad_clave_privada` | `IDENTIDAD_CLAVE_PRIVADA` (semilla Ed25519 de 32 bytes en base64url sin relleno). Si la base del núcleo ya guarda una, tiene que ser esa: el rol se niega a cambiarla. De ella sale `IDENTITY_PUBLIC_KEY` en `australis.env` |
 | `vault_origen_clave` (opcional) | no va a `campusia.env`: se escribe en `/etc/caddy/certs/origen.key` si no existe |
 | `vault_origen_certificado` (opcional) | no va a `campusia.env`: se escribe en `/etc/caddy/certs/origen.pem` si no existe |
 

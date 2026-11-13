@@ -31,3 +31,15 @@ campusia.tech, *.campusia.tech {
 		}
 	}
 }
+
+:8091 {
+	bind 127.0.0.1
+	handle /api/* {
+		reverse_proxy 127.0.0.1:8090
+	}
+	handle {
+		root * /srv/campusia/australis/frontend
+		try_files {path} /index.html
+		file_server
+	}
+}
