@@ -29,7 +29,7 @@ pub fn router() -> Router<AppState> {
 struct Submission {
     campus_id: i64,
     status: String,
-    /// The secretary's note from the last return, kept until the next send.
+    /// The secretary's note from the last return, cleared by the next send.
     note: Option<String>,
     updated_at: Option<String>,
     updated_by: Option<i64>,
@@ -68,12 +68,8 @@ async fn change(
     note: Option<&str>,
     action: &str,
 ) -> AppResult<Submission> {
-    // A send keeps the last return note so the teacher still sees what was asked.
-    let kept = if action == "send" {
-        before.note.as_deref()
-    } else {
-        note
-    };
+    // A return stores its note; a send clears the previous one, as the migration says.
+    let kept = if action == "return" { note } else { None };
     sqlx::query(
         "INSERT INTO grades_submissions (campus_id, status, note, updated_at, updated_by)
          VALUES (?1, ?2, ?3, datetime('now'), ?4)
@@ -97,7 +93,11 @@ async fn change(
             action,
             before: Some(json!({ "status": before.status })),
             after: Some(json!({ "status": status })),
-            reason: if action == "return" { note } else { None },
+            reason: match action {
+                "return" => note,
+                "edit" => Some("grades edited after sending"),
+                _ => None,
+            },
         },
     )
     .await?;
@@ -132,6 +132,22 @@ async fn send(
     Ok(Json(after))
 }
 
+/// Called by the gradebook inside the transaction of any grade or item change: a campus whose
+/// grades were sent or checked goes back to draft, with an audit row, because the check no
+/// longer describes the gradebook.
+pub(crate) async fn reset_after_edit(
+    tx: &mut SqliteConnection,
+    user: &CurrentUser,
+    campus_id: i64,
+) -> AppResult<()> {
+    let before = current(tx, campus_id).await?;
+    if before.status == "draft" {
+        return Ok(());
+    }
+    change(tx, user, &before, "draft", None, "edit").await?;
+    Ok(())
+}
+
 /// Secretary-only: 403 for anyone else, including a professor of the campus.
 async fn require_secretary(
     conn: &mut SqliteConnection,
@@ -155,6 +171,9 @@ async fn check(
         return Err(AppError::Conflict(
             "only sent grades can be marked as checked".into(),
         ));
+    }
+    if before.updated_by == Some(user.id) {
+        return Err(AppError::Forbidden);
     }
     let after = change(&mut tx, &user, &before, "checked", None, "check").await?;
     tx.commit().await?;

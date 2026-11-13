@@ -259,6 +259,7 @@ async fn create_item(
     .await?
     .last_insert_rowid();
     let item = find_item(&mut tx, id).await?;
+    submission::reset_after_edit(&mut tx, &user, campus_id).await?;
     audit::record(
         &mut tx,
         AuditEntry {
@@ -316,6 +317,7 @@ async fn update_item(
         .execute(&mut *tx)
         .await?;
     let after = find_item(&mut tx, item_id).await?;
+    submission::reset_after_edit(&mut tx, &user, before.campus_id).await?;
     audit::record(
         &mut tx,
         AuditEntry {
@@ -366,6 +368,7 @@ async fn archive_item(
         .execute(&mut *tx)
         .await?;
     let after = find_item(&mut tx, item_id).await?;
+    submission::reset_after_edit(&mut tx, &user, before.campus_id).await?;
     audit::record(
         &mut tx,
         AuditEntry {
@@ -529,6 +532,9 @@ async fn put_entries(
         )
         .await?;
     }
+    if !changes.is_empty() {
+        submission::reset_after_edit(&mut tx, &user, campus_id).await?;
+    }
     tx.commit().await?;
     Ok(Json(json!({ "changed": changes.len() })))
 }
@@ -567,9 +573,8 @@ struct MineRow {
 
 async fn mine(State(state): State<AppState>, user: CurrentUser) -> AppResult<Json<Value>> {
     let mut conn = state.db.acquire().await?;
-    // The scale of each course is its own (a campus may override it); the top-level one is
-    // the program default, for a screen that has no course.
-    let default_scale: GradingScale = settings::get(&mut conn, settings::GRADING_SCALE).await?;
+    // The scale of each course is its own (a campus may override it). There is no top-level
+    // scale: a screen must read `courses[].scale`.
     let campuses = directory::campuses_for_user(&mut conn, &user).await?;
     let mut courses = Vec::new();
     for campus in campuses
@@ -603,5 +608,5 @@ async fn mine(State(state): State<AppState>, user: CurrentUser) -> AppResult<Jso
             })).collect::<Vec<_>>(),
         }));
     }
-    Ok(Json(json!({ "scale": default_scale, "courses": courses })))
+    Ok(Json(json!({ "courses": courses })))
 }

@@ -330,6 +330,9 @@ async fn student_sees_only_own_grades_and_cannot_use_the_gradebook() {
     assert_eq!(courses.len(), 1);
     assert_eq!(courses[0]["final"], 9.0);
     assert_eq!(courses[0]["items"][0]["score"], 9.0);
+    // The scale lives on each course; there is no top-level one to misread.
+    assert!(body.get("scale").is_none(), "{body}");
+    assert_eq!(courses[0]["scale"]["max"], 10.0);
     assert!(!body.to_string().contains(&b.email));
 
     assert_eq!(s.book(&a.cookie).await.0, StatusCode::FORBIDDEN);

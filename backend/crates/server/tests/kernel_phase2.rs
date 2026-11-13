@@ -361,9 +361,9 @@ async fn the_gradebook_and_my_grades_use_each_campuss_own_scale() {
         scales.contains(&(a, 100.0)) && scales.contains(&(b, 10.0)),
         "{scales:?}"
     );
-    assert_eq!(
-        mine["scale"]["max"], 10.0,
-        "the top-level scale is the global one"
+    assert!(
+        mine.get("scale").is_none(),
+        "there is no top-level scale, only each course's own"
     );
 }
 
