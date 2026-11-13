@@ -192,6 +192,17 @@ pub async fn de_la_persona(app: &App, usuario: i64) -> Result<Vec<Value>, sqlx::
 }
 
 pub async fn de_la_universidad_para_admin(app: &App, universidad: i64) -> Result<Vec<(String, Value)>, sqlx::Error> {
+    let propios = sqlx::query("SELECT id, campus_externo, universidad_id FROM campus_modulos WHERE universidad_id = ?")
+        .bind(universidad)
+        .fetch_all(&app.db)
+        .await?;
+    for f in propios {
+        sincronizar_como_dueno(
+            app,
+            &CampusModulos { id: f.get("id"), campus_externo: f.get("campus_externo"), universidad_id: f.get("universidad_id") },
+        )
+        .await;
+    }
     let filas = sqlx::query(&format!(
         "SELECT c.id, c.nombre, \
          (SELECT COUNT(*) FROM inscripciones_modulos i JOIN usuarios u ON u.id = i.usuario_id WHERE i.campus_id = c.id AND i.suspendida = 0 \
@@ -230,12 +241,16 @@ pub async fn de_la_universidad_para_admin(app: &App, universidad: i64) -> Result
 
 pub async fn listar_inscriptos(State(app): State<Estado>, ctx: Ctx, Path(id): Path<String>) -> Resultado {
     let n: i64 = id.parse().map_err(|_| ApiError::no_encontrado())?;
-    let es_de_la_universidad = match campus_modulos(&app, n).await {
-        Ok(c) => ctx.admin().ok() == Some(c.universidad_id),
-        Err(_) => false,
+    let administrador = match campus_modulos(&app, n).await {
+        Ok(c) if ctx.admin().ok() == Some(c.universidad_id) => Some(c),
+        _ => None,
     };
-    if !es_de_la_universidad {
-        docente_en_modulos(&app, &ctx, &id).await?;
+    match administrador {
+        Some(c) => sincronizar_como_dueno(&app, &c).await,
+        None => {
+            let c = docente_en_modulos(&app, &ctx, &id).await?;
+            let _ = sincronizar_con(&app, &ctx.usuario, &ctx.ip, &c).await;
+        }
     }
     let filas = sqlx::query(
         "SELECT u.id, u.nombre, u.email, i.rol, u.pendiente, i.suspendida FROM inscripciones_modulos i \
@@ -328,13 +343,13 @@ pub async fn agregar_inscriptos(
     if !estado.is_success() {
         return Err(error_de_australis(estado));
     }
-    let (agregados, actualizados) = sincronizar_con(&app, &ctx, &campus).await?;
+    let (agregados, actualizados) = sincronizar_con(&app, &ctx.usuario, &ctx.ip, &campus).await?;
     Ok(ok(json!({"agregados": agregados, "actualizados": actualizados})))
 }
 
-async fn sincronizar_con(app: &App, ctx: &Ctx, campus: &CampusModulos) -> Result<(usize, usize), ApiError> {
+async fn sincronizar_con(app: &App, usuario: &Usuario, ip: &str, campus: &CampusModulos) -> Result<(usize, usize), ApiError> {
     let ruta = format!("/api/campuses/{}/members", campus.campus_externo);
-    let (estado, miembros) = llamar_australis(app, &ctx.usuario, reqwest::Method::GET, &ruta, None).await?;
+    let (estado, miembros) = llamar_australis(app, usuario, reqwest::Method::GET, &ruta, None).await?;
     if !estado.is_success() {
         return Err(error_de_australis(estado));
     }
@@ -405,32 +420,41 @@ async fn sincronizar_con(app: &App, ctx: &Ctx, campus: &CampusModulos) -> Result
             }
         }
     }
-    auditar(
-        &mut *tx,
-        Some(campus.universidad_id),
-        Some(ctx.usuario.id),
-        "inscripcion_modulos",
-        &format!("{} sincronizó las inscripciones del campus con módulos {}", ctx.usuario.email, campus.id),
-        Some(&ctx.ip),
-    )
-    .await?;
+    if agregados + actualizados > 0 {
+        auditar(
+            &mut *tx,
+            Some(campus.universidad_id),
+            Some(usuario.id),
+            "inscripcion_modulos",
+            &format!("{} sincronizó las inscripciones del campus con módulos {}", usuario.email, campus.id),
+            Some(ip),
+        )
+        .await?;
+    }
     tx.commit().await?;
     Ok((agregados, actualizados))
 }
 
+async fn sincronizar_como_dueno(app: &App, campus: &CampusModulos) {
+    let dueno: Option<i64> =
+        sqlx::query_scalar("SELECT usuario_id FROM inscripciones_modulos WHERE campus_id = ? AND rol = 'dueño' AND suspendida = 0")
+            .bind(campus.id)
+            .fetch_optional(&app.db)
+            .await
+            .unwrap_or(None);
+    let Some(dueno) = dueno else { return };
+    let Ok(Some(usuario)) = crate::auth::usuario_por_id(&app.db, dueno).await else { return };
+    let _ = sincronizar_con(app, &usuario, "sistema", campus).await;
+}
+
 pub async fn sincronizar(State(app): State<Estado>, ctx: Ctx, Path(id): Path<String>) -> Resultado {
     let campus = docente_en_modulos(&app, &ctx, &id).await?;
-    let (agregados, actualizados) = sincronizar_con(&app, &ctx, &campus).await?;
+    let (agregados, actualizados) = sincronizar_con(&app, &ctx.usuario, &ctx.ip, &campus).await?;
     Ok(ok(json!({"agregados": agregados, "actualizados": actualizados})))
 }
 
 pub async fn traer_mis_campus(app: &App, ctx: &Ctx) {
     let Some(universidad) = ctx.usuario.universidad_id else { return };
-    let Ok((estado, campus)) = llamar_australis(app, &ctx.usuario, reqwest::Method::GET, "/api/campuses", None).await else {
-        return;
-    };
-    let Some(lista) = campus.as_array().filter(|_| estado.is_success()) else { return };
-    let mios: Vec<(i64, &str)> = lista.iter().filter_map(|c| Some((c["id"].as_i64()?, c["member_role"].as_str()?))).collect();
     let Ok(filas) = sqlx::query("SELECT id, campus_externo FROM campus_modulos WHERE universidad_id = ?")
         .bind(universidad)
         .fetch_all(&app.db)
@@ -438,6 +462,14 @@ pub async fn traer_mis_campus(app: &App, ctx: &Ctx) {
     else {
         return;
     };
+    if filas.is_empty() {
+        return;
+    }
+    let Ok((estado, campus)) = llamar_australis(app, &ctx.usuario, reqwest::Method::GET, "/api/campuses", None).await else {
+        return;
+    };
+    let Some(lista) = campus.as_array().filter(|_| estado.is_success()) else { return };
+    let mios: Vec<(i64, &str)> = lista.iter().filter_map(|c| Some((c["id"].as_i64()?, c["member_role"].as_str()?))).collect();
     let ahora = ahora_txt();
     for f in filas {
         let (campus_id, externo): (i64, i64) = (f.get("id"), f.get("campus_externo"));
@@ -492,6 +524,6 @@ pub async fn sincronizar_docentes(app: &App, ctx: &Ctx) {
     };
     for f in filas {
         let campus = CampusModulos { id: f.get("id"), campus_externo: f.get("campus_externo"), universidad_id: f.get("universidad_id") };
-        let _ = sincronizar_con(app, ctx, &campus).await;
+        let _ = sincronizar_con(app, &ctx.usuario, &ctx.ip, &campus).await;
     }
 }

@@ -31,6 +31,7 @@ interface Persona {
 
 interface CursoAdmin {
   id: string;
+  tipo?: 'libre' | 'modulos';
   nombre: string;
   periodo: string;
   color: string;
@@ -358,30 +359,32 @@ function Cursos({ dominioBase, conUni }: { dominioBase: string; conUni: ConUni }
           </thead>
           <tbody>
             {(cursos ?? []).map((c) => (
-              <tr key={c.id} data-fila-curso={c.id}>
+              <tr key={`${c.tipo ?? 'libre'}-${c.id}`} data-fila-curso={c.id}>
                 <td>
                   <div className="per">
                     <span className="punto" style={{ background: c.color, width: 10, height: 10 }}></span>
                     <div>
                       {c.nombre}
-                      <small>
-                        {c.id}.{dominioBase}
-                      </small>
+                      <small>{c.tipo === 'modulos' ? 'Campus con módulos' : `${c.id}.${dominioBase}`}</small>
                     </div>
                   </div>
                 </td>
                 <td>{c.dueno?.nombre ?? '—'}</td>
                 <td className="num">{c.profesores}</td>
                 <td className="num">{c.alumnos}</td>
-                <td>{c.archivado ? <PastillaArchivado /> : c.version_publicada ? <span className="pill verde">Publicado · v{c.version_publicada}</span> : <span className="pill">Sin publicar</span>}</td>
+                <td>{c.tipo === 'modulos' ? <span className="pill">Campus con módulos</span> : c.archivado ? <PastillaArchivado /> : c.version_publicada ? <span className="pill verde">Publicado · v{c.version_publicada}</span> : <span className="pill">Sin publicar</span>}</td>
                 <td className="num">USD {usd(c.uso_usd_mes)}</td>
-                <CeldaAccionCursoAdmin
-                  c={c}
-                  conUni={conUni}
-                  alTransferir={setTransferir}
-                  pedir={confirmar.pedir}
-                  alCambiar={(nuevo) => setCursos((lista) => lista?.map((x) => (x.id === nuevo.id ? { ...x, ...nuevo } : x)) ?? lista)}
-                />
+                {c.tipo === 'modulos' ? (
+                  <td></td>
+                ) : (
+                  <CeldaAccionCursoAdmin
+                    c={c}
+                    conUni={conUni}
+                    alTransferir={setTransferir}
+                    pedir={confirmar.pedir}
+                    alCambiar={(nuevo) => setCursos((lista) => lista?.map((x) => (x.id === nuevo.id && x.tipo !== 'modulos' ? { ...x, ...nuevo } : x)) ?? lista)}
+                  />
+                )}
               </tr>
             ))}
           </tbody>

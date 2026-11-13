@@ -28,6 +28,7 @@ struct Registro {
     confirmaciones: usize,
     creados: usize,
     miembros: Vec<Value>,
+    listados: usize,
 }
 
 type Compartido = Arc<Mutex<Registro>>;
@@ -53,7 +54,8 @@ async fn australis_falso() -> (String, Compartido) {
                 let r = r5.clone();
                 async move {
                     let quien = carga(&h);
-                    let r = r.lock().unwrap();
+                    let mut r = r.lock().unwrap();
+                    r.listados += 1;
                     let rol = r.miembros.iter().find(|m| m["email"] == quien["email"] && m["status"] == "active").map(|m| m["role"].clone());
                     match rol {
                         Some(rol) => Json(json!([{"id": 7, "name": "Campus", "member_role": rol}])),
@@ -542,4 +544,39 @@ async fn el_administrador_de_la_universidad_ve_el_campus_con_modulos_y_sus_inscr
     let ajeno = administrador(&app, "admin@otra.test", otra).await;
     let (estado, _) = pedir(&app, &ajeno, Method::GET, &format!("/api/cursos-modulos/{id}/inscriptos"), None).await;
     assert_eq!(estado, 404);
+}
+
+#[tokio::test]
+async fn una_universidad_sin_campus_con_modulos_no_llama_a_australis_en_mis_cursos() {
+    let (url, registro) = australis_falso().await;
+    let app = nueva_app(Some(url)).await;
+    let uni = universidad(&app, "univ.test").await;
+    let (_, ana) = persona(&app, "ana@univ.test", uni, false).await;
+    let (estado, _) = pedir(&app, &ana, Method::GET, "/api/mis-cursos", None).await;
+    assert_eq!(estado, 200);
+    assert_eq!(registro.lock().unwrap().listados, 0);
+}
+
+#[tokio::test]
+async fn lo_importado_en_australis_aparece_en_la_lista_y_en_los_conteos_sin_abrir_mis_cursos() {
+    let (url, registro) = australis_falso().await;
+    let app = nueva_app(Some(url)).await;
+    let uni = universidad(&app, "univ.test").await;
+    let (_, profe) = persona(&app, "profe@univ.test", uni, true).await;
+    let id = campus_creado(&app, &profe).await;
+    let admin = administrador(&app, "admin@univ.test", uni).await;
+    {
+        let mut r = registro.lock().unwrap();
+        r.miembros.push(json!({"email": "ana@univ.test", "full_name": "Ana", "role": "student", "status": "active"}));
+        r.miembros.push(json!({"email": "nueva@univ.test", "full_name": "Nueva", "role": "student", "status": "active"}));
+    }
+    let (_, cursos) = pedir(&app, &admin, Method::GET, "/api/admin/cursos", None).await;
+    let campus = cursos["cursos"].as_array().unwrap().iter().find(|c| c["tipo"] == "modulos").unwrap();
+    assert_eq!(campus["alumnos"], 2, "{cursos}");
+    let (_, lista) = pedir(&app, &admin, Method::GET, &format!("/api/cursos-modulos/{id}/inscriptos"), None).await;
+    let emails: Vec<&str> = lista["inscriptos"].as_array().unwrap().iter().map(|i| i["email"].as_str().unwrap()).collect();
+    assert!(emails.contains(&"ana@univ.test") && emails.contains(&"nueva@univ.test"), "{lista}");
+    registro.lock().unwrap().miembros.push(json!({"email": "otra@univ.test", "full_name": "Otra", "role": "student", "status": "active"}));
+    let (_, lista) = pedir(&app, &profe, Method::GET, &format!("/api/cursos-modulos/{id}/inscriptos"), None).await;
+    assert!(lista["inscriptos"].as_array().unwrap().iter().any(|i| i["email"] == "otra@univ.test"), "{lista}");
 }
