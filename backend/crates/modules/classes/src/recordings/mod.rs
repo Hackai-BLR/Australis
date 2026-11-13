@@ -244,7 +244,10 @@ async fn sync_recording(
     user: CurrentUser,
     Path(class_id): Path<i64>,
 ) -> AppResult<Json<RecordingView>> {
-    require_member(&state, &user, class_id).await?;
+    let campus_id = class_campus(&state, class_id).await?;
+    let mut conn = state.db.acquire().await?;
+    require_campus(&mut conn, &user, campus_id, Access::Teach).await?;
+    drop(conn);
     sync_class(&state, class_id).await?;
     Ok(Json(recording_view(&state, class_id).await?))
 }
