@@ -1,6 +1,6 @@
 FROM node:22.12.0-bookworm-slim AS node
 
-FROM rust:1.88.0-bookworm
+FROM rust:1.100.0-bookworm
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update \
  && apt-get install -y --no-install-recommends ca-certificates git pkg-config libssl-dev sqlite3 python3 make g++ \

@@ -18,6 +18,7 @@ El servidor solo instalaba el núcleo de Campus IA. Australis (`backend/` y `fro
 
 ## Decisiones
 
+- La imagen de compilación pasó de `rust:1.88.0` a `rust:1.100.0`. La compilación real de `backend/` con 1.88 falló: `aes@0.9.4 requires rustc 1.89`.
 - Caddy no cambia. El reenvío del tráfico a Australis es de la tarea M2.
 - Un commit sin `compilado/bin/australis-server` se instala como antes y su salud no pide el puerto 8090, para que la vuelta atrás a un commit anterior a este cambio siga funcionando.
 - `DATABASE_URL`, `BIND_ADDR` y `UPLOAD_DIR` los fija la unidad: un `EnvironmentFile` pisa a `Environment=`, por eso Ansible los rechaza en `australis.env`.
