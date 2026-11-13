@@ -1,11 +1,11 @@
 export const meta = {
   name: 'australis-phase',
-  description: 'Run one phase of docs/plan.md: check the plan and GitHub, publish the phase kickoff, then build, review and fix each free feature on its own branch and pull request. Nothing is merged.',
-  whenToUse: 'Start or continue a phase of the Australis build plan. args: { phase: 0-5, only?: ["F10"], max?: number }',
+  description: 'Run one phase of docs/plan.md (kickoff, then build, review and fix each free feature on its own branch and pull request), or run one checkpoint (end-to-end tests and the demo story on a test stack). Nothing is merged.',
+  whenToUse: 'Start or continue a phase of the Australis build plan. args: { phase: 0-5 } or { checkpoint: "A"-"F" }; with a phase also { only?: ["F10"], max?: number }',
   phases: [
     { title: 'Scout', detail: 'read docs/plan.md and GitHub: what is done, taken and free', model: 'sonnet' },
     { title: 'Kickoff', detail: 'publish phase/N: kernel additions, module skeletons, seams', model: 'sonnet' },
-    { title: 'Test', detail: 'phase 1 only: start a test stack and drive the app, one tester per area', model: 'sonnet' },
+    { title: 'Test', detail: 'phase 1 and checkpoints: start a test stack, run the end-to-end tests and drive the app', model: 'sonnet' },
     { title: 'Implement', detail: 'one agent per feature or fix, in its own worktree; claims the branch, opens the PR', model: 'sonnet' },
     { title: 'Review', detail: 'read-only adversarial review of each PR', model: 'opus' },
     { title: 'Fix', detail: 'fix blocker and major findings, push to the same PR', model: 'sonnet' },
@@ -19,7 +19,8 @@ const REVIEWER = 'opus'
 
 const A = args || {}
 const N = Number(A.phase)
-if (A.phase === undefined || !(N >= 0 && N <= 5)) return { error: 'Pass args.phase as a number from 0 to 5, e.g. { phase: 2 }.' }
+const CP = A.checkpoint === undefined ? null : String(A.checkpoint).trim().toUpperCase()
+if (CP === null && (A.phase === undefined || !(N >= 0 && N <= 5))) return { error: 'Pass args.phase as a number from 0 to 5, e.g. { phase: 2 }, or args.checkpoint as a letter, e.g. { checkpoint: "A" }.' }
 const ONLY = Array.isArray(A.only) ? A.only.map(s => String(s).toUpperCase()) : null
 const MAX = Number(A.max) > 0 ? Number(A.max) : Infinity
 
@@ -125,6 +126,155 @@ ${CHECKS(item.key)}`,
   return { findings: all, fix }
 }
 
+// ---------- test stack and fixes, shared by phase 1 and checkpoints ----------
+
+const STACK_SCHEMA = { type: 'object', required: ['up'], properties: {
+  up: { type: 'boolean' }, frontend_url: { type: 'string' }, api_url: { type: 'string' },
+  built_from: { type: 'string', description: 'commit and what was merged into it' },
+  accounts: { type: 'array', items: { type: 'object', properties: { role: { type: 'string' }, email: { type: 'string' }, password: { type: 'string' } } } },
+  notes: { type: 'string', description: 'how to sign in, how to read sign-in codes or mails, anything a tester must know' },
+} }
+async function startStack(what) {
+  const stack = await agent(`Start a throwaway test copy of the product for other agents to test. You run in your own worktree; work only there.
+
+- \`git fetch origin\`, \`git checkout --detach origin/main\`. ${what}
+- Write a .env in the worktree with fake seed accounts (SEED_ADMIN_EMAIL, SEED_ADMIN_PASSWORD, SEED_DEMO=true) and APP_BASE_URL set to the test frontend URL. Fake data only, on a fresh database.
+- It must NOT touch the normal stack or its data: use the Compose project name australis-test (\`docker compose -p australis-test ...\`) and a small override file that maps other host ports (frontend 3100, backend 8180). Remove a leftover australis-test project first (\`docker compose -p australis-test down -v\`) so the database is fresh. Never run \`down -v\` on, or remove volumes of, the project "australis".
+- If what you were asked to run includes the Campus IA core (nucleo), start it the way its contracts and handoffs describe for development: mails written to a file (PROVEEDOR_EMAIL=archivo), Cloudflare's public Turnstile test keys, DOMINIO_BASE=localhost, and the fake model unless a real one is asked for. No real secret is used or needed.
+- If Docker is not running, start Docker Desktop and wait for the daemon (up to 5 minutes). Then build and start in the background, and wait until the health check answers.
+- Sign in once as each role to confirm the accounts work.
+Report the URLs, the accounts, how a tester signs in, and the commit you built. Leave the stack running.`,
+    { label: 'test:stack', phase: 'Test', model: CODER, isolation: 'worktree', schema: STACK_SCHEMA })
+  if (stack && stack.up) log(`Test stack up at ${stack.frontend_url} (built from ${stack.built_from})`)
+  return stack
+}
+
+// One fix branch per module, so two fixes never edit the same files.
+async function fixFindings(serious, stack, prefix, source) {
+  const byArea = {}
+  for (const f of serious) (byArea[f.area || 'app'] = byArea[f.area || 'app'] || []).push(f)
+  return pipeline(Object.keys(byArea),
+    async (area) => {
+      const key = `${prefix}-${area}`
+      const item = { key, branch: `fix/${key}`, title: `Fixes from ${source}: ${area}`, what: `Fixes for the findings of ${source} in the ${area} area: ${JSON.stringify(byArea[area])}` }
+      const impl = await agent(`You are fixing findings from ${source} of Australis, all in the "${area}" area, on the branch ${item.branch}.
+
+Findings (each was seen on the running app at ${stack.frontend_url}; reproduce each one first, against that app or in a test, and if one does not reproduce, skip it and say why):
+${JSON.stringify(byArea[area], null, 1)}
+
+For each real finding write a failing test first, then the smallest fix. Add no features. A fix may touch a frozen shared file only if the fault is there; report it as a deviation.
+
+${CONTRACT}
+
+${GIT(item.branch, 'main', [], item.title)}
+
+${CHECKS(key)}`,
+        { label: `fix:${key}`, phase: 'Implement', model: CODER, isolation: 'worktree', schema: IMPL_SCHEMA })
+      if (!impl || !impl.pushed) { log(`${item.branch}: no branch was published`); return { area, ok: false, impl } }
+      const rf = await reviewAndFix(item, impl)
+      return { area, branch: item.branch, ok: true, impl, ...rf }
+    })
+}
+
+// ---------- Checkpoint mode ----------
+
+if (CP !== null) {
+  phase('Scout')
+  const cp = await agent(`Read-only scout for checkpoint ${CP} of the Australis build plan. Change nothing.
+
+1. \`git fetch origin --prune\`. Read the "Checkpoints" section of docs/plan.md with \`git show origin/main:docs/plan.md\` (if the plan is not on main yet, try origin/merge/campusai, then origin/docs/plan). Report the ref you used.
+2. Copy verbatim, for checkpoint ${CP}: its title, its "Runs on" cell, every numbered step of its demo story, and every item of "Must be refused". Copy the numbered list "A checkpoint passes when" as well.
+3. For every id under "Needs" (expand ranges such as "F10 to F17"; an earlier checkpoint counts as done if the tag checkpoint-<letter> exists on origin), say whether it is done: its pull request is merged. Use \`gh pr list --state all --limit 200 --json number,title,state,headRefName,mergedAt\` and \`git ls-remote --tags origin\`. ${GH}
+4. List the end-to-end test folders that exist on that ref for this checkpoint and every earlier one (pruebas/australis/checkpoint-*), and say how the folder's own files say to run them.`,
+    { label: `scout:checkpoint-${CP}`, phase: 'Scout', model: CODER, effort: 'low', schema: { type: 'object', required: ['title', 'steps', 'needs'], properties: {
+      plan_ref: { type: 'string' }, title: { type: 'string' }, runs_on: { type: 'string' },
+      steps: { type: 'array', items: { type: 'string' } }, refused: { type: 'array', items: { type: 'string' } },
+      passes_when: { type: 'string' },
+      needs: { type: 'array', items: { type: 'object', required: ['id', 'done'], properties: { id: { type: 'string' }, done: { type: 'boolean' }, detail: { type: 'string' } } } },
+      suites: { type: 'array', items: { type: 'string' }, description: 'existing end-to-end test folders, this checkpoint and earlier' },
+      how_to_run_suites: { type: 'string' },
+    } } })
+  if (!cp) return { error: 'The scout did not return; nothing was tested.' }
+  const waiting = cp.needs.filter(n => !n.done).map(n => n.id)
+  if (waiting.length && !A.force) {
+    log(`Checkpoint ${CP} (${cp.title}) cannot pass yet. Not merged: ${waiting.join(', ')}. Pass force: true to test what is on main anyway.`)
+    return { checkpoint: CP, passes: false, waiting_for: waiting, tested: false }
+  }
+  if (waiting.length) log(`Checkpoint ${CP}: testing main although these are not merged: ${waiting.join(', ')}. It cannot pass in this run.`)
+
+  phase('Test')
+  const stack = await startStack(`This is for checkpoint ${CP} (${cp.title}). The plan says it runs on: ${cp.runs_on || 'a local test stack'}. Always use a LOCAL test stack here, never the live site: if that line names campusia.tech, start the Campus IA core and Australis together locally instead.${A.real_model ? ' The person running this asked for the real model: use it only if its credential is already configured on this machine outside the repo; otherwise use the fake model and say so.' : ''}`)
+  if (!stack || !stack.up) return { checkpoint: CP, passes: false, scout: cp, stack, error: 'The test stack did not start; nothing was tested.' }
+  const APP = `App: ${stack.frontend_url} (API ${stack.api_url}). Accounts: ${JSON.stringify(stack.accounts)}. Notes from setup: ${stack.notes || 'none'}.`
+  const BROWSER = `Drive the screens in a real browser if you have a browser tool (find one with ToolSearch). If you have none, exercise the same flows through the HTTP API with a cookie jar and read the frontend code for the screen logic, and say plainly in "covered" that the screens were not driven.`
+  const WALK_SCHEMA = { type: 'object', required: ['steps', 'findings'], properties: {
+    steps: { type: 'array', items: { type: 'object', required: ['n', 'ok'], properties: { n: { type: 'integer' }, ok: { type: 'boolean' }, note: { type: 'string' } } } },
+    findings: { type: 'array', items: FINDING }, covered: { type: 'string' }, minutes: { type: 'number', description: 'rough time the story took, leaving out your own thinking' },
+  } }
+  const walker = (run) => () => agent(`You are rehearsing a product demo of Australis as the presenter would give it, run ${run} of 2. Do NOT edit any repo file and do not open pull requests.
+
+${APP}
+
+The demo story of checkpoint ${CP} (${cp.title}). Do every step in order, as the role the step names, exactly as an audience would see it. Do not skip a step, and do not work around a problem: if a step cannot be done as written, mark it not ok, say what happened, and go on to the next step if you can.
+${cp.steps.map((s, i) => `${i + 1}. ${s}`).join('\n')}
+
+- ${BROWSER}
+- Use names starting "demo-${run}" for anything you create, so the other rehearsal on the same app is not disturbed.
+- Also note anything an audience would notice: a raw error, English text on a screen, a missing "Simulado" badge on simulated data, a dead link, a long wait.
+- Report each step, and a finding for every failed step and every such problem, with exact steps to reproduce. blocker = the story cannot continue, data is lost, or a security hole; major = a step fails or shows something wrong; minor = cosmetic.`,
+    { label: `test:demo-${run}`, phase: 'Test', model: CODER, schema: WALK_SCHEMA })
+
+  const [suite, walk1, walk2, attack] = await parallel([
+    () => agent(`Run the automated end-to-end tests for checkpoint ${CP} of Australis against a running test stack. Do NOT edit any repo file. You run in your own worktree at origin/main.
+
+${APP}
+
+Test folders the scout found (this checkpoint and earlier ones): ${JSON.stringify(cp.suites || [])}. How they say to run: ${cp.how_to_run_suites || 'not stated; read the folder'}.
+Also run backend/crates/server/tests/demo_flow.rs with the backend check image (see "Backend checks" in CLAUDE.md; run only that test file, target volume australis-target-checkpoint).
+If there is no end-to-end folder for this checkpoint, say so in "missing": that alone means the checkpoint cannot pass. Install test dependencies only inside the test folder. Report totals and one finding per failing test (name, what it expected, what happened); do not fix anything.`,
+      { label: 'test:e2e-suite', phase: 'Test', model: CODER, isolation: 'worktree', schema: { type: 'object', required: ['ran', 'passed', 'failed'], properties: {
+        ran: { type: 'boolean' }, passed: { type: 'integer' }, failed: { type: 'integer' },
+        missing: { type: 'array', items: { type: 'string' } }, findings: { type: 'array', items: FINDING }, detail: { type: 'string' } } } }),
+    walker(1), walker(2),
+    () => agent(`You are attacking the running Australis app to check that what must be refused is refused. Do NOT edit any repo file and do not open pull requests.
+
+${APP}
+
+For checkpoint ${CP} (${cp.title}) each of these must be refused, through the screens AND directly through the API:
+${(cp.refused || []).map((s, i) => `${i + 1}. ${s}`).join('\n') || '(the plan lists none; test access by role on every screen and route the demo story touches)'}
+
+Also try, on every route the demo story of this checkpoint uses: no session, a student of another campus, a guest teacher on manage-only actions, a suspended member, and ids that belong to another campus. Create your own data with names starting "attack-".
+Report only what you reproduced: the exact request or steps, what should have happened and what did. blocker = anything refused in the list above that went through; major = other wrong access; minor = a refusal with a confusing message. An empty list is a valid answer.`,
+      { label: 'test:attack', phase: 'Test', model: CODER, schema: FINDINGS_SCHEMA }),
+  ])
+
+  const raw = [suite, walk1, walk2, attack].filter(Boolean).flatMap(r => r.findings || [])
+  const serious = raw.filter(f => f.severity !== 'minor')
+  const walkOk = (w) => !!w && w.steps.length >= cp.steps.length && w.steps.every(s => s.ok)
+  const checks = {
+    needs_merged: waiting.length === 0,
+    e2e_suite_exists: !!suite && suite.ran && !(suite.missing || []).length,
+    e2e_suite_green: !!suite && suite.ran && suite.failed === 0,
+    demo_run_1: walkOk(walk1),
+    demo_run_2: walkOk(walk2),
+    refusals_tested: !!attack,
+    no_blocker_or_major: serious.length === 0,
+  }
+  const passes = Object.values(checks).every(Boolean)
+  log(`Checkpoint ${CP} (${cp.title}): ${passes ? 'PASSES the automated part' : 'does NOT pass'} | ${Object.entries(checks).map(([k, v]) => `${k}=${v ? 'yes' : 'NO'}`).join(', ')}`)
+  log(`${raw.length} finding(s): ${serious.length} blocker or major, ${raw.length - serious.length} minor (minor ones are reported, not fixed)`)
+
+  const fixes = serious.length ? await fixFindings(serious, stack, `c${CP.toLowerCase()}`, `checkpoint ${CP}`) : []
+  return { checkpoint: CP, title: cp.title, passes, checks, scout: cp, stack, suite, demo_runs: [walk1, walk2], attack,
+    minor: raw.filter(f => f.severity === 'minor'), fixes,
+    left_for_a_person: [
+      serious.length ? 'Read and merge the fix pull requests, then run this checkpoint again: it passes only on a clean run' : null,
+      passes ? `Tag main: git tag checkpoint-${CP.toLowerCase()} origin/main && git push origin checkpoint-${CP.toLowerCase()}` : null,
+      /campusia\.tech/.test(cp.runs_on || '') ? 'This checkpoint is live: after the tag, check the deploy and the health check on campusia.tech, and try going back to the previous checkpoint tag once. This run tested a local stack only' : null,
+      `The test stack is still running (Compose project australis-test, ${stack.frontend_url}); stop it with: docker compose -p australis-test down`,
+    ].filter(Boolean) }
+}
+
 // ---------- Scout ----------
 
 phase('Scout')
@@ -165,23 +315,8 @@ if ((scout.earlier_not_merged || []).length) log(`Not merged from earlier phases
 
 if (N === 1) {
   phase('Test')
-  const STACK_SCHEMA = { type: 'object', required: ['up'], properties: {
-    up: { type: 'boolean' }, frontend_url: { type: 'string' }, api_url: { type: 'string' },
-    built_from: { type: 'string', description: 'commit and what was merged into it' },
-    accounts: { type: 'array', items: { type: 'object', properties: { role: { type: 'string' }, email: { type: 'string' }, password: { type: 'string' } } } },
-    notes: { type: 'string' },
-  } }
-  const stack = await agent(`Start a throwaway test copy of Australis for other agents to test. You run in your own worktree; work only there.
-
-- \`git fetch origin\`, \`git checkout --detach origin/main\`.${scout.open_pr_19 ? ' Pull request #19 is still open: also `git merge --no-edit origin/fix/slides-follow` locally so the test covers it. Do not push that merge.' : ''}
-- Write a .env in the worktree with fake seed accounts (SEED_ADMIN_EMAIL, SEED_ADMIN_PASSWORD, SEED_DEMO=true) and APP_BASE_URL set to the test frontend URL. Fake data only.
-- It must NOT touch the normal stack or its data: use the Compose project name australis-test (\`docker compose -p australis-test ...\`) and a small override file that maps other host ports (frontend 3100, backend 8180). Never run \`down -v\` or remove volumes of the project "australis".
-- If Docker is not running, start Docker Desktop and wait for the daemon (up to 5 minutes). Then build and start in the background, and wait until GET <api>/api/health answers.
-- Sign in once as each seeded role through the API to confirm the accounts work, and read crates/server/src/seed.rs for the demo account emails.
-Report the URLs, the accounts, and the commit you built. Leave the stack running.`,
-    { label: 'test:stack', phase: 'Test', model: CODER, isolation: 'worktree', schema: STACK_SCHEMA })
+  const stack = await startStack(`Build from origin/main.${scout.open_pr_19 ? ' Pull request #19 is still open: also \`git merge --no-edit origin/fix/slides-follow\` locally so the test covers it. Do not push that merge.' : ''}`)
   if (!stack || !stack.up) return { scout, stack, error: 'The test stack did not start; no testing was done.' }
-  log(`Test stack up at ${stack.frontend_url} (built from ${stack.built_from})`)
 
   const AREAS = [
     ['sign-in', 'Feature 1: sign-in, sign-out, wrong password, invite acceptance, the secretary user screen (create, suspend with reason, reactivate), a suspended user losing an open session'],
@@ -213,30 +348,7 @@ Your area: ${what}
   const serious = raw.filter(f => f.severity !== 'minor')
   log(`${raw.length} finding(s): ${serious.length} blocker or major, ${raw.length - serious.length} minor (minor ones are reported, not fixed)`)
 
-  // One fix branch per module, so two fixes never edit the same files.
-  const byArea = {}
-  for (const f of serious) (byArea[f.area || 'app'] = byArea[f.area || 'app'] || []).push(f)
-  const fixes = await pipeline(Object.keys(byArea),
-    async (area) => {
-      const key = `p1-${area}`
-      const item = { key, branch: `fix/${key}`, title: `Phase 1 fixes: ${area}`, what: `Fixes for the phase-1 test findings in the ${area} module: ${JSON.stringify(byArea[area])}` }
-      const impl = await agent(`You are fixing findings from the phase-1 test pass of Australis, all in the "${area}" area, on the branch ${item.branch}.
-
-Findings (each was seen on the running app at ${stack.frontend_url}; reproduce each one first, against that app or in a test, and if one does not reproduce, skip it and say why):
-${JSON.stringify(byArea[area], null, 1)}
-
-For each real finding write a failing test first, then the smallest fix. Phase 1 adds no features. A fix may touch a frozen shared file only if the fault is there; report it as a deviation.
-
-${CONTRACT}
-
-${GIT(item.branch, 'main', [], item.title)}
-
-${CHECKS(key)}`,
-        { label: `fix:${key}`, phase: 'Implement', model: CODER, isolation: 'worktree', schema: IMPL_SCHEMA })
-      if (!impl || !impl.pushed) { log(`${item.branch}: no branch was published`); return { area, ok: false, impl } }
-      const rf = await reviewAndFix(item, impl)
-      return { area, branch: item.branch, ok: true, impl, ...rf }
-    })
+  const fixes = await fixFindings(serious, stack, 'p1', 'the phase-1 test pass')
   return { phase: 1, scout, stack, tests: AREAS.map((a, i) => ({ area: a[0], result: tests[i] })), minor: raw.filter(f => f.severity === 'minor'), fixes,
     left_for_a_person: ['Merge pull request #19 and the fix pull requests after reading them', 'Remove leftover worktrees under .claude/worktrees/ (git worktree remove)', `The test stack is still running (Compose project australis-test, ${stack.frontend_url}); stop it with: docker compose -p australis-test down`] }
 }

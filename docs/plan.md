@@ -45,11 +45,117 @@ A phase is open when its kickoff branch is published. The kickoff does the work 
 
 Rules for every phase:
 
+- **A checkpoint closes each phase** (see "Checkpoints"). The next phase opens only after it passes.
 - **Kickoff first.** Before a phase starts, one person publishes `phase/<N>` and opens its pull request to `main`. The kickoff holds the kernel additions, the new module skeletons, and an empty submodule (a "seam") for each feature that shares a crate with another feature. The kickoff is the only package in a phase that edits the frozen shared files.
 - **One branch and one pull request per feature**, named `feat/<id>-<slug>` with the id in lower case.
 - **Migrations.** Each feature has its own range of ten numbers: feature `F<NN>` uses `0600 + (NN - 10) * 10` onwards (F10 is 0600 to 0609, F20 is 0700 to 0709). Kickoffs use the core range (0002 to 0049).
 - **Placeholders.** Nothing calls an outside service. A feature that would need one uses a placeholder provider behind a trait and shows the "Simulado" badge.
 - **Models, when agents do the work.** Sonnet writes all code. Opus or Fable only plan and review.
+
+## Checkpoints
+
+A checkpoint closes a phase. At a checkpoint `main` is demo ready: the product can be shown to an audience from start to finish with no workaround. The next phase does not open until the checkpoint passes.
+
+| Checkpoint | Closes | Runs on | The demo in one line |
+|---|---|---|---|
+| A. First build works | Phase 1 | Local test stack, placeholders | A professor builds a campus and teaches a class; a student follows it |
+| B. One product, live | Phase 0 | Test stack with the core, then `campusia.tech` | One sign-in by email code, both kinds of course, a real AI change |
+| C. Records | Phase 2 | `campusia.tech` | A class leaves attendance and a summary; grades go to the secretary |
+| D. Follow-up and closing | Phase 3 | `campusia.tech` | The secretary closes grades, sees who is at risk and exports the record |
+| E. Student experience | Phase 4 | `campusia.tech` | A student studies from one page, answers the survey and gets a certificate |
+| F. Final | Phase 5 | `campusia.tech`, on a phone | The whole story on a phone, with real slides and a calendar |
+
+Phases 0 and 1 do not depend on each other, so A and B can be reached in either order. B also needs A.
+
+**A checkpoint passes when all of this is true:**
+
+1. Everything under "Needs" is merged. A feature that is not finished is left out of the screens; nothing half-working is shown.
+2. The automated end-to-end tests of this checkpoint and of every earlier one pass on a fresh database with fake data.
+3. The demo story has been run from the first step to the last twice, by two different people or agents, without help and without skipping a step.
+4. There is no open finding of severity blocker or major.
+5. Placeholder data shows the "Simulado" badge, and unconfirmed rules are marked as unconfirmed.
+6. For a live checkpoint: it is deployed, the health check is green, and going back to the previous checkpoint's tag has been tried once.
+7. `main` is tagged `checkpoint-a`, `checkpoint-b` and so on. A demo is always given from the latest tag, never from a branch.
+
+**End-to-end tests.** They live in `pruebas/australis/checkpoint-<letter>/`, as Playwright tests in the style of `pruebas/fase-*`: `aceptacion/` for what must work and `ataque/` for what must be refused. Task M8 creates the folder and the tests for checkpoint A, so checkpoint A cannot pass before M8 is merged. From then on, every feature's pull request adds its own tests to the folder of the checkpoint that closes its phase.
+
+### Checkpoint A: first build works
+
+- **Needs:** T1, T2, T3, M8.
+- **Demo story:**
+  1. The secretary signs in and creates a professor.
+  2. The professor signs in and creates a campus from a template.
+  3. The professor asks the AI for a change, previews it and accepts it; then restores the earlier revision.
+  4. The professor imports students from an Excel file, checks the preview and confirms.
+  5. The professor adds graded items and pastes 30 grades from a spreadsheet.
+  6. The professor creates today's class and uploads a PDF presentation.
+  7. A student accepts the invite, signs in, and sees the course, the grades and the "join today's class" button.
+  8. The professor presents; the student's page follows each slide, browses away, and comes back to the live slide.
+  9. The professor ends the class; the recording and the transcript appear on the class page.
+- **Must be refused:** a professor on another professor's campus; a student writing a grade; a student reading another student's grades; a request to the AI to change a grade; a suspended student.
+
+### Checkpoint B: one product, live
+
+- **Needs:** checkpoint A, M1 to M5, M7. It passes first on a test stack that runs the core and Australis together. Then M6 switches production, and steps 1, 2 and 6 are repeated on `campusia.tech`.
+- **Demo story:**
+  1. A person signs in at `campusia.tech` with an email code. There is no password anywhere.
+  2. The course list shows a campus with modules and a free course side by side, with the same look.
+  3. A professor creates a campus with modules from the course list and lands in it without signing in again.
+  4. The professor asks the AI for a change. A real model answers, the preview shows it, and the token quota in the core goes down.
+  5. The professor imports students in the campus; the administrator sees those enrolments in the core.
+  6. A university administrator opens the campus as secretary; a student of another campus is refused.
+  7. A change merged to `main` is live within minutes, and a failed deploy goes back to the earlier version by itself.
+- **Must be refused:** a forged or expired identity header; a request that reaches Australis without going through the core; a person disabled in the core; a professor with no token quota left asking the AI; any model credential readable from Australis.
+
+### Checkpoint C: records
+
+- **Needs:** checkpoint B, K2, F10 to F17.
+- **Demo story:**
+  1. A student's home shows the next step: the class today.
+  2. The professor ends the class and takes attendance from the session, then corrects one student with a reason.
+  3. The professor generates the class summary, edits it and approves it; only then does the student see it.
+  4. The student writes notes on two slides and exports them.
+  5. The professor overrides the grading scale for this campus, then sends the grades to the secretary.
+  6. The secretary finds the campus in the list of all campuses, checks the grades and returns them with a note.
+  7. A student reports a problem from a campus page; the professor sees it in the inbox.
+- **Must be refused:** a student changing attendance; an attendance correction with no reason; a student reading a summary that is not approved; one student reading another's notes; a professor opening the list of all campuses; an AI call past the summary quota.
+
+### Checkpoint D: follow-up and closing
+
+- **Needs:** checkpoint C, K3, F20 to F28.
+- **Demo story:**
+  1. The professor's home shows today's tasks: take attendance, enter grades, review a summary.
+  2. The professor enters one grade for a group; every member gets it.
+  3. The secretary sees which campuses have grades missing, sent, checked or closed, and closes one.
+  4. The professor tries to change a closed grade and is refused; the secretary corrects it with a reason, and the log shows who, when and why.
+  5. One student's record shows attendance and grades together.
+  6. The secretary opens the dropout alerts, sees the reason for each, and marks one as handled.
+  7. The secretary exports grades and attendance and opens the file in Excel.
+  8. A student jumps from a slide to what was said on it in the transcript.
+  9. The secretary filters a list and suspends three students at once with one reason.
+- **Must be refused:** a teacher editing a closed gradebook; a secretary correction with no reason; a professor reading alerts or exports of another campus; a student opening another student's record.
+
+### Checkpoint E: student experience
+
+- **Needs:** checkpoint D, K4, F30 to F34.
+- **Demo story:**
+  1. During a live presentation the professor asks a poll; the results show on screen.
+  2. After class the student opens study mode: slides, recording, transcript, summary and notes on one page.
+  3. The student asks for an explanation and for practice questions; the questions appear only after the professor approves them.
+  4. The course ends. The student cannot open the next course until the survey is answered, then can.
+  5. The secretary sees the response rate, with no way to see who answered what.
+  6. The student downloads an attendance certificate and a completion certificate, both marked "No oficial"; the secretary looks one up by its code.
+- **Must be refused:** opening the next course with the survey pending; a completion certificate before grades are closed; study help past the student's daily quota; a survey answer traced to a student.
+
+### Checkpoint F: final
+
+- **Needs:** checkpoint E, K5, F40 to F43. F44 and F45 are not needed.
+- **Demo story:**
+  1. The stories of checkpoints A to E, shortened to ten minutes, run on a phone.
+  2. The professor uploads a `.pptx` and presents it.
+  3. The student subscribes to the class calendar from Outlook and sees the next class.
+  4. A person signs in with the Microsoft option (simulated unless the university has allowed it).
+- **Must be refused:** a calendar link guessed or reused after it was reset; everything refused at the earlier checkpoints, checked again.
 
 ## Dependency map
 
@@ -58,8 +164,9 @@ Rules for every phase:
 ```
 CampusAi merge
   <- M1 deploy Australis on the server  <- M6 switch production to this repository
-  <- M2 one sign-in                     <- M3 one course list, M4 real AI through the model proxy, M8 browser tests
+  <- M2 one sign-in                     <- M3 one course list, M4 real AI through the model proxy
   <- M5 one visual design
+  <- M8 browser tests                   <- checkpoint A
   <- M7 CI for the Campus IA folders    <- M6 switch production to this repository
 M4 real AI <- F11 class summary and F33 study help stop being simulated (they can still be built on the placeholder)
 
@@ -102,7 +209,7 @@ There is no kickoff. The tasks own different folders, except where a dependency 
 | M5 | One visual design | CampusAi merge | `frontend/src/shared/ui/**` |
 | M6 | Switch production to this repository | M1, M7 | Operations. A person with the credentials does it |
 | M7 | CI for the Campus IA folders | CampusAi merge | `.github/workflows/**` |
-| M8 | Browser tests for Australis | M2 | a new `pruebas/australis/**` |
+| M8 | Browser tests for Australis | CampusAi merge | a new `pruebas/australis/**` |
 
 - **M1 Deploy.** A second systemd service for the Australis backend on its own local port (the core already uses 8080), with its database and uploads under `/srv/campusia`. The continuous deploy builds, tests and installs `backend/` and `frontend/` next to the core, checks health, and rolls both back together. The daily backup and Litestream include the Australis database and uploads. Ansible installs all of it. Tests in the style of the existing infrastructure tests.
 - **M2 One sign-in.** The core reserves one address for Australis, forwards to it, strips cookies and adds the signed identity header with the person's platform role. Australis gets a second way to identify the caller: verify the header (Ed25519 public key from the environment), create the account on first sight, and map roles (owner and university administrator to secretary, professor mark to professor, everyone else to student). A setting chooses the mode; password sign-in stays for local development and the tests. In header mode the password routes and invites are off. An account that is suspended or disabled in the core has no access in Australis.
@@ -111,7 +218,7 @@ There is no kickoff. The tasks own different folders, except where a dependency 
 - **M5 One design.** The Australis design tokens take the palette, type and bar of `prototipo/campus.html`, so moving between the two does not look like changing product.
 - **M6 Switch production.** Point the server's deploy at this repository (deploy key, webhook, `despliegue_origen` in Ansible). After this, every merge to `main` is live within 5 minutes, so it comes last and only when M1 and M7 are merged.
 - **M7 CI.** GitHub jobs for `nucleo` (cargo test), `interfaz`, `sdk` and `plantilla-curso` (pnpm build and test), and a check that no secret is committed (`pruebas/tramo-infraestructura/test_secretos.py`).
-- **M8 Browser tests.** Playwright tests for the first-build features of Australis, in the style of `pruebas/fase-*`: acceptance (what must work) and attack (what must be refused). Later phases use them in place of a manual pass.
+- **M8 Browser tests.** Playwright tests for checkpoint A in `pruebas/australis/checkpoint-a/`, in the style of `pruebas/fase-*`: acceptance (the demo story) and attack (what must be refused). They start their own stack on a fresh database and sign in with the password mode, so they do not wait for M2. One command runs them from nothing.
 
 Decisions for phase 0 (agreed 2026-11-13):
 
@@ -237,4 +344,4 @@ Every feature here depends only on the first build.
 Workflow({ scriptPath: "<repo>/workflows/phase.js", args: { phase: 2 } })
 ```
 
-`phase: 0` runs the tasks that join the two systems (M6 is left for a person). Optional arguments: `only: ["F10", "F13"]` to build some features, `max: 3` to cap how many features one run starts.
+`phase: 0` runs the tasks that join the two systems (M6 is left for a person). `{ checkpoint: "A" }` runs a checkpoint in place of a phase: it starts a test stack, runs the end-to-end tests, walks the demo story twice, tries what must be refused, opens fix pull requests for what it finds, and reports whether the checkpoint passes. Optional arguments for a phase: `only: ["F10", "F13"]` to build some features, `max: 3` to cap how many features one run starts.
