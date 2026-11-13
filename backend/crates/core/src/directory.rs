@@ -89,6 +89,8 @@ pub struct Campus {
     pub name: String,
     pub owner_id: i64,
     pub created_at: String,
+    /// The platform's id of the university the campus belongs to, if any.
+    pub university: Option<String>,
 }
 
 /// A campus as one user sees it.
@@ -204,6 +206,78 @@ pub async fn list_users(conn: &mut SqliteConnection) -> AppResult<Vec<User>> {
     .fetch_all(conn)
     .await?;
     Ok(users)
+}
+
+/// The users a secretary screen may show: everyone for the owner, only the administrator's
+/// own university for a university administrator.
+pub async fn list_users_for(
+    conn: &mut SqliteConnection,
+    actor: &CurrentUser,
+) -> AppResult<Vec<User>> {
+    let Some(university) = university_scope(conn, actor.id).await? else {
+        return list_users(conn).await;
+    };
+    let users = sqlx::query_as::<_, User>(&format!(
+        "{USER_SELECT} WHERE u.university = ? ORDER BY u.full_name COLLATE NOCASE, u.id"
+    ))
+    .bind(university)
+    .fetch_all(conn)
+    .await?;
+    Ok(users)
+}
+
+/// The university a secretary is limited to: `Some` for a university administrator, `None`
+/// for a secretary with rights on every campus (the owner) and for everyone else.
+pub async fn university_scope(
+    conn: &mut SqliteConnection,
+    user_id: i64,
+) -> AppResult<Option<String>> {
+    let scope: Option<String> = sqlx::query_scalar(
+        "SELECT university FROM core_users
+         WHERE id = ? AND administers_university = 1 AND role = 'secretary'",
+    )
+    .bind(user_id)
+    .fetch_optional(conn)
+    .await?
+    .flatten();
+    Ok(scope)
+}
+
+/// The university and administrator flag stored for a person.
+pub async fn platform_university(
+    conn: &mut SqliteConnection,
+    user_id: i64,
+) -> AppResult<(Option<String>, bool)> {
+    let row: (Option<String>, bool) =
+        sqlx::query_as("SELECT university, administers_university FROM core_users WHERE id = ?")
+            .bind(user_id)
+            .fetch_one(conn)
+            .await?;
+    Ok(row)
+}
+
+/// Records the university the platform says a person belongs to and whether they administer it.
+pub async fn set_university(
+    conn: &mut SqliteConnection,
+    user_id: i64,
+    university: Option<&str>,
+    administers: bool,
+) -> AppResult<()> {
+    sqlx::query("UPDATE core_users SET university = ?, administers_university = ? WHERE id = ?")
+        .bind(university)
+        .bind(administers && university.is_some())
+        .bind(user_id)
+        .execute(conn)
+        .await?;
+    Ok(())
+}
+
+/// Whether a secretary with this scope has secretary rights on a campus of that university.
+pub fn scope_reaches(scope: Option<&str>, campus_university: Option<&str>) -> bool {
+    match scope {
+        None => true,
+        Some(scope) => campus_university == Some(scope),
+    }
 }
 
 /// A user together with the stored password hash, for sign-in only.
@@ -340,11 +414,15 @@ pub async fn create_campus(
 ) -> AppResult<Campus> {
     let name = required_text(name, "the campus name", 200)?;
     let mut tx = crate::begin_nested(conn).await?;
-    let result = sqlx::query("INSERT INTO core_campuses (name, owner_id) VALUES (?, ?)")
-        .bind(&name)
-        .bind(owner_id)
-        .execute(&mut *tx)
-        .await?;
+    let result = sqlx::query(
+        "INSERT INTO core_campuses (name, owner_id, university)
+         VALUES (?, ?, (SELECT university FROM core_users WHERE id = ?))",
+    )
+    .bind(&name)
+    .bind(owner_id)
+    .bind(owner_id)
+    .execute(&mut *tx)
+    .await?;
     let campus_id = result.last_insert_rowid();
     add_member(
         &mut tx,
@@ -363,7 +441,7 @@ pub async fn create_campus(
 
 pub async fn find_campus(conn: &mut SqliteConnection, campus_id: i64) -> AppResult<Option<Campus>> {
     let campus = sqlx::query_as::<_, Campus>(
-        "SELECT id, name, owner_id, created_at FROM core_campuses WHERE id = ?",
+        "SELECT id, name, owner_id, created_at, university FROM core_campuses WHERE id = ?",
     )
     .bind(campus_id)
     .fetch_optional(conn)
@@ -377,18 +455,25 @@ struct CampusRow {
     name: String,
     owner_id: i64,
     created_at: String,
+    university: Option<String>,
     member_role: Option<MemberRole>,
 }
 
-/// The campuses a user can open: every campus for a secretary, otherwise the ones where the
+/// The campuses a user can open: every campus for a secretary (only the ones of their university
+/// for a university administrator), otherwise the ones where the
 /// user is an active member. A student's courses are exactly this list.
 pub async fn campuses_for_user(
     conn: &mut SqliteConnection,
     user: &CurrentUser,
 ) -> AppResult<Vec<CampusForUser>> {
     let is_secretary = user.role == Role::Secretary;
+    let scope = if is_secretary {
+        university_scope(conn, user.id).await?
+    } else {
+        None
+    };
     let rows = sqlx::query_as::<_, CampusRow>(
-        "SELECT c.id, c.name, c.owner_id, c.created_at, m.role AS member_role
+        "SELECT c.id, c.name, c.owner_id, c.created_at, c.university, m.role AS member_role
          FROM core_campuses c
          LEFT JOIN core_members m
             ON m.campus_id = c.id AND m.user_id = ?1 AND m.status = 'active'
@@ -403,11 +488,12 @@ pub async fn campuses_for_user(
     Ok(rows
         .into_iter()
         .filter_map(|row| {
-            let access = if is_secretary {
-                Access::Manage
-            } else {
-                Access::of_member(row.member_role?)
-            };
+            let access =
+                if is_secretary && scope_reaches(scope.as_deref(), row.university.as_deref()) {
+                    Access::Manage
+                } else {
+                    Access::of_member(row.member_role?)
+                };
             Some(CampusForUser {
                 id: row.id,
                 name: row.name,

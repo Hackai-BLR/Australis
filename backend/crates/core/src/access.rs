@@ -5,9 +5,12 @@
 //!
 //! | Level  | Who has it                                   | Used for                          |
 //! |--------|----------------------------------------------|-----------------------------------|
-//! | Manage | the secretary; a professor member            | shaping, importing, settings      |
+//! | Manage | the secretary*; a professor member            | shaping, importing, settings      |
 //! | Teach  | Manage, plus a guest member                  | grading, classes, presenting      |
 //! | View   | Teach, plus an active student member         | reading the campus                |
+//!
+//! *A university administrator is a secretary only on the campuses of their own university;
+//! the owner is one everywhere.
 //!
 //! A suspended member has no access. A suspended user cannot even sign in (`CurrentUser`
 //! rejects the session).
@@ -66,6 +69,28 @@ pub fn require_role(user: &CurrentUser, allowed: &[Role]) -> AppResult<()> {
     }
 }
 
+/// 403 unless the secretary may act on this person: the owner may on anyone, a university
+/// administrator only on people of their own university. 404 if the person does not exist.
+pub async fn require_user_in_scope(
+    conn: &mut SqliteConnection,
+    actor: &CurrentUser,
+    user_id: i64,
+) -> AppResult<()> {
+    let Some(scope) = directory::university_scope(conn, actor.id).await? else {
+        return Ok(());
+    };
+    let university: Option<Option<String>> =
+        sqlx::query_scalar("SELECT university FROM core_users WHERE id = ?")
+            .bind(user_id)
+            .fetch_optional(conn)
+            .await?;
+    match university {
+        None => Err(AppError::NotFound),
+        Some(university) if university.as_deref() == Some(scope.as_str()) => Ok(()),
+        Some(_) => Err(AppError::Forbidden),
+    }
+}
+
 /// Checks that the user has at least `needed` on the campus. 404 if the campus does not
 /// exist, 403 if the user lacks the level.
 pub async fn require_campus(
@@ -81,7 +106,14 @@ pub async fn require_campus(
         .await?
         .filter(|member| member.status == MemberStatus::Active)
         .map(|member| member.role);
-    let level = if user.role == Role::Secretary {
+    let scope = if user.role == Role::Secretary {
+        directory::university_scope(conn, user.id).await?
+    } else {
+        None
+    };
+    let level = if user.role == Role::Secretary
+        && directory::scope_reaches(scope.as_deref(), campus.university.as_deref())
+    {
         Some(Access::Manage)
     } else {
         // A professor or guest seat only counts for an account that still has a teaching

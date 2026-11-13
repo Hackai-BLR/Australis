@@ -51,6 +51,11 @@ fn claims(email: &str, name: &str, rol: &str, administrador: bool) -> Value {
     })
 }
 
+fn in_university(mut claims: Value, university: &str) -> Value {
+    claims["universidad"] = json!(university);
+    claims
+}
+
 fn sign_with(key: &SigningKey, claims: &Value) -> String {
     let payload = URL_SAFE_NO_PAD.encode(claims.to_string());
     let signature = URL_SAFE_NO_PAD.encode(key.sign(payload.as_bytes()).to_bytes());
@@ -130,14 +135,24 @@ async fn platform_roles_map_to_australis_roles() {
     let app = header_app().await;
     let cases = [
         ("owner@demo.test", "dueño", false, "secretary"),
+        ("owner-flag@demo.test", "dueño", true, "secretary"),
         ("admin@demo.test", "alumno", true, "secretary"),
         ("admin-prof@demo.test", "profesor", true, "secretary"),
+        ("admin-sin-univ@demo.test", "alumno", true, "student"),
         ("prof@demo.test", "profesor", false, "professor"),
         ("alumno@demo.test", "alumno", false, "student"),
         ("raro@demo.test", "otra-cosa", false, "student"),
     ];
     for (email, rol, administrador, expected) in cases {
-        let header = sign(&claims(email, "Persona Demo", rol, administrador));
+        let header = sign(&in_university(
+            claims(email, "Persona Demo", rol, administrador),
+            "uni-a",
+        ));
+        let header = if email.contains("sin-univ") {
+            sign(&claims(email, "Persona Demo", rol, administrador))
+        } else {
+            header
+        };
         let response = me(&app, Some(&header)).await;
         assert_eq!(response.status, StatusCode::OK, "{email}");
         assert_eq!(response.json()["role"], expected, "{email}");
@@ -465,4 +480,261 @@ async fn losing_the_professor_mark_removes_manage_access_on_campuses() {
     assert_eq!(me(&app, Some(&demoted)).await.json()["role"], "student");
     let denied = call(&app, Method::POST, &uri, Some(&demoted), None, body()).await;
     assert_eq!(denied.status, StatusCode::FORBIDDEN);
+}
+
+struct TwoUniversities {
+    app: TestApp,
+    owner: String,
+    admin_a: String,
+    admin_b: String,
+    campus_a: i64,
+    campus_b: i64,
+    prof_b_id: i64,
+}
+
+async fn two_universities() -> TwoUniversities {
+    let app = header_app().await;
+    let mut ids = Vec::new();
+    let mut campuses = Vec::new();
+    for (email, university, name) in [
+        ("prof-a@a.test", "uni-a", "Campus A"),
+        ("prof-b@b.test", "uni-b", "Campus B"),
+    ] {
+        let header = sign(&in_university(
+            claims(email, "Profesor", "profesor", false),
+            university,
+        ));
+        ids.push(me(&app, Some(&header)).await.json()["id"].as_i64().unwrap());
+        let created = call(
+            &app,
+            Method::POST,
+            "/api/campuses",
+            Some(&header),
+            None,
+            Some(json!({ "name": name, "template_key": "weekly_topics" })),
+        )
+        .await;
+        assert_eq!(created.status, StatusCode::CREATED, "{}", created.json());
+        campuses.push(created.json()["id"].as_i64().unwrap());
+    }
+    let mut conn = app.db.acquire().await.unwrap();
+    for (campus, university) in campuses.iter().zip(["uni-a", "uni-b"]) {
+        let found = directory::find_campus(&mut conn, *campus)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(found.university.as_deref(), Some(university));
+    }
+    drop(conn);
+    let admin = |email: &str, university: &str| {
+        sign(&in_university(
+            claims(email, "Administrador", "alumno", true),
+            university,
+        ))
+    };
+    TwoUniversities {
+        owner: sign(&claims("owner@demo.test", "Dueño", "dueño", false)),
+        admin_a: admin("admin-a@a.test", "uni-a"),
+        admin_b: admin("admin-b@b.test", "uni-b"),
+        campus_a: campuses[0],
+        campus_b: campuses[1],
+        prof_b_id: ids[1],
+        app,
+    }
+}
+
+#[tokio::test]
+async fn an_administrator_is_the_secretary_of_their_own_university() {
+    let t = two_universities().await;
+    let own = format!("/api/campuses/{}", t.campus_a);
+    let response = call(&t.app, Method::GET, &own, Some(&t.admin_a), None, None).await;
+    assert_eq!(response.status, StatusCode::OK);
+    assert_eq!(response.json()["access"], "manage");
+    assert_eq!(
+        me(&t.app, Some(&t.admin_a)).await.json()["role"],
+        "secretary"
+    );
+
+    let import = call(
+        &t.app,
+        Method::POST,
+        &format!("{own}/roster/imports"),
+        Some(&t.admin_a),
+        None,
+        Some(json!({ "text": "Ana Pérez,ana@alumnos.test" })),
+    )
+    .await;
+    assert_eq!(import.status, StatusCode::CREATED);
+
+    let list = call(
+        &t.app,
+        Method::GET,
+        "/api/campuses",
+        Some(&t.admin_a),
+        None,
+        None,
+    )
+    .await;
+    let names: Vec<Value> = list
+        .json()
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|c| c["name"].clone())
+        .collect();
+    assert_eq!(names, vec![json!("Campus A")]);
+}
+
+#[tokio::test]
+async fn the_owner_keeps_the_secretary_rights_on_every_campus() {
+    let t = two_universities().await;
+    for campus in [t.campus_a, t.campus_b] {
+        let response = call(
+            &t.app,
+            Method::GET,
+            &format!("/api/campuses/{campus}"),
+            Some(&t.owner),
+            None,
+            None,
+        )
+        .await;
+        assert_eq!(response.status, StatusCode::OK);
+        assert_eq!(response.json()["access"], "manage");
+    }
+    let list = call(
+        &t.app,
+        Method::GET,
+        "/api/campuses",
+        Some(&t.owner),
+        None,
+        None,
+    )
+    .await;
+    assert_eq!(list.json().as_array().unwrap().len(), 2);
+    let users = call(
+        &t.app,
+        Method::GET,
+        "/api/users",
+        Some(&t.owner),
+        None,
+        None,
+    )
+    .await;
+    assert_eq!(users.json().as_array().unwrap().len(), 3);
+}
+
+#[tokio::test]
+async fn an_administrator_of_one_university_is_refused_on_another_universitys_campus() {
+    let t = two_universities().await;
+    let other = format!("/api/campuses/{}", t.campus_b);
+    let attempts = [
+        (Method::GET, other.clone(), None),
+        (
+            Method::PUT,
+            format!("{other}/document"),
+            Some(json!({ "version": 1, "document": {} })),
+        ),
+        (
+            Method::POST,
+            format!("{other}/roster/imports"),
+            Some(json!({ "text": "Ana Pérez,ana@alumnos.test" })),
+        ),
+        (Method::GET, format!("{other}/revisions"), None),
+    ];
+    for (method, uri, body) in attempts {
+        let response = call(&t.app, method.clone(), &uri, Some(&t.admin_a), None, body).await;
+        assert_eq!(response.status, StatusCode::FORBIDDEN, "{method} {uri}");
+    }
+    let swapped = call(&t.app, Method::GET, &other, Some(&t.admin_b), None, None).await;
+    assert_eq!(swapped.status, StatusCode::OK);
+}
+
+#[tokio::test]
+async fn an_administrator_sees_only_their_universitys_people_and_cannot_act_on_others() {
+    let t = two_universities().await;
+    let list = call(
+        &t.app,
+        Method::GET,
+        "/api/users",
+        Some(&t.admin_a),
+        None,
+        None,
+    )
+    .await;
+    assert_eq!(list.status, StatusCode::OK);
+    let emails: Vec<String> = list
+        .json()
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|u| u["email"].as_str().unwrap().to_string())
+        .collect();
+    assert_eq!(emails.len(), 2, "{emails:?}");
+    assert!(emails.contains(&"prof-a@a.test".to_string()));
+    assert!(emails.contains(&"admin-a@a.test".to_string()));
+
+    let suspend = call(
+        &t.app,
+        Method::PATCH,
+        &format!("/api/users/{}", t.prof_b_id),
+        Some(&t.admin_a),
+        None,
+        Some(json!({ "status": "suspended", "reason": "intento" })),
+    )
+    .await;
+    assert_eq!(suspend.status, StatusCode::FORBIDDEN);
+    let mut conn = t.app.db.acquire().await.unwrap();
+    let user = directory::find_user(&mut conn, t.prof_b_id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(user.status, UserStatus::Active);
+}
+
+#[tokio::test]
+async fn a_campus_created_by_an_administrator_belongs_to_their_university() {
+    let t = two_universities().await;
+    let created = call(
+        &t.app,
+        Method::POST,
+        "/api/campuses",
+        Some(&t.admin_a),
+        None,
+        Some(json!({ "name": "Nuevo", "template_key": "weekly_topics" })),
+    )
+    .await;
+    assert_eq!(created.status, StatusCode::CREATED, "{}", created.json());
+    let id = created.json()["id"].as_i64().unwrap();
+    let uri = format!("/api/campuses/{id}");
+    assert_eq!(
+        call(&t.app, Method::GET, &uri, Some(&t.admin_a), None, None)
+            .await
+            .status,
+        StatusCode::OK
+    );
+    assert_eq!(
+        call(&t.app, Method::GET, &uri, Some(&t.admin_b), None, None)
+            .await
+            .status,
+        StatusCode::FORBIDDEN
+    );
+}
+
+#[tokio::test]
+async fn an_administrator_without_a_university_or_who_stops_administering_loses_the_rights() {
+    let t = two_universities().await;
+    let own = format!("/api/campuses/{}", t.campus_a);
+    let no_university = sign(&claims("admin-a@a.test", "Administrador", "alumno", true));
+    let response = call(&t.app, Method::GET, &own, Some(&no_university), None, None).await;
+    assert_eq!(response.status, StatusCode::FORBIDDEN);
+
+    let stopped = sign(&in_university(
+        claims("admin-a@a.test", "Administrador", "alumno", false),
+        "uni-a",
+    ));
+    let response = call(&t.app, Method::GET, &own, Some(&stopped), None, None).await;
+    assert_eq!(response.status, StatusCode::FORBIDDEN);
+
+    let again = call(&t.app, Method::GET, &own, Some(&t.admin_a), None, None).await;
+    assert_eq!(again.status, StatusCode::OK);
 }
