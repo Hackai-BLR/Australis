@@ -8,7 +8,7 @@ use australis_core::{
 };
 use axum::http::StatusCode;
 use common::TestApp;
-use serde_json::Value;
+use serde_json::{json, Value};
 
 fn names(list: &Value, key: &str) -> Vec<String> {
     list.as_array()
@@ -166,10 +166,16 @@ async fn a_person_links_to_each_of_their_campuses() {
     assert!(body.get("password_hash").is_none());
     let memberships = body["memberships"].as_array().unwrap();
     assert_eq!(memberships.len(), 2);
-    assert_eq!(memberships[0]["campus_id"], first);
-    assert_eq!(memberships[0]["status"], "active");
-    assert_eq!(memberships[1]["campus_id"], second);
-    assert_eq!(memberships[1]["status"], "suspended");
+    // The list is ordered by campus name ("Test campus 10" sorts before "Test campus 9"),
+    // so look each campus up instead of relying on the position.
+    let status_of = |campus: i64| {
+        memberships
+            .iter()
+            .find(|m| m["campus_id"] == campus)
+            .map(|m| m["status"].clone())
+    };
+    assert_eq!(status_of(first), Some(json!("active")));
+    assert_eq!(status_of(second), Some(json!("suspended")));
 
     let (status, _) = app
         .get("/api/admin/people/99999", Some(&secretary.cookie))
