@@ -22,6 +22,7 @@ use serde_json::Value;
 use sqlx::SqliteConnection;
 
 pub mod document;
+mod settings;
 mod shaping;
 pub mod store;
 pub mod templates;
@@ -42,6 +43,7 @@ pub fn router() -> Router<AppState> {
         .route("/campuses/{id}/revisions/{rev}", get(get_revision))
         .route("/campuses/{id}/revisions/{rev}/restore", post(restore))
         .merge(shaping::router())
+        .merge(settings::router())
 }
 
 // --- responses ------------------------------------------------------------------------------

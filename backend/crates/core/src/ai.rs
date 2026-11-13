@@ -40,6 +40,9 @@ use crate::{settings, AppError, AppResult, AppState, ProviderError};
 /// The feature name of campus shaping, as used in quota keys and the usage log.
 pub const FEATURE_SHAPING: &str = "shaping";
 
+/// The feature name of the class summary (quota key `ai.summary.daily_quota`).
+pub const FEATURE_SUMMARY: &str = "summary";
+
 /// A tool the provider may call. `input_schema` is a JSON Schema object.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct AiTool {
@@ -103,7 +106,10 @@ pub trait AiProvider: Send + Sync {
 // Placeholder provider
 // ---------------------------------------------------------------------------------------
 
-const SCRIPT_FILES: &[&str] = &[include_str!("../scripts/shaping.json")];
+const SCRIPT_FILES: &[&str] = &[
+    include_str!("../scripts/shaping.json"),
+    include_str!("../scripts/summary.json"),
+];
 const PLACEHOLDER_MODEL: &str = "placeholder-scripted";
 const NO_SCRIPT_REPLY: &str = "Esta es una respuesta simulada: el asistente de IA todavía no \
     está conectado y esta función no tiene respuestas preparadas.";
@@ -860,10 +866,27 @@ mod tests {
         assert!(reply.text.contains("respuesta simulada"));
 
         let mut other = request("agregá la bibliografía", &["add_section"]);
-        other.feature = "summary".into();
+        other.feature = "no-such-feature".into();
         let reply = ai.complete(&other, &ticket()).await.unwrap();
         assert!(reply.tool_calls.is_empty());
         assert_eq!(reply.text, NO_SCRIPT_REPLY);
+    }
+
+    #[tokio::test]
+    async fn the_class_summary_has_a_scripted_reply_for_any_instruction() {
+        let ai = PlaceholderAi::new();
+        for instruction in [
+            "Resumí la clase",
+            "hacé lo que quieras con esta transcripción",
+        ] {
+            let mut summary = request(instruction, &[]);
+            summary.feature = FEATURE_SUMMARY.into();
+            let reply = ai.complete(&summary, &ticket()).await.unwrap();
+            assert!(reply.tool_calls.is_empty());
+            assert!(reply.text.contains("Puntos clave"), "{}", reply.text);
+            assert!(reply.text.contains("Tareas para la próxima clase"));
+            assert!(reply.text.contains("simulado"));
+        }
     }
 
     #[test]

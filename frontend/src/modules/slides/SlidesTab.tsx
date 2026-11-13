@@ -14,6 +14,7 @@ import {
 } from "./api";
 import { isBrowsing, viewPage, type LiveState } from "./follower";
 import { NotesPanel } from "./notes/NotesPanel";
+import { NotesSlot } from "./notes/NotesSlot";
 import { PdfViewer } from "./PdfViewer";
 import { POLL_MS, useLiveFollow } from "./useLiveFollow";
 import { useCampusId } from "./useCampusId";
@@ -319,38 +320,40 @@ function FollowerView({ campusId }: { campusId: string }) {
   const behind = isBrowsing(state);
   const browse = (p: number) => dispatch({ type: "browse", page: p });
   return (
-    <Card
-      title="Presentación en vivo"
-      actions={
-        behind ? (
-          <Button onClick={() => dispatch({ type: "backToLive" })}>Volver al vivo</Button>
-        ) : (
-          <Badge tone="success">Siguiendo al docente</Badge>
-        )
-      }
-    >
-      <PdfViewer url={presentationFileUrl(live.presentation_id)} page={page} />
-      <div className="slides-controls">
-        <Button variant="secondary" disabled={page <= 1} onClick={() => browse(page - 1)}>
-          Anterior
-        </Button>
-        <span aria-live="polite">
-          Página {page} de {live.page_count}
-        </span>
-        <Button
-          variant="secondary"
-          disabled={page >= live.page_count}
-          onClick={() => browse(page + 1)}
-        >
-          Siguiente
-        </Button>
-      </div>
-      {behind && (
-        <p className="slides-muted">
-          Estás explorando por tu cuenta. El docente está en la página {live.current_page}.
-        </p>
-      )}
-      <NotesPanel presentationId={live.presentation_id} page={page} />
-    </Card>
+    <div className="au-stack">
+      <Card
+        title="Presentación en vivo"
+        actions={
+          behind ? (
+            <Button onClick={() => dispatch({ type: "backToLive" })}>Volver al vivo</Button>
+          ) : (
+            <Badge tone="success">Siguiendo al docente</Badge>
+          )
+        }
+      >
+        <PdfViewer url={presentationFileUrl(live.presentation_id)} page={page} />
+        <div className="slides-controls">
+          <Button variant="secondary" disabled={page <= 1} onClick={() => browse(page - 1)}>
+            Anterior
+          </Button>
+          <span aria-live="polite">
+            Página {page} de {live.page_count}
+          </span>
+          <Button
+            variant="secondary"
+            disabled={page >= live.page_count}
+            onClick={() => browse(page + 1)}
+          >
+            Siguiente
+          </Button>
+        </div>
+        {behind && (
+          <p className="slides-muted">
+            Estás explorando por tu cuenta. El docente está en la página {live.current_page}.
+          </p>
+        )}
+      </Card>
+      <NotesSlot campusId={campusId} presentationId={live.presentation_id} page={page} />
+    </div>
   );
 }

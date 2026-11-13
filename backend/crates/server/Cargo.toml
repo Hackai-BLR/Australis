@@ -6,6 +6,7 @@ build = "build.rs"
 
 [dependencies]
 australis-core.workspace = true
+australis-admin.workspace = true
 australis-auth.workspace = true
 australis-campus.workspace = true
 australis-classes.workspace = true
@@ -13,6 +14,7 @@ australis-grades.workspace = true
 australis-health.workspace = true
 australis-roster.workspace = true
 australis-slides.workspace = true
+australis-support.workspace = true
 anyhow.workspace = true
 axum.workspace = true
 sqlx.workspace = true

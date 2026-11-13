@@ -7,7 +7,7 @@ use std::sync::{
 
 use async_trait::async_trait;
 use australis_core::{
-    zoom::{Meeting, MeetingRequest, Recording, ZoomProvider},
+    zoom::{Invitee, Meeting, MeetingRequest, Participant, Recording, ZoomProvider},
     ProviderError, Role,
 };
 use axum::http::StatusCode;
@@ -156,6 +156,13 @@ impl ZoomProvider for Staged {
             // After that the provider "forgets" the recording: status must not go back.
             _ => None,
         })
+    }
+    async fn fetch_participants(
+        &self,
+        _id: &str,
+        _invitees: &[Invitee],
+    ) -> Result<Vec<Participant>, ProviderError> {
+        Ok(Vec::new())
     }
 }
 
