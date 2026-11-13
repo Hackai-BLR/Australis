@@ -49,6 +49,7 @@ Rules for every phase:
 - **Kickoff first.** Before a phase starts, one person publishes `phase/<N>` and opens its pull request to `main`. The kickoff holds the kernel additions, the new module skeletons, and an empty submodule (a "seam") for each feature that shares a crate with another feature. The kickoff is the only package in a phase that edits the frozen shared files.
 - **One branch and one pull request per feature**, named `feat/<id>-<slug>` with the id in lower case.
 - **Migrations.** Each feature has its own range of ten numbers: feature `F<NN>` uses `0600 + (NN - 10) * 10` onwards (F10 is 0600 to 0609, F20 is 0700 to 0709). Kickoffs use the core range (0002 to 0049).
+- **Production is off limits** for every task except M6. No task contacts the real server, `campusia.tech`, Cloudflare or any real account, runs Ansible or OpenTofu against anything but a local container, or reads credentials. Everything is built and tested locally with fake data.
 - **Placeholders.** Nothing calls an outside service. A feature that would need one uses a placeholder provider behind a trait and shows the "Simulado" badge.
 - **Models, when agents do the work.** Sonnet writes all code. Opus or Fable only plan and review.
 
