@@ -279,8 +279,9 @@ async fn a_call_dropped_by_the_caller_deadline_is_still_logged() {
     let professor = app.login_as(Role::Professor).await;
 
     // The caller gives up exactly when the proxy has the request: no clock involved.
+    let req = request("agregá ética");
     tokio::select! {
-        _ = ai::run(&app.state, professor.id, None, &request("agregá ética")) => {
+        _ = ai::run(&app.state, professor.id, None, &req) => {
             panic!("the call finished before the proxy was released");
         }
         _ = fake.arrived.notified() => {}
