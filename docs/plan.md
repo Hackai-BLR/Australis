@@ -78,6 +78,8 @@ Phases 0 and 1 do not depend on each other, so A and B can be reached in either 
 6. For a live checkpoint: it is deployed, the health check is green, and going back to the previous checkpoint's tag has been tried once.
 7. `main` is tagged `checkpoint-a`, `checkpoint-b` and so on. A demo is always given from the latest tag, never from a branch.
 
+**Before a live demo.** Set `APP_BASE_URL` to the public address of the app where the demo runs: the placeholder Zoom links ("join today's class") are built from it, and its default `http://localhost:5173` opens a dead page elsewhere. Run with `AI_PROVIDER=placeholder` (scripted replies, "Simulado" badge) or with the real model; the checkpoint test stacks use a fake model for the proxy, which is for tests, not for a rehearsal in front of an audience.
+
 **End-to-end tests.** They live in `pruebas/australis/checkpoint-<letter>/`, as Playwright tests in the style of `pruebas/fase-*`: `aceptacion/` for what must work and `ataque/` for what must be refused. Task M8 creates the folder and the tests for checkpoint A, so checkpoint A cannot pass before M8 is merged. From then on, every feature's pull request adds its own tests to the folder of the checkpoint that closes its phase.
 
 ### Checkpoint A: first build works
