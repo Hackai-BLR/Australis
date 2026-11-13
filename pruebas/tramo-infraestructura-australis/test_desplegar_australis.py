@@ -8,6 +8,9 @@ INSTALAR = r'''#!/usr/bin/env bash
 set -euo pipefail
 mkdir -p "$CAMPUSIA_RAIZ/instalado"
 echo "$COMMIT" >> "$CAMPUSIA_RAIZ/instalado/historial"
+BASE_A="$CAMPUSIA_RAIZ/australis/datos/australis.db"
+if [ -e MIGRAR ] && [ -f "$BASE_A" ]; then sqlite3 "$BASE_A" "CREATE TABLE IF NOT EXISTS migrada (x INTEGER)"; fi
+if [ ! -e MIGRAR ] && [ -f "$BASE_A" ] && [ -n "$(sqlite3 "$BASE_A" "SELECT name FROM sqlite_master WHERE name='migrada'")" ]; then echo "binario viejo: migracion desconocida" >&2; exit 1; fi
 if [ -e ROMPER_AUSTRALIS ]; then touch "$CAMPUSIA_RAIZ/roto-8090"; else rm -f "$CAMPUSIA_RAIZ/roto-8090"; fi
 if [ -e ROMPER_NUCLEO ]; then touch "$CAMPUSIA_RAIZ/roto-8080"; else rm -f "$CAMPUSIA_RAIZ/roto-8080"; fi
 if [ -e FALLAR_INSTALACION_AUSTRALIS ] && [ -e compilado/bin/australis-server ]; then exit 1; fi
@@ -63,7 +66,7 @@ def esc(tmp_modulo):
 
 
 def commit(e, mensaje, marcas=()):
-    for m in ("ROMPER_AUSTRALIS", "ROMPER_NUCLEO", "SIN_AUSTRALIS", "FALLAR_INSTALACION_AUSTRALIS", "FALLAR_PRUEBAS_AUSTRALIS"):
+    for m in ("ROMPER_AUSTRALIS", "ROMPER_NUCLEO", "SIN_AUSTRALIS", "FALLAR_INSTALACION_AUSTRALIS", "FALLAR_PRUEBAS_AUSTRALIS", "MIGRAR"):
         (e.trabajo / m).unlink(missing_ok=True)
     for m in marcas:
         (e.trabajo / m).write_text("")
@@ -195,5 +198,24 @@ def test_la_copia_previa_incluye_la_base_de_australis(esc):
     con = sqlite3.connect(copia)
     try:
         assert con.execute("SELECT v FROM t").fetchall() == [("antes",)]
+    finally:
+        con.close()
+
+
+@pytest.mark.aceptacion
+def test_al_revertir_se_restaura_la_base_de_australis_anterior_a_la_migracion(esc):
+    import sqlite3
+
+    anterior = actual(esc)
+    commit(esc, "ocho", marcas=["MIGRAR", "ROMPER_NUCLEO"])
+    r = desplegar(esc)
+    assert r.returncode == 2, f"{r.stdout}\n{r.stderr}"
+    assert registro(esc)[-1]["resultado"] == "revertido", f"{r.stdout}\n{r.stderr}"
+    assert actual(esc) == anterior
+    assert instalado(esc, "australis") == anterior
+    con = sqlite3.connect(esc.raiz / "australis" / "datos" / "australis.db")
+    try:
+        assert con.execute("SELECT v FROM t").fetchall() == [("antes",)]
+        assert con.execute("SELECT name FROM sqlite_master WHERE name='migrada'").fetchall() == []
     finally:
         con.close()

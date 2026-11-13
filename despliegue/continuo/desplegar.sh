@@ -347,10 +347,19 @@ copia_de_datos() {
     sqlite3 "$base" ".backup '$DESPLIEGUE_DIR/previos/$NUEVO.db'" || decir "no se pudo copiar la base"
   fi
   local base_australis="$CAMPUSIA_RAIZ/australis/datos/australis.db"
+  rm -f "$DESPLIEGUE_DIR/previos/$NUEVO-australis.db"
   if [ -f "$base_australis" ] && command -v sqlite3 >/dev/null 2>&1; then
     mkdir -p "$DESPLIEGUE_DIR/previos"
     sqlite3 "$base_australis" ".backup '$DESPLIEGUE_DIR/previos/$NUEVO-australis.db'" || decir "no se pudo copiar la base de Australis"
   fi
+}
+
+restaurar_base_australis() {
+  local base_australis="$CAMPUSIA_RAIZ/australis/datos/australis.db"
+  local copia="$DESPLIEGUE_DIR/previos/$NUEVO-australis.db"
+  [ -f "$copia" ] && [ -f "$base_australis" ] || return 0
+  command -v sqlite3 >/dev/null 2>&1 || { decir "sin sqlite3: no se restaura la base de Australis"; return 0; }
+  sqlite3 "$base_australis" ".restore '$copia'" || decir "no se pudo restaurar la base de Australis"
 }
 
 anterior_disponible() {
@@ -374,6 +383,7 @@ copia_de_datos
 volver_a_la_anterior() {
   local espacio_tocado="$1"
   anterior_disponible || return 1
+  restaurar_base_australis
   etapa "$DESPLIEGUE_INSTALAR" "$ANTERIOR" || { decir "no se pudo reinstalar $ANTERIOR"; return 1; }
   if [ "$espacio_tocado" = 1 ]; then
     etapa "$DESPLIEGUE_ESPACIO" "$ANTERIOR" "$NUEVO" || { decir "no se pudo reconstruir el espacio de $ANTERIOR"; return 1; }
