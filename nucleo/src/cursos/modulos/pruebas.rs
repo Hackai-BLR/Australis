@@ -736,6 +736,7 @@ async fn el_administrador_de_la_universidad_ve_el_campus_con_modulos_y_sus_inscr
     assert_eq!(estado, 200);
     let campus = cursos["cursos"].as_array().unwrap().iter().find(|c| c["tipo"] == "modulos").expect("campus listed");
     assert_eq!(campus["id"], format!("campus-{id}"));
+    assert!(campus["campus_externo"].as_i64().unwrap() > 0, "the administrator needs the Australis id to open the campus: {campus}");
     assert_eq!(campus["alumnos"], 1);
     assert_eq!(campus["profesores"], 1);
     assert_eq!(campus["dueno"]["email"], "profe@univ.test");

@@ -41,6 +41,7 @@ interface CursoAdmin {
   version_publicada: number | null;
   uso_usd_mes: number;
   archivado?: boolean;
+  campus_externo?: number;
 }
 
 interface Evento {
@@ -379,7 +380,12 @@ function Cursos({ dominioBase, conUni }: { dominioBase: string; conUni: ConUni }
                   <td>
                     <button className="btn" data-inscriptos-campus={c.id} onClick={() => setInscriptos(c)}>
                       Ver inscriptos
-                    </button>
+                    </button>{' '}
+                    {c.campus_externo ? (
+                      <a className="btn" data-abrir-campus={c.id} href={`${window.location.protocol}//campus.${dominioBase}${window.location.port ? `:${window.location.port}` : ''}/campuses/${c.campus_externo}`}>
+                        Abrir como secretaría
+                      </a>
+                    ) : null}
                   </td>
                 ) : (
                   <CeldaAccionCursoAdmin
