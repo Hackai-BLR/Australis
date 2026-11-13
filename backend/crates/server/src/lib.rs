@@ -102,7 +102,9 @@ pub fn app(state: AppState) -> Router {
         .merge(australis_roster::router())
         .merge(australis_grades::router())
         .merge(australis_classes::router())
-        .merge(australis_slides::router());
+        .merge(australis_slides::router())
+        .merge(australis_admin::router())
+        .merge(australis_support::router());
 
     let api = api.route("/auth/mode", get(auth_mode));
 

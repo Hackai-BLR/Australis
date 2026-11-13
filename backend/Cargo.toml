@@ -10,6 +10,7 @@ edition = "2021"
 # frozen after the kernel package: feature packages add no dependencies.
 [workspace.dependencies]
 australis-core = { path = "crates/core" }
+australis-admin = { path = "crates/modules/admin" }
 australis-auth = { path = "crates/modules/auth" }
 australis-campus = { path = "crates/modules/campus" }
 australis-classes = { path = "crates/modules/classes" }
@@ -17,6 +18,7 @@ australis-grades = { path = "crates/modules/grades" }
 australis-health = { path = "crates/modules/health" }
 australis-roster = { path = "crates/modules/roster" }
 australis-slides = { path = "crates/modules/slides" }
+australis-support = { path = "crates/modules/support" }
 
 anyhow = "1"
 argon2 = "0.5"
