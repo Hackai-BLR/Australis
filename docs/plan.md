@@ -4,6 +4,8 @@ This is the main plan. It lists every feature that is still to be built, grouped
 
 The first build (features 1 to 9) is merged. Everything below comes after it.
 
+The CampusAi repository (the Campus IA platform) is merged into this one. Its folders sit at the repo root next to `backend/` and `frontend/`. Phase 0 joins the two systems so they run as one product on the same server.
+
 ## How to pick up a feature
 
 Anyone on the team can do this, with or without Claude. With Claude, say: "read the main plan, check what is being worked on, and start a free feature on your own branch".
@@ -15,7 +17,7 @@ Anyone on the team can do this, with or without Claude. With Claude, say: "read 
    git branch -r --list "origin/feat/f*" "origin/phase/*" "origin/fix/p1-*"
    gh pr list --state all --limit 100 --json number,title,state,isDraft,headRefName,author
    ```
-   A feature is **done** when its pull request is merged, **taken** when a branch `feat/f<NN>-...` exists on origin, and **free** otherwise.
+   A feature is **done** when its pull request is merged, **taken** when a branch `feat/<id>-...` exists on origin (for example `feat/f10-attendance` or `feat/m2-sign-in`), and **free** otherwise.
 3. **Choose** a free feature in the open phase whose dependencies are all done. If a dependency is only taken, you may still start: merge its branch into yours and say so in the pull request.
 4. **Claim it at once**, before writing code, so nobody else starts the same feature:
    ```
@@ -34,6 +36,7 @@ A phase is open when its kickoff branch is published. The kickoff does the work 
 
 | Phase | Name | Depends on | Status |
 |---|---|---|---|
+| 0 | Join Australis and Campus IA | First build, the CampusAi merge | Next |
 | 1 | Test and stabilise the first build | First build | Next |
 | 2 | Records and staff basics | Phase 1 | Not open |
 | 3 | Follow-up and closing | Phase 2 | Not open |
@@ -43,7 +46,7 @@ A phase is open when its kickoff branch is published. The kickoff does the work 
 Rules for every phase:
 
 - **Kickoff first.** Before a phase starts, one person publishes `phase/<N>` and opens its pull request to `main`. The kickoff holds the kernel additions, the new module skeletons, and an empty submodule (a "seam") for each feature that shares a crate with another feature. The kickoff is the only package in a phase that edits the frozen shared files.
-- **One branch and one pull request per feature**, named `feat/f<NN>-<slug>`.
+- **One branch and one pull request per feature**, named `feat/<id>-<slug>` with the id in lower case.
 - **Migrations.** Each feature has its own range of ten numbers: feature `F<NN>` uses `0600 + (NN - 10) * 10` onwards (F10 is 0600 to 0609, F20 is 0700 to 0709). Kickoffs use the core range (0002 to 0049).
 - **Placeholders.** Nothing calls an outside service. A feature that would need one uses a placeholder provider behind a trait and shows the "Simulado" badge.
 - **Models, when agents do the work.** Sonnet writes all code. Opus or Fable only plan and review.
@@ -53,6 +56,13 @@ Rules for every phase:
 `A <- B` means B needs A.
 
 ```
+CampusAi merge
+  <- M1 deploy Australis on the server  <- M6 switch production to this repository
+  <- M2 one sign-in                     <- M3 one course list, M4 real AI through the model proxy, M8 browser tests
+  <- M5 one visual design
+  <- M7 CI for the Campus IA folders    <- M6 switch production to this repository
+M4 real AI <- F11 class summary and F33 study help stop being simulated (they can still be built on the placeholder)
+
 First build
   <- F10 attendance        <- F22 student record, F23 export, F24 dropout alerts, F25 professor home, F31 certificates
   <- F11 class summary     <- F25 professor home, F32 study mode, F33 study help
@@ -69,6 +79,45 @@ First build
   <- F41 Microsoft sign-in, F42 calendar feed, F43 PowerPoint conversion
 Everything with screens <- F40 phone pass
 ```
+
+## Phase 0: join Australis and Campus IA
+
+Both systems are in this repository but do not know about each other yet. Campus IA is live at `campusia.tech`; Australis runs only locally and on placeholders. This phase makes Australis run on the same server, behind the same sign-in, with the same model access and the same look.
+
+How they fit together:
+
+- **Campus IA stays the front door.** Caddy sends every request to the core (`nucleo`), which owns sign-in, universities, roles, enrolments and token quotas.
+- **Australis becomes a service behind it.** The core forwards requests for one reserved address to the Australis backend and adds its signed identity header, the same way it already does for course containers (`contratos/identidad-cursos.md`). In production Australis trusts that header and nothing else.
+- **A course has a kind.** "Campus with modules" is an Australis campus (gradebook, classes, recordings, slides, AI proposals). "Free course" is a Campus IA container shaped by the agent. Both appear in the same course list.
+- **One model access.** Australis's `AiProvider` gets a real implementation that calls the core's model proxy, so the token quotas and usage records are shared. The placeholder stays for development and tests.
+
+There is no kickoff. The tasks own different folders, except where a dependency is listed.
+
+| Id | Task | Depends on | Owns |
+|---|---|---|---|
+| M1 | Deploy Australis on the server | CampusAi merge | `despliegue/**`, `infraestructura/servidor/**`, `pruebas/tramo-infraestructura*/**`, a new `contratos/tramo-australis.md` |
+| M2 | One sign-in | CampusAi merge | `backend/crates/core/src/auth.rs` and `config.rs`, `backend/crates/server/src/**`, `nucleo/src/enrutador.rs` and `identidad.rs`, `tests/identity.rs`, `frontend/src/shared/auth/**` |
+| M3 | One course list | M2 | `nucleo/src/cursos.rs` and `cuenta.rs`, `interfaz/src/MisCursos.tsx` and the create-course screen, `backend/crates/modules/campus/src/lib.rs` |
+| M4 | Real AI through the model proxy | M2 | `backend/crates/core/src/ai.rs`, `nucleo/src/modelo.rs` and `cupos.rs` |
+| M5 | One visual design | CampusAi merge | `frontend/src/shared/ui/**` |
+| M6 | Switch production to this repository | M1, M7 | Operations. A person with the credentials does it |
+| M7 | CI for the Campus IA folders | CampusAi merge | `.github/workflows/**` |
+| M8 | Browser tests for Australis | M2 | a new `pruebas/australis/**` |
+
+- **M1 Deploy.** A second systemd service for the Australis backend on its own local port (the core already uses 8080), with its database and uploads under `/srv/campusia`. The continuous deploy builds, tests and installs `backend/` and `frontend/` next to the core, checks health, and rolls both back together. The daily backup and Litestream include the Australis database and uploads. Ansible installs all of it. Tests in the style of the existing infrastructure tests.
+- **M2 One sign-in.** The core reserves one address for Australis, forwards to it, strips cookies and adds the signed identity header with the person's platform role. Australis gets a second way to identify the caller: verify the header (Ed25519 public key from the environment), create the account on first sight, and map roles (owner and university administrator to secretary, professor mark to professor, everyone else to student). A setting chooses the mode; password sign-in stays for local development and the tests. In header mode the password routes and invites are off. An account that is suspended or disabled in the core has no access in Australis.
+- **M3 One course list.** Creating a course in Campus IA offers the two kinds. "My courses" lists both. A campus with modules belongs to a university. Enrolments made in either system reach the other through the platform API; the core is the record of who is enrolled.
+- **M4 Real AI.** An `AiProvider` that calls the core's model proxy with a token that only works there, so no model credential enters Australis. Usage counts against the professor's token quota in the core; the Australis daily quota stays as a second limit. The "Simulado" badge disappears only when this provider is the one configured.
+- **M5 One design.** The Australis design tokens take the palette, type and bar of `prototipo/campus.html`, so moving between the two does not look like changing product.
+- **M6 Switch production.** Point the server's deploy at this repository (deploy key, webhook, `despliegue_origen` in Ansible). After this, every merge to `main` is live within 5 minutes, so it comes last and only when M1 and M7 are merged.
+- **M7 CI.** GitHub jobs for `nucleo` (cargo test), `interfaz`, `sdk` and `plantilla-curso` (pnpm build and test), and a check that no secret is committed (`pruebas/tramo-infraestructura/test_secretos.py`).
+- **M8 Browser tests.** Playwright tests for the first-build features of Australis, in the style of `pruebas/fase-*`: acceptance (what must work) and attack (what must be refused). Later phases use them in place of a manual pass.
+
+Open decisions for phase 0, to settle before M2 and M3 start:
+
+1. The address Australis is served on (for example `campus.campusia.tech`, or inside each course's own subdomain).
+2. Whether the secretary is the university administrator, or a separate role the administrator grants.
+3. Whether student import (Australis) writes enrolments to the core, or the core's own enrolment screens replace it.
 
 ## Phase 1: test and stabilise the first build
 
@@ -174,11 +223,11 @@ Every feature here depends only on the first build.
 | Id | Feature | Depends on | Owns | Note |
 |---|---|---|---|---|
 | F40 | Works well on a phone | Everything with screens | all of `frontend/src` | Run it alone, last |
-| F41 | Microsoft sign-in | First build, K5 | `auth/microsoft` | Placeholder provider. A real one waits on open question 2 in `features.md` |
+| F41 | Microsoft sign-in | M2, K5 | `nucleo` sign-in | Sign-in now belongs to the Campus IA core (email code). A Microsoft option goes there and waits on open question 2 in `features.md` |
 | F42 | Calendar feed | First build | `classes/calendar` | A private `.ics` link that Outlook can subscribe to. Needs no key |
 | F43 | PowerPoint conversion | First build | kernel `SlideConverter`, backend image | LibreOffice in the image. Needs no key |
 | F44 | Exams that allow AI | Not set | Not set | Blocked: the goal is still vague. Needs a product decision first |
-| F45 | Real AI and Zoom providers | Not set | kernel providers | Blocked: needs keys and open question 1 in `features.md` |
+| F45 | Real Zoom provider | Not set | kernel providers | Blocked: needs keys and open question 1 in `features.md`. Real AI is M4 |
 
 ## Running a phase with agents
 
@@ -188,4 +237,4 @@ Every feature here depends only on the first build.
 Workflow({ scriptPath: "<repo>/workflows/phase.js", args: { phase: 2 } })
 ```
 
-Optional arguments: `only: ["F10", "F13"]` to build some features, `max: 3` to cap how many features one run starts.
+`phase: 0` runs the tasks that join the two systems (M6 is left for a person). Optional arguments: `only: ["F10", "F13"]` to build some features, `max: 3` to cap how many features one run starts.

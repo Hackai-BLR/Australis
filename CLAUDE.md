@@ -2,6 +2,16 @@
 
 Modular monolith: one Rust backend binary, one React frontend, one SQLite database.
 
+## Two systems in one repo
+The CampusAi repository was merged into this one. Both systems deploy to the same server and are being joined step by step (`docs/plan.md`, "Phase 0").
+
+- **Campus IA (platform):** `nucleo/` (Rust core: sign-in by email code, universities, roles, enrolments, subdomain router, container supervisor, model proxy), `interfaz/` (its React interface), `plantilla-curso/` and `sdk/` (the per-course app and its SDK), `pruebas/` (acceptance and attack tests), `contratos/`, `despliegue/` and `infraestructura/` (Caddy, systemd, continuous deploy, backups, Cloudflare with OpenTofu, the server with Ansible), `handoffs/`, `prototipo/`.
+- **Australis (campus modules):** `backend/`, `frontend/`, `docs/`, `workflows/`. Everything below this section describes Australis.
+- **Each tree keeps its own rules.** The Campus IA folders follow `CONVENCIONES.md`: Spanish names, commits and docs, no code comments, pnpm, append-only `handoffs/`. The Australis folders follow this file: English code, npm. Do not restyle one tree to match the other.
+- **Do not move or rename the Campus IA folders.** The deploy scripts on the server read them at these paths.
+- **Production.** The server deploys from a repository's `main` every 5 minutes. Until phase 0 switches it to this repository it still deploys from CampusAi; after the switch, every merge to `main` goes live.
+- **Secrets** never enter the repo: they live in `~/.config/campusia/` and in the Ansible Vault (`infraestructura/README.md`).
+
 ## Product
 A standalone campus platform for postgraduate programs (HackAI 2026, Product track; pitch and live demo on Fri 13 Nov 2026). It does not depend on the university's current campus or student-records system. The full feature list, with the problem each feature solves and its evidence, is in `docs/features.md`. Read it before designing or building a feature.
 

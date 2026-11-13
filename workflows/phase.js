@@ -1,7 +1,7 @@
 export const meta = {
   name: 'australis-phase',
   description: 'Run one phase of docs/plan.md: check the plan and GitHub, publish the phase kickoff, then build, review and fix each free feature on its own branch and pull request. Nothing is merged.',
-  whenToUse: 'Start or continue a phase of the Australis build plan. args: { phase: 1-5, only?: ["F10"], max?: number }',
+  whenToUse: 'Start or continue a phase of the Australis build plan. args: { phase: 0-5, only?: ["F10"], max?: number }',
   phases: [
     { title: 'Scout', detail: 'read docs/plan.md and GitHub: what is done, taken and free', model: 'sonnet' },
     { title: 'Kickoff', detail: 'publish phase/N: kernel additions, module skeletons, seams', model: 'sonnet' },
@@ -19,7 +19,7 @@ const REVIEWER = 'opus'
 
 const A = args || {}
 const N = Number(A.phase)
-if (!(N >= 1 && N <= 5)) return { error: 'Pass args.phase as a number from 1 to 5, e.g. { phase: 2 }.' }
+if (A.phase === undefined || !(N >= 0 && N <= 5)) return { error: 'Pass args.phase as a number from 0 to 5, e.g. { phase: 2 }.' }
 const ONLY = Array.isArray(A.only) ? A.only.map(s => String(s).toUpperCase()) : null
 const MAX = Number(A.max) > 0 ? Number(A.max) : Infinity
 
@@ -31,7 +31,7 @@ const CONTRACT = `## Contract
 - Nothing calls an outside service: placeholder providers behind traits, with the "Simulado" badge wherever placeholder data shows.
 - Product rules that a review will check: the AI never changes grades, attendance or closed records (no such operation may exist); a removed student is suspended, never deleted; every change to grades or attendance writes an audit row (who, when, why) in the same transaction; every AI call goes through ai::run with a per-user quota and a usage log; scales, thresholds and similar rules are settings, never constants, and unconfirmed ones are marked as such on screen; store only the personal data the feature needs; fake data only.
 - Screen text is Spanish (es-AR). Code, comments, commits and docs are English.
-- Stay inside the paths your item owns. Only a kickoff edits the frozen shared files. If you truly cannot finish without touching one, make the smallest change and report it as a deviation.
+- Stay inside the paths your item owns. Only a kickoff, or a phase-0 task whose "Owns" line names them, edits the frozen shared files. If you truly cannot finish without touching one, make the smallest change and report it as a deviation.
 - Write a test for every behaviour your item's description promises.`
 
 const GH = `GitHub CLI: \`gh\`. On Windows, if it is not on PATH, use "/c/Program Files/GitHub CLI/gh.exe" (Bash) or & "C:\\Program Files\\GitHub CLI\\gh.exe" (PowerShell).`
@@ -152,7 +152,7 @@ const scout = await agent(`Read-only scout for phase ${N} of the Australis build
 
 1. \`git fetch origin --prune\`. Read docs/plan.md with \`git show origin/main:docs/plan.md\`; if it is not on main yet, use \`git show origin/docs/plan:docs/plan.md\`. Report which ref you used.
 2. List what exists: \`git branch -r\`, and \`gh pr list --state all --limit 200 --json number,title,state,isDraft,headRefName,author,mergedAt\`. ${GH}
-3. For every item of phase ${N} (features F.. or tasks T..), copy its plan text verbatim and set its status by the plan's own rule: done = its pull request is merged; taken = a branch feat/f<NN>-... (any slug) exists on origin and is not merged; blocked = the plan marks it blocked; free otherwise. For each feature dependency give its status the same way, and the branch if it is taken.
+3. For every item of phase ${N} (features F.., tasks T.. or M..), copy its plan text verbatim and set its status by the plan's own rule: done = its pull request is merged; taken = a branch feat/<id in lower case>-... (any slug) exists on origin and is not merged; blocked = the plan marks it blocked, or says a person does it; free otherwise. For each feature dependency give its status the same way, and the branch if it is taken.
 4. Kickoff of phase ${N}: none if the plan lists none; otherwise missing, published or merged, judged from origin/phase/${N} and its pull request. Copy its bullet list verbatim.
 5. List every feature and kickoff of EARLIER phases that is not merged into main.
 6. Say whether pull request #19 is still open.`,
@@ -281,7 +281,8 @@ if (free.length > run.length) log(`max=${MAX}: not started this run: ${free.slic
 const done = {}
 async function runFeature(f) {
   const num = f.id.replace(/\D/g, '')
-  const key = `f${num}`
+  const key = f.id.toLowerCase()
+  const isFeature = /^F\d+$/i.test(f.id)
   const branch = `feat/${key}-${f.slug}`
   const item = { key, branch, title: `${f.id} ${f.title}`, what: `${f.what || f.title}${f.owns ? `\nOwns: ${f.owns}` : ''}` }
 
@@ -299,7 +300,7 @@ async function runFeature(f) {
 
 FEATURE ${f.id}: ${f.title}
 ${item.what}
-Migration range for this feature: ${600 + (Number(num) - 10) * 10} to ${609 + (Number(num) - 10) * 10} (four digits, zero-padded).
+${isFeature ? `Migration range for this feature: ${600 + (Number(num) - 10) * 10} to ${609 + (Number(num) - 10) * 10} (four digits, zero-padded).` : 'This task joins the Australis and Campus IA trees. Each tree keeps its own rules: CONVENCIONES.md for the Campus IA folders (Spanish, no code comments, pnpm, a new handoff file per piece of work), CLAUDE.md for backend/ and frontend/. Read the contracts in contratos/ that your task touches before changing either side, and run the tests of every tree you change.'}
 
 Read the phase ${N} section of docs/plan.md (ref ${scout.plan_ref}) for the kickoff your work builds on, and read the code you start from before writing anything: it is the real contract.${merges.length ? `\nYou build on unmerged work (${merges.join(', ')}); say so in the PR body.` : ''}
 
