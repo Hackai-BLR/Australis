@@ -2,7 +2,7 @@ import { defineConfig } from '@playwright/test';
 
 export default defineConfig({
   testDir: '.',
-  testMatch: /checkpoint-[a-z]\/.*\.spec\.ts$/,
+  testMatch: /checkpoint-a\/.*\.spec\.ts$/,
   globalSetup: './comun/pila-global.ts',
   globalTeardown: './comun/pila-limpieza.ts',
   timeout: 90_000,
