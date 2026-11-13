@@ -306,3 +306,27 @@ async fn zoom_connection_is_recorded_for_teachers_only() {
         .await;
     assert_eq!(status, StatusCode::FORBIDDEN);
 }
+
+#[tokio::test]
+async fn ending_a_class_never_sets_an_end_before_its_start() {
+    let app = TestApp::new().await;
+    let prof = app.login_as(Role::Professor).await;
+    let campus = app.seed_campus(&prof).await;
+    let (status, class) = app
+        .post_json(
+            &format!("/api/campuses/{campus}/classes"),
+            Some(&prof.cookie),
+            json!({ "title": "Futura", "starts_at": "2099-01-01 10:00:00", "duration_min": 60 }),
+        )
+        .await;
+    assert_eq!(status, StatusCode::CREATED, "{class}");
+    let (status, ended) = app
+        .patch_json(
+            &format!("/api/classes/{}", class["id"]),
+            Some(&prof.cookie),
+            json!({ "ended": true }),
+        )
+        .await;
+    assert_eq!(status, StatusCode::OK, "{ended}");
+    assert!(ended["ended_at"].as_str().unwrap() >= ended["starts_at"].as_str().unwrap());
+}

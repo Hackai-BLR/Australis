@@ -43,6 +43,68 @@ describe("SummarySlot", () => {
     expect(await screen.findByText(/Aprobado: los estudiantes lo ven/)).toBeTruthy();
   });
 
+  it("sends the text the professor saw when approving", async () => {
+    const draft = { ...base, status: "draft", body: "Texto visto" };
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(reply(draft))
+      .mockResolvedValueOnce(reply({ ...draft, status: "approved" }));
+    render(<SummarySlot classItem={item} />);
+    fireEvent.click(await screen.findByText("Aprobar y publicar"));
+    await screen.findByText(/Aprobado: los estudiantes lo ven/);
+    const call = vi.mocked(fetch).mock.calls[1];
+    expect(JSON.parse(String((call[1] as RequestInit).body))).toEqual({ body: "Texto visto" });
+  });
+
+  it("reloads the draft and explains when approving finds the text changed", async () => {
+    const draft = { ...base, status: "draft", body: "Texto viejo" };
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(reply(draft))
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ error: "the summary changed" }), {
+          status: 409,
+          headers: { "Content-Type": "application/json" },
+        }),
+      )
+      .mockResolvedValueOnce(reply({ ...draft, body: "Texto nuevo" }));
+    render(<SummarySlot classItem={item} />);
+    fireEvent.click(await screen.findByText("Aprobar y publicar"));
+    expect(await screen.findByText(/El resumen cambió mientras lo mirabas/)).toBeTruthy();
+    expect((screen.getByLabelText("Texto del resumen") as HTMLTextAreaElement).value).toBe(
+      "Texto nuevo",
+    );
+  });
+
+  it("hides the Simulado badge once the professor edited the text", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(
+      reply({
+        ...base,
+        status: "draft",
+        body: "Mío",
+        simulated: false,
+        edited_at: "2026-11-01 10:00:00",
+      }),
+    );
+    render(<SummarySlot classItem={item} />);
+    await screen.findByText("Aprobar y publicar");
+    expect(screen.queryByText("Simulado")).toBeNull();
+  });
+
+  it("shows a clear Spanish message when the daily quota is used up", async () => {
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(reply(base))
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ error: "daily quota used up" }), {
+          status: 429,
+          headers: { "Content-Type": "application/json" },
+        }),
+      )
+      .mockResolvedValueOnce(reply({ ...base, quota: { limit: 20, used: 20, remaining: 0 } }));
+    render(<SummarySlot classItem={item} />);
+    fireEvent.click(await screen.findByText("Generar borrador"));
+    expect(await screen.findByText(/Alcanzaste el límite diario de resúmenes/)).toBeTruthy();
+    expect(screen.queryByText(/daily quota/)).toBeNull();
+  });
+
   it("shows a student nothing until the summary is approved", async () => {
     vi.mocked(fetch).mockResolvedValue(
       reply({ ...base, can_teach: false, transcript_ready: false, quota: null }),

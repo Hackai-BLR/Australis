@@ -62,6 +62,10 @@ export function AttendancePanel({ classItem }: { classItem: ClassItem }) {
   const entries = pendingEntries(sheet.rows, draft);
   const reasonNeeded = needsReason(sheet.rows, entries);
   const reasonMissing = reasonNeeded && reason.trim() === "";
+  const noMeeting = classItem.source === "manual";
+  // Taking from the session may change records it saved before: the same rule as a manual save.
+  const sessionNeedsReason = sheet.rows.some((row) => row.source === "session");
+  const sessionReasonMissing = sessionNeedsReason && reason.trim() === "";
 
   function done(next: AttendanceSheet, message: string) {
     setSheet(next);
@@ -116,6 +120,9 @@ export function AttendancePanel({ classItem }: { classItem: ClassItem }) {
           {own && own.status ? (
             <div className="au-row">
               <Badge tone={STATUS_TONES[own.status]}>{STATUS_LABELS[own.status]}</Badge>
+              {own.source === "session" && sheet.simulated && (
+                <SimulatedBadge detail="Estado tomado de una lista de participantes de ejemplo." />
+              )}
               {own.reason && <span>Motivo: {own.reason}</span>}
             </div>
           ) : (
@@ -191,13 +198,29 @@ export function AttendancePanel({ classItem }: { classItem: ClassItem }) {
           maxLength={500}
           onChange={(e) => setReason(e.target.value)}
         />
+        {noMeeting && (
+          <p className="au-hint">
+            Esta clase no tiene reunión de Zoom: cargá la asistencia a mano.
+          </p>
+        )}
+        {!noMeeting && sessionReasonMissing && (
+          <p className="au-hint">
+            Ya hay asistencia tomada de la sesión: escribí el motivo del cambio para volver a
+            tomarla.
+          </p>
+        )}
         {error && <p role="alert">{error}</p>}
         {notice && <p role="status">{notice}</p>}
         <div className="au-row">
           <Button loading={busy} disabled={entries.length === 0 || reasonMissing} onClick={save}>
             Guardar asistencia
           </Button>
-          <Button variant="secondary" loading={busy} onClick={fromSession}>
+          <Button
+            variant="secondary"
+            loading={busy}
+            disabled={noMeeting || sessionReasonMissing}
+            onClick={fromSession}
+          >
             Tomar de la sesión
           </Button>
         </div>

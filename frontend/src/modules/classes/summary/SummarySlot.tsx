@@ -40,7 +40,25 @@ function SummaryPanel({ classItem }: { classItem: ClassItem }) {
     try {
       apply(await action());
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : "No se pudo completar la acción.");
+      if (e instanceof ApiError && e.status === 429) {
+        setError(
+          "Alcanzaste el límite diario de resúmenes con IA. Probá de nuevo mañana o editá el texto a mano.",
+        );
+        void getSummary(classItem.id)
+          .then(setSummary)
+          .catch(() => undefined);
+      } else if (e instanceof ApiError && e.status === 409) {
+        setError(
+          "El resumen cambió mientras lo mirabas (otra pestaña o una generación). Cargamos la versión actual: revisala antes de aprobar.",
+        );
+        try {
+          apply(await getSummary(classItem.id));
+        } catch {
+          // The message above already tells the professor to reload.
+        }
+      } else {
+        setError(e instanceof ApiError ? e.message : "No se pudo completar la acción.");
+      }
     } finally {
       setBusy(false);
     }
@@ -140,7 +158,7 @@ function SummaryPanel({ classItem }: { classItem: ClassItem }) {
             <Button
               loading={busy}
               disabled={changed}
-              onClick={() => run(() => approveSummary(classItem.id))}
+              onClick={() => run(() => approveSummary(classItem.id, summary.body ?? ""))}
             >
               Aprobar y publicar
             </Button>

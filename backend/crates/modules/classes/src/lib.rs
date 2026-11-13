@@ -399,7 +399,8 @@ async fn update_class(
             title = COALESCE(?1, title),
             starts_at = COALESCE(?2, starts_at),
             duration_min = COALESCE(?3, duration_min),
-            ended_at = CASE ?4 WHEN 1 THEN COALESCE(ended_at, datetime('now'))
+            ended_at = CASE ?4 WHEN 1 THEN COALESCE(ended_at,
+                                    MAX(datetime('now'), COALESCE(?2, starts_at)))
                                WHEN 0 THEN NULL ELSE ended_at END
          WHERE id = ?5",
     )
