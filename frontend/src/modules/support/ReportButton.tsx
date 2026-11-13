@@ -3,7 +3,7 @@ import { useLocation } from "react-router-dom";
 import { ApiError } from "../../shared/api";
 import { Button, Modal } from "../../shared/ui";
 import { sendReport } from "./api";
-import { campusIdOf } from "./campusId";
+import { resolveCampusId } from "./campusId";
 import "./support.css";
 
 /** Floating button on every page; opens a form that files a report about the current page. */
@@ -14,7 +14,7 @@ export function ReportButton() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sent, setSent] = useState(false);
-  const campusId = campusIdOf(location.pathname);
+  const [sentCampus, setSentCampus] = useState<number | null>(null);
 
   const close = () => {
     setOpen(false);
@@ -32,7 +32,9 @@ export function ReportButton() {
     setBusy(true);
     setError(null);
     try {
-      await sendReport({ page: location.pathname, campus_id: campusId, text });
+      const campus = await resolveCampusId(location.pathname);
+      await sendReport({ page: location.pathname, campus_id: campus, text });
+      setSentCampus(campus);
       setSent(true);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "No se pudo enviar el reporte.");
@@ -68,7 +70,7 @@ export function ReportButton() {
         {sent ? (
           <p role="status">
             Gracias, el reporte se envió.{" "}
-            {campusId !== null
+            {sentCampus !== null
               ? "Lo van a ver los profesores de este campus."
               : "Lo va a ver la secretaría."}
           </p>

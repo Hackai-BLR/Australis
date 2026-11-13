@@ -28,6 +28,8 @@ use serde::{Deserialize, Serialize};
 use sqlx::SqliteConnection;
 use tokio_stream::wrappers::BroadcastStream;
 
+mod notes;
+
 pub fn router() -> Router<AppState> {
     Router::new()
         .route(
@@ -41,6 +43,7 @@ pub fn router() -> Router<AppState> {
         .route("/live/{lid}/stream", get(stream_state))
         .route("/live/{lid}/goto", post(goto))
         .route("/live/{lid}/end", post(end))
+        .merge(notes::router())
 }
 
 // --- types -----------------------------------------------------------------------------------

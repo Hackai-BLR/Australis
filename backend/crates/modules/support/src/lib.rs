@@ -42,6 +42,14 @@ struct Report {
 const SELECT: &str = "SELECT r.id, r.campus_id, r.reporter_id, r.page, r.body, r.status,
         r.created_at, r.resolved_at, '' AS reporter_name FROM support_reports r";
 
+/// The page is shown as a link in the inbox, so it must be a same-origin path: one leading `/`
+/// and no backslash or control character (no scheme, no `//host`).
+fn is_in_app_path(page: &str) -> bool {
+    page.starts_with('/')
+        && !page.starts_with("//")
+        && !page.chars().any(|c| c == '\\' || c.is_control())
+}
+
 #[derive(Deserialize)]
 struct NewReport {
     page: String,
@@ -87,6 +95,11 @@ async fn create_report(
     if page.is_empty() || page.chars().count() > MAX_PAGE_CHARS {
         return Err(AppError::Unprocessable(
             "the page is missing or too long".into(),
+        ));
+    }
+    if !is_in_app_path(&page) {
+        return Err(AppError::Unprocessable(
+            "the page must be a path inside the app".into(),
         ));
     }
     if text.is_empty() {

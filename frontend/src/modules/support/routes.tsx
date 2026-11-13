@@ -1,8 +1,7 @@
-import type { ReactNode } from "react";
 import type { RouteObject } from "react-router-dom";
 import { RequireRole } from "../../shared/auth";
-import type { CampusTab, NavItem } from "../../shared/routing";
-import { ReportButton } from "./ReportButton";
+import type { CampusTab, GlobalWidget, NavItem } from "../../shared/routing";
+import { ReportProblemSlot } from "./ReportProblemSlot";
 import { ReportsInbox } from "./ReportsInbox";
 
 export const routes: RouteObject[] = [
@@ -22,5 +21,7 @@ export const navItems: NavItem[] = [
   { to: "/reports", label: "Reportes", roles: ["professor", "secretary"], order: 90 },
 ];
 
-/** Shown on every page of the signed-in shell. */
-export const globalWidgets: ReactNode[] = [<ReportButton key="report-button" />];
+/** Shown on every signed-in page by the app shell. */
+export const globalWidgets: GlobalWidget[] = [
+  { id: "report-problem", element: <ReportProblemSlot /> },
+];

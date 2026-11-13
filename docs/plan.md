@@ -38,7 +38,7 @@ A phase is open when its kickoff branch is published. The kickoff does the work 
 |---|---|---|---|
 | 0 | Join Australis and Campus IA | First build, the CampusAi merge | M9 to M12 merged (2026-11-13). Round 3 open: M13 and M14. Then checkpoint B again, then M6 |
 | 1 | Test and stabilise the first build | First build | Done. Checkpoint A passed and is tagged `checkpoint-a` (2026-11-13) |
-| 2 | Records and staff basics | Phase 1 | Not open |
+| 2 | Records and staff basics | Phase 1 | Open. Kickoff `phase/2` published (2026-11-13) |
 | 3 | Follow-up and closing | Phase 2 | Not open |
 | 4 | Student extras | Phase 3 | Not open |
 | 5 | Integrations and polish | Phase 4 | Not open |
@@ -271,6 +271,8 @@ Every feature here depends only on the first build.
 - New skeleton modules, backend and frontend: `admin`, `support`.
 - Seams: `classes/attendance`, `classes/summary`, `grades/submission`, `campus/settings`, `slides/notes`, each with an empty router already merged and a slot in the page that will show it.
 - Frontend shell: modules may export `globalWidgets` (shown on every page), used by F16.
+
+**Status: kickoff done.** The kernel also seeds the global `attendance.rule` (unconfirmed) and `ai.summary.daily_quota`, and offers `settings::set_for_campus` and `clear_for_campus` (validated and audited) for F14. `grades/mine` returns each course's own `scale`. The seams are mounted: the class page (attendance, summary), the teacher's grades tab (submission), the student's live presentation (notes) and a "Configuración" tab for managers (F14); the global widget slot holds an empty F16 button. Each feature uses `phase/2` as its base until it is merged into `main`.
 
 | Id | Feature | Depends on | Owns |
 |---|---|---|---|

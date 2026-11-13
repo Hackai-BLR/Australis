@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { ApiError } from "../../shared/api";
 import { Badge, Button, Card, EmptyState, PageHeader, Spinner } from "../../shared/ui";
 import { listReports, setReportStatus, type Report, type ReportStatus } from "./api";
+import { isInAppPath } from "./campusId";
 import "./support.css";
 
 /** Inbox of reports addressed to the signed-in professor or secretary. */
@@ -81,7 +82,11 @@ export function ReportsInbox() {
             <Badge tone={report.status === "open" ? "warning" : "success"}>
               {report.status === "open" ? "Abierto" : "Resuelto"}
             </Badge>{" "}
-            <Link to={report.page}>{report.page}</Link>
+            {isInAppPath(report.page) ? (
+              <Link to={report.page}>{report.page}</Link>
+            ) : (
+              <code>{report.page}</code>
+            )}
             {report.campus_id !== null && <> · campus {report.campus_id}</>} · {report.created_at}
           </p>
         </Card>

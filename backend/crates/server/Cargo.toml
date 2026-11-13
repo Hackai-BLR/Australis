@@ -6,6 +6,7 @@ build = "build.rs"
 
 [dependencies]
 australis-core.workspace = true
+australis-admin.workspace = true
 australis-auth.workspace = true
 australis-campus.workspace = true
 australis-classes.workspace = true

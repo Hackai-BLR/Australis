@@ -104,6 +104,22 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1505bd5d3d116872e7271a6d4e16d81d0c8570876c8de68093a09ac269d8aac0"
 
 [[package]]
+name = "australis-admin"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "australis-core",
+ "axum",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "thiserror",
+ "time",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
 name = "australis-auth"
 version = "0.1.0"
 dependencies = [
@@ -232,6 +248,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "async-trait",
+ "australis-admin",
  "australis-auth",
  "australis-campus",
  "australis-classes",
@@ -287,10 +304,16 @@ dependencies = [
 name = "australis-support"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
  "australis-core",
  "axum",
  "serde",
+ "serde_json",
  "sqlx",
+ "thiserror",
+ "time",
+ "tokio",
+ "tracing",
 ]
 
 [[package]]

@@ -188,3 +188,34 @@ async fn inbox_filters_open_and_resolved() {
         .await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
 }
+
+#[tokio::test]
+async fn page_must_be_an_in_app_path() {
+    let app = TestApp::new().await;
+    let student = app.login_as(Role::Student).await;
+    for bad in [
+        "javascript:alert(1)",
+        "https://evil.example/login",
+        "//evil.example/login",
+        "/\\evil.example",
+        "campuses/1",
+        "/a\nb",
+    ] {
+        let (status, _) = app
+            .post_json(
+                "/api/support/reports",
+                Some(&student.cookie),
+                json!({"page": bad, "text": "x"}),
+            )
+            .await;
+        assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "page {bad:?}");
+    }
+    let (status, _) = app
+        .post_json(
+            "/api/support/reports",
+            Some(&student.cookie),
+            json!({"page": "/classes/12?x=1#top", "text": "x"}),
+        )
+        .await;
+    assert_eq!(status, StatusCode::CREATED);
+}

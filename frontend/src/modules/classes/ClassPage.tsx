@@ -11,7 +11,9 @@ import {
   Spinner,
 } from "../../shared/ui";
 import { formatStart, getClass, updateClass, type ClassItem } from "./api";
+import { AttendanceSlot } from "./attendance/AttendanceSlot";
 import { RecordingPanel } from "./recordings/RecordingPanel";
+import { SummarySlot } from "./summary/SummarySlot";
 
 export function ClassPage() {
   const { cid = "" } = useParams();
@@ -71,7 +73,9 @@ export function ClassPage() {
           )}
         </div>
       </Card>
+      <AttendanceSlot classItem={item} />
       <RecordingPanel classItem={item} />
+      <SummarySlot classItem={item} />
     </div>
   );
 }
