@@ -23,6 +23,19 @@ jobs:
       - run: cargo clippy --all-targets --locked -- -D warnings
       - run: cargo test --locked
 
+  nucleo:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: nucleo
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: nucleo
+      - run: cargo test --locked
+
   frontend:
     runs-on: ubuntu-latest
     defaults:

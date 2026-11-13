@@ -193,8 +193,7 @@ pub async fn de_la_persona(app: &App, usuario: i64) -> Result<Vec<Value>, sqlx::
 
 pub async fn listar_inscriptos(State(app): State<Estado>, ctx: Ctx, Path(id): Path<String>) -> Resultado {
     let n: i64 = id.parse().map_err(|_| ApiError::no_encontrado())?;
-    campus_modulos(&app, n).await?;
-    rol_en_modulos(&app, n, ctx.usuario.id).await?.ok_or_else(ApiError::no_encontrado)?;
+    docente_en_modulos(&app, &ctx, &id).await?;
     let filas = sqlx::query(
         "SELECT u.id, u.nombre, u.email, i.rol, u.pendiente, i.suspendida FROM inscripciones_modulos i \
          JOIN usuarios u ON u.id = i.usuario_id WHERE i.campus_id = ? \
@@ -300,9 +299,15 @@ async fn sincronizar_con(app: &App, ctx: &Ctx, campus: &CampusModulos) -> Result
     let ahora = ahora_txt();
     let mut agregados = 0;
     let mut actualizados = 0;
-    let mut tx = app.db.begin().await?;
+    let mut admitidos = Vec::new();
     for m in lista {
         let Some(email) = m["email"].as_str().and_then(normalizar_email) else { continue };
+        if de_la_universidad(app, &email, campus.universidad_id).await? {
+            admitidos.push((email, m));
+        }
+    }
+    let mut tx = app.db.begin().await?;
+    for (email, m) in admitidos {
         let rol = rol_desde_australis(m["role"].as_str().unwrap_or("student"));
         let suspendida = i64::from(m["status"].as_str() == Some("suspended"));
         let usuario: Option<i64> =
@@ -374,4 +379,21 @@ pub async fn sincronizar(State(app): State<Estado>, ctx: Ctx, Path(id): Path<Str
     let campus = docente_en_modulos(&app, &ctx, &id).await?;
     let (agregados, actualizados) = sincronizar_con(&app, &ctx, &campus).await?;
     Ok(ok(json!({"agregados": agregados, "actualizados": actualizados})))
+}
+
+pub async fn sincronizar_docentes(app: &App, ctx: &Ctx) {
+    let Ok(filas) = sqlx::query(
+        "SELECT c.id, c.campus_externo, c.universidad_id FROM inscripciones_modulos i JOIN campus_modulos c ON c.id = i.campus_id \
+         WHERE i.usuario_id = ? AND i.suspendida = 0 AND i.rol IN ('dueño', 'profesor')",
+    )
+    .bind(ctx.usuario.id)
+    .fetch_all(&app.db)
+    .await
+    else {
+        return;
+    };
+    for f in filas {
+        let campus = CampusModulos { id: f.get("id"), campus_externo: f.get("campus_externo"), universidad_id: f.get("universidad_id") };
+        let _ = sincronizar_con(app, ctx, &campus).await;
+    }
 }

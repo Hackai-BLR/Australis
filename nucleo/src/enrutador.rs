@@ -533,8 +533,8 @@ mod pruebas {
         let casos = [
             (usuario(true, false, false), "dueño", false),
             (usuario(false, true, false), "profesor", false),
-            (usuario(false, false, true), "alumno", true),
-            (usuario(false, true, true), "profesor", true),
+            (usuario(false, false, true), "alumno", false),
+            (usuario(false, true, true), "profesor", false),
             (usuario(false, false, false), "alumno", false),
         ];
         for (u, rol, administrador) in casos {

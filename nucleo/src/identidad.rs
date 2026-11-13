@@ -28,6 +28,8 @@ pub struct PersonaAustralis<'a> {
 }
 
 impl<'a> PersonaAustralis<'a> {
+    /// A university administrator is not signed as an administrator: Australis has no notion of
+    /// universities, so that flag would grant power over every campus, including other universities'.
     pub fn de_usuario(u: &'a crate::auth::Usuario) -> PersonaAustralis<'a> {
         let rol = if u.owner {
             "dueño"
@@ -36,7 +38,7 @@ impl<'a> PersonaAustralis<'a> {
         } else {
             "alumno"
         };
-        PersonaAustralis { usuario: u.id, email: &u.email, nombre: &u.nombre, rol, administrador: u.administrador }
+        PersonaAustralis { usuario: u.id, email: &u.email, nombre: &u.nombre, rol, administrador: u.owner && u.administrador }
     }
 }
 
