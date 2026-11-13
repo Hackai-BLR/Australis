@@ -32,6 +32,25 @@ impl Argon2Cost {
     }
 }
 
+/// How the caller is identified.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AuthMode {
+    /// Email and password with a session cookie. For local development and the tests.
+    Password,
+    /// The Campus IA core signs who the caller is and forwards the request with the
+    /// `X-Campus-Identidad` header; the password routes and invites are off.
+    Header,
+}
+
+impl AuthMode {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            AuthMode::Password => "password",
+            AuthMode::Header => "header",
+        }
+    }
+}
+
 #[derive(Clone)]
 pub struct Config {
     /// `DATABASE_URL`
@@ -63,6 +82,11 @@ pub struct Config {
     pub seed_admin_password: Option<String>,
     /// `SEED_DEMO`: also create fake professor and student accounts.
     pub seed_demo: bool,
+    /// `AUTH_MODE`: `password` (default) or `header`.
+    pub auth_mode: AuthMode,
+    /// `IDENTITY_PUBLIC_KEY`: the core's Ed25519 public key (32 bytes, base64url without
+    /// padding). Required when `AUTH_MODE=header`.
+    pub identity_key: Option<ed25519_dalek::VerifyingKey>,
     /// How long an invite link works. Not an environment variable.
     pub invite_ttl_hours: i64,
     /// Not an environment variable; tests lower it.
@@ -91,6 +115,8 @@ impl Default for Config {
             seed_admin_email: None,
             seed_admin_password: None,
             seed_demo: false,
+            auth_mode: AuthMode::Password,
+            identity_key: None,
             invite_ttl_hours: 24 * 14,
             argon2: Argon2Cost::default(),
         }
@@ -125,6 +151,24 @@ impl Config {
             None => defaults.max_upload_mb,
         };
 
+        let auth_mode = match get("AUTH_MODE").map(|mode| mode.to_lowercase()).as_deref() {
+            None | Some("password") => AuthMode::Password,
+            Some("header") => AuthMode::Header,
+            Some(other) => {
+                return Err(ConfigError(format!(
+                    "AUTH_MODE must be password or header, got {other:?}"
+                )))
+            }
+        };
+        let identity_key = get("IDENTITY_PUBLIC_KEY")
+            .map(|raw| parse_public_key(&raw))
+            .transpose()?;
+        if auth_mode == AuthMode::Header && identity_key.is_none() {
+            return Err(ConfigError(
+                "AUTH_MODE=header needs IDENTITY_PUBLIC_KEY".into(),
+            ));
+        }
+
         Ok(Self {
             database_url: get("DATABASE_URL").unwrap_or(defaults.database_url),
             bind_addr: get("BIND_ADDR").unwrap_or(defaults.bind_addr),
@@ -150,6 +194,8 @@ impl Config {
             seed_admin_email: get("SEED_ADMIN_EMAIL"),
             seed_admin_password: get("SEED_ADMIN_PASSWORD"),
             seed_demo: parse_bool("SEED_DEMO", get("SEED_DEMO"))?,
+            auth_mode,
+            identity_key,
             invite_ttl_hours: defaults.invite_ttl_hours,
             argon2: defaults.argon2,
         })
@@ -162,6 +208,18 @@ impl Config {
 
 pub(crate) fn mb_to_bytes(mb: u64) -> usize {
     usize::try_from(mb.saturating_mul(1024 * 1024)).unwrap_or(usize::MAX)
+}
+
+fn parse_public_key(raw: &str) -> Result<ed25519_dalek::VerifyingKey, ConfigError> {
+    use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
+    let invalid = || {
+        ConfigError(
+            "IDENTITY_PUBLIC_KEY must be an Ed25519 public key (32 bytes, base64url)".into(),
+        )
+    };
+    let bytes = URL_SAFE_NO_PAD.decode(raw).map_err(|_| invalid())?;
+    let bytes: [u8; 32] = bytes.try_into().map_err(|_| invalid())?;
+    ed25519_dalek::VerifyingKey::from_bytes(&bytes).map_err(|_| invalid())
 }
 
 fn parse_positive(name: &str, raw: &str) -> Result<i64, ConfigError> {
@@ -237,6 +295,32 @@ mod tests {
             Some("admin@example.com")
         );
         assert!(config.seed_demo);
+    }
+
+    #[test]
+    fn header_mode_needs_a_valid_public_key() {
+        use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
+        let key = ed25519_dalek::SigningKey::from_bytes(&[7u8; 32]).verifying_key();
+        let encoded = URL_SAFE_NO_PAD.encode(key.to_bytes());
+        let with = |mode: &'static str, key: Option<String>| {
+            Config::from_lookup(move |name| match name {
+                "AUTH_MODE" => Some(mode.into()),
+                "IDENTITY_PUBLIC_KEY" => key.clone(),
+                _ => None,
+            })
+        };
+        assert_eq!(
+            with("password", None).unwrap().auth_mode,
+            AuthMode::Password
+        );
+        assert!(with("header", None).is_err());
+        assert!(with("header", Some("not a key".into())).is_err());
+        assert!(with("header", Some(URL_SAFE_NO_PAD.encode([1u8; 8]))).is_err());
+        assert!(with("magic", Some(encoded.clone())).is_err());
+        let config = with("Header", Some(encoded)).unwrap();
+        assert_eq!(config.auth_mode, AuthMode::Header);
+        assert_eq!(config.identity_key, Some(key));
+        assert_eq!(Config::default().auth_mode, AuthMode::Password);
     }
 
     #[test]
