@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AuthProvider } from "../../shared/auth";
@@ -22,12 +22,17 @@ const today = {
   join_url: "http://x.test/join",
   ended_at: null,
 };
+function ago(days: number): string {
+  return new Date(Date.now() - days * 86_400_000).toISOString().slice(0, 19).replace("T", " ");
+}
 const recorded = {
   id: 9,
   campus_name: "Seminario A",
   title: "Clase 0",
   recording_status: "available",
-  ended_at: "2026-11-12 22:00:00",
+  starts_at: ago(1.1),
+  simulated: true,
+  ended_at: ago(1),
 };
 const grades = {
   scale: { pass: 6 },
@@ -88,11 +93,89 @@ describe("pickStep", () => {
     expect(pickStep([], [recorded], grades, [9], []).kind).toBe("grade");
   });
   it("skips seen grades and says nothing is pending", () => {
-    expect(pickStep([], [], grades, [], [3]).kind).toBe("none");
+    expect(pickStep([], [], grades, [], ["3:8"]).kind).toBe("none");
+  });
+});
+
+describe("pickStep details", () => {
+  const multi = {
+    scale: { pass: 6 },
+    courses: [
+      { campus_name: "Curso A", items: [{ item_id: 1, score: 5 }] },
+      {
+        campus_name: "Seminario de investigación",
+        items: [
+          { item_id: 2, score: 7 },
+          { item_id: 3, score: 9 },
+          { item_id: 4, score: null },
+        ],
+      },
+    ],
+  };
+  it("names the course with most new grades and counts the other courses", () => {
+    const s = pickStep([], [], multi, [], []);
+    expect(s).toMatchObject({
+      kind: "grade",
+      count: 3,
+      campus: "Seminario de investigación",
+      otherCourses: 1,
+    });
+  });
+  it("counts a corrected score as new again", () => {
+    expect(pickStep([], [], grades, [], ["3:7"]).kind).toBe("grade");
+  });
+  it("does not offer a recording older than a week", () => {
+    const old = { ...recorded, starts_at: ago(10.1), ended_at: ago(10) };
+    expect(pickStep([], [old], { courses: [] }, [], []).kind).toBe("none");
+  });
+  it("sorts a never-ended class by its start time", () => {
+    const unended = { ...recorded, id: 20, starts_at: ago(0.5), ended_at: null };
+    const ended = { ...recorded, id: 21, starts_at: ago(3.1), ended_at: ago(3) };
+    const s = pickStep([], [ended, unended], null, [], []);
+    expect(s.kind === "recording" && s.item.id).toBe(20);
   });
 });
 
 describe("NextStep card", () => {
+  it("shows the Simulado badge on a placeholder recording", async () => {
+    mock({ classes: [recorded] });
+    renderHome();
+    await screen.findByText(/Ya está la grabación/);
+    expect(screen.getAllByText("Simulado").length).toBeGreaterThan(0);
+  });
+
+  it("marks a recording seen when opened and moves on to the grade", async () => {
+    mock({
+      classes: [recorded],
+      grades: { ...grades, courses: [{ ...grades.courses[0], items: [{ item_id: 3, score: 8 }] }] },
+    });
+    localStorage.setItem("australis.next.grades.1", "[]");
+    renderHome();
+    fireEvent.click(await screen.findByRole("link", { name: "Ver la grabación" }));
+    expect(JSON.parse(localStorage.getItem("australis.next.rec.1") ?? "[]")).toEqual([9]);
+    cleanup();
+    renderHome();
+    expect(await screen.findByText(/Tenés una nota nueva/)).toBeTruthy();
+  });
+
+  it("marks grades seen when opened and then says the student is up to date", async () => {
+    mock({ grades });
+    localStorage.setItem("australis.next.grades.1", "[]");
+    renderHome();
+    fireEvent.click(await screen.findByRole("link", { name: "Ver mis notas" }));
+    expect(JSON.parse(localStorage.getItem("australis.next.grades.1") ?? "[]")).toEqual(["3:8"]);
+    cleanup();
+    renderHome();
+    expect(await screen.findByText(/Estás al día/)).toBeTruthy();
+  });
+
+  it("baselines existing grades on a browser with no stored state", async () => {
+    mock({ grades });
+    renderHome();
+    expect(await screen.findByText(/Estás al día/)).toBeTruthy();
+    expect(JSON.parse(localStorage.getItem("australis.next.grades.1") ?? "[]")).toEqual(["3:8"]);
+  });
+
   it("shows the class today with a join button", async () => {
     mock({ today: [today], classes: [recorded], grades });
     renderHome();
@@ -106,6 +189,7 @@ describe("NextStep card", () => {
   });
 
   it("shows a new grade when nothing else is pending", async () => {
+    localStorage.setItem("australis.next.grades.1", "[]");
     mock({ grades });
     renderHome();
     expect(await screen.findByText(/Tenés una nota nueva/)).toBeTruthy();

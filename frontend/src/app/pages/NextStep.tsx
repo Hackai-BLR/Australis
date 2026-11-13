@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { apiGet } from "../../shared/api";
 import { useAuth } from "../../shared/auth";
 import {
+  allGradeKeys,
   pickStep,
   type CampusItem,
   type ClassRow,
@@ -12,18 +13,18 @@ import {
 } from "./nextStepLogic";
 import { Button, Card, SimulatedBadge, Spinner } from "../../shared/ui";
 
-function readSeen(key: string): number[] {
+function readSeen<T extends number | string>(key: string, type: "number" | "string"): T[] {
   try {
     const raw = JSON.parse(localStorage.getItem(key) ?? "[]");
-    return Array.isArray(raw) ? raw.filter((n): n is number => typeof n === "number") : [];
+    return Array.isArray(raw) ? raw.filter((n): n is T => typeof n === type) : [];
   } catch {
     return [];
   }
 }
 
-function markSeen(key: string, ids: number[]) {
+function markSeen<T extends number | string>(key: string, ids: T[], type: "number" | "string") {
   try {
-    localStorage.setItem(key, JSON.stringify([...new Set([...readSeen(key), ...ids])]));
+    localStorage.setItem(key, JSON.stringify([...new Set([...readSeen<T>(key, type), ...ids])]));
   } catch {
     // Storage can be blocked; the card then simply shows again.
   }
@@ -63,8 +64,27 @@ export function NextStep() {
         (campuses ?? []).map((c) => orNull(apiGet<ClassRow[]>(`/campuses/${c.id}/classes`))),
       );
       const classes = lists.flatMap((l) => l ?? []);
+      // Grades have no date in the API, so "new" means "not seen in this browser".
+      // On a browser with no stored state (first sign-in, new device) everything
+      // already graded is baselined as seen, so only later changes count as new.
+      // Recordings use their class date instead: only the last RECENT_DAYS count.
+      try {
+        if (grades && localStorage.getItem(gradeKey) === null) {
+          markSeen(gradeKey, allGradeKeys(grades), "string");
+        }
+      } catch {
+        // Storage blocked: nothing to baseline.
+      }
       if (alive)
-        setStep(pickStep(today ?? [], classes, grades, readSeen(recKey), readSeen(gradeKey)));
+        setStep(
+          pickStep(
+            today ?? [],
+            classes,
+            grades,
+            readSeen<number>(recKey, "number"),
+            readSeen<string>(gradeKey, "string"),
+          ),
+        );
     })();
     return () => {
       alive = false;
@@ -89,12 +109,13 @@ export function NextStep() {
       ) : step.kind === "recording" ? (
         <div className="au-row">
           <span>
-            Ya está la grabación de {step.item.title} · {step.item.campus_name}
+            Ya está la grabación de {step.item.title} · {step.item.campus_name}{" "}
+            {step.item.simulated && <SimulatedBadge detail="Grabación de Zoom simulada." />}
           </span>
           <Link
             to={`/classes/${step.item.id}`}
             className="au-btn au-btn--secondary"
-            onClick={() => markSeen(recKey, [step.item.id])}
+            onClick={() => markSeen(recKey, [step.item.id], "number")}
           >
             Ver la grabación
           </Link>
@@ -104,11 +125,13 @@ export function NextStep() {
           <span>
             {step.count === 1 ? "Tenés una nota nueva" : `Tenés ${step.count} notas nuevas`} en{" "}
             {step.campus}
+            {step.otherCourses > 0 &&
+              ` y ${step.otherCourses} ${step.otherCourses === 1 ? "curso más" : "cursos más"}`}
           </span>
           <Link
             to="/grades"
             className="au-btn au-btn--secondary"
-            onClick={() => markSeen(gradeKey, step.ids)}
+            onClick={() => markSeen(gradeKey, step.keys, "string")}
           >
             Ver mis notas
           </Link>
