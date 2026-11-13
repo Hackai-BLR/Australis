@@ -2,6 +2,7 @@ use std::sync::{Arc, Mutex};
 
 use axum::body::Body;
 use axum::http::{header, Method, Request};
+use axum::extract::Path;
 use axum::routing::{get, post};
 use axum::{Json, Router};
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
@@ -28,6 +29,9 @@ struct Registro {
     confirmaciones: usize,
     creados: usize,
     miembros: Vec<Value>,
+    listado_roto: bool,
+    primer_listado_lento: bool,
+    listados: usize,
 }
 
 type Compartido = Arc<Mutex<Registro>>;
@@ -44,6 +48,8 @@ async fn australis_falso() -> (String, Compartido) {
     let r2 = registro.clone();
     let r3 = registro.clone();
     let r4 = registro.clone();
+    let r5 = registro.clone();
+    let r6 = registro.clone();
     let app = Router::new()
         .route("/api/campus-templates", get(|| async { Json(json!([{"key": "basico"}])) }))
         .route(
@@ -91,7 +97,45 @@ async fn australis_falso() -> (String, Compartido) {
             "/api/campuses/7/members",
             get(move || {
                 let r = r4.clone();
-                async move { Json(Value::Array(r.lock().unwrap().miembros.clone())) }
+                async move {
+                    let (lento, miembros) = {
+                        let mut r = r.lock().unwrap();
+                        if r.listado_roto {
+                            return (axum::http::StatusCode::INTERNAL_SERVER_ERROR, Json(Value::Null));
+                        }
+                        r.listados += 1;
+                        (r.primer_listado_lento && r.listados == 1, r.miembros.clone())
+                    };
+                    if lento {
+                        tokio::time::sleep(std::time::Duration::from_millis(400)).await;
+                    }
+                    (axum::http::StatusCode::OK, Json(Value::Array(miembros)))
+                }
+            }),
+        )
+        .route(
+            "/api/campuses/7/members/{uid}/{accion}",
+            post(move |Path((uid, accion)): Path<(usize, String)>| {
+                let r = r5.clone();
+                async move {
+                    let mut r = r.lock().unwrap();
+                    match accion.as_str() {
+                        "suspend" => r.miembros[uid]["status"] = json!("suspended"),
+                        "reactivate" => r.miembros[uid]["status"] = json!("active"),
+                        _ => {}
+                    }
+                    Json(json!({"ok": true}))
+                }
+            }),
+        )
+        .route(
+            "/api/campuses/7/teachers",
+            post(move |Json(c): Json<Value>| {
+                let r = r6.clone();
+                async move {
+                    r.lock().unwrap().miembros.push(json!({"email": c["email"], "full_name": "Invitada", "role": "guest", "status": "active"}));
+                    (axum::http::StatusCode::CREATED, Json(json!({"ok": true})))
+                }
             }),
         );
     let escucha = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -506,4 +550,123 @@ async fn confirmar_una_importacion_en_australis_inscribe_en_el_nucleo_sin_sincro
     let (_, lista) = pedir(&app, &profe, Method::GET, &format!("/api/cursos-modulos/{id}/inscriptos"), None).await;
     let todos = lista["inscriptos"].as_array().unwrap();
     assert!(todos.iter().any(|i| i["email"] == "marta@univ.test"), "{lista}");
+}
+
+async fn por_australis(app: &Estado, profe: &str, ruta: &str, cuerpo: Option<Value>) -> (u16, Value) {
+    let propio = crate::enrutador::origen_de(app, crate::servidor::SUBDOMINIO_AUSTRALIS, None);
+    let host = propio.split("://").nth(1).unwrap().to_string();
+    let mut b = Request::builder()
+        .method(Method::POST)
+        .uri(ruta)
+        .header(header::HOST, &host)
+        .header(header::ORIGIN, &propio)
+        .header(header::COOKIE, format!("{COOKIE}={profe}"));
+    let cuerpo = match cuerpo {
+        Some(c) => {
+            b = b.header(header::CONTENT_TYPE, "application/json");
+            Body::from(c.to_string())
+        }
+        None => Body::empty(),
+    };
+    let mut router = crate::servidor::router(app.clone());
+    let respuesta = router.call(b.body(cuerpo).unwrap()).await.unwrap();
+    let estado = respuesta.status().as_u16();
+    let bytes = axum::body::to_bytes(respuesta.into_body(), 1 << 20).await.unwrap();
+    (estado, serde_json::from_slice(&bytes).unwrap_or(Value::Null))
+}
+
+async fn estado_en_el_nucleo(app: &Estado, profe: &str, id: i64, email: &str) -> Option<bool> {
+    let (_, lista) = pedir(app, profe, Method::GET, &format!("/api/cursos-modulos/{id}/inscriptos"), None).await;
+    lista["inscriptos"].as_array().unwrap().iter().find(|i| i["email"] == email).map(|i| i["suspendida"].as_bool().unwrap())
+}
+
+#[tokio::test]
+async fn suspender_y_reactivar_en_australis_llega_al_nucleo_en_el_mismo_pedido() {
+    let (url, registro) = australis_falso().await;
+    let app = nueva_app(Some(url)).await;
+    let uni = universidad(&app, "univ.test").await;
+    let (_, profe) = persona(&app, "profe@univ.test", uni, true).await;
+    let id = campus_creado(&app, &profe).await;
+    registro.lock().unwrap().miembros.push(json!({"email": "marta@univ.test", "full_name": "Marta", "role": "student", "status": "active"}));
+    let (estado, _) = por_australis(&app, &profe, "/api/campuses/7/members/1/suspend", Some(json!({"reason": "baja"}))).await;
+    assert_eq!(estado, 200);
+    assert_eq!(estado_en_el_nucleo(&app, &profe, id, "marta@univ.test").await, Some(true));
+    let (estado, _) = por_australis(&app, &profe, "/api/campuses/7/members/1/reactivate", Some(json!({"reason": "vuelve"}))).await;
+    assert_eq!(estado, 200);
+    assert_eq!(estado_en_el_nucleo(&app, &profe, id, "marta@univ.test").await, Some(false));
+}
+
+#[tokio::test]
+async fn agregar_un_docente_invitado_en_australis_llega_al_nucleo() {
+    let (url, _registro) = australis_falso().await;
+    let app = nueva_app(Some(url)).await;
+    let uni = universidad(&app, "univ.test").await;
+    let (_, profe) = persona(&app, "profe@univ.test", uni, true).await;
+    let id = campus_creado(&app, &profe).await;
+    let (estado, _) = por_australis(&app, &profe, "/api/campuses/7/teachers", Some(json!({"email": "otra@univ.test"}))).await;
+    assert_eq!(estado, 201);
+    assert_eq!(estado_en_el_nucleo(&app, &profe, id, "otra@univ.test").await, Some(false));
+}
+
+#[tokio::test]
+async fn reenviar_la_invitacion_en_australis_sincroniza_sin_error() {
+    let (url, registro) = australis_falso().await;
+    let app = nueva_app(Some(url)).await;
+    let uni = universidad(&app, "univ.test").await;
+    let (_, profe) = persona(&app, "profe@univ.test", uni, true).await;
+    let id = campus_creado(&app, &profe).await;
+    registro.lock().unwrap().miembros.push(json!({"email": "marta@univ.test", "full_name": "Marta", "role": "student", "status": "active"}));
+    let (estado, _) = por_australis(&app, &profe, "/api/campuses/7/members/1/invite", None).await;
+    assert_eq!(estado, 200);
+    assert_eq!(estado_en_el_nucleo(&app, &profe, id, "marta@univ.test").await, Some(false));
+}
+
+#[tokio::test]
+async fn si_el_cambio_no_llega_al_nucleo_el_pedido_lo_muestra() {
+    let (url, registro) = australis_falso().await;
+    let app = nueva_app(Some(url)).await;
+    let uni = universidad(&app, "univ.test").await;
+    let (_, profe) = persona(&app, "profe@univ.test", uni, true).await;
+    campus_creado(&app, &profe).await;
+    registro.lock().unwrap().miembros.push(json!({"email": "marta@univ.test", "full_name": "Marta", "role": "student", "status": "active"}));
+    registro.lock().unwrap().listado_roto = true;
+    let (estado, cuerpo) = por_australis(&app, &profe, "/api/campuses/7/members/1/suspend", Some(json!({"reason": "baja"}))).await;
+    assert_eq!(estado, 502);
+    assert_eq!(cuerpo["codigo"], "sincronizacion_fallida");
+    assert!(cuerpo["error"].as_str().unwrap().contains("no llegó"));
+}
+
+#[tokio::test]
+async fn dos_cambios_a_la_vez_dejan_al_nucleo_igual_que_australis() {
+    let (url, registro) = australis_falso().await;
+    let app = nueva_app(Some(url)).await;
+    let uni = universidad(&app, "univ.test").await;
+    let (_, profe) = persona(&app, "profe@univ.test", uni, true).await;
+    let id = campus_creado(&app, &profe).await;
+    registro.lock().unwrap().miembros.push(json!({"email": "marta@univ.test", "full_name": "Marta", "role": "student", "status": "active"}));
+    registro.lock().unwrap().primer_listado_lento = true;
+    let (a, b) = tokio::join!(
+        por_australis(&app, &profe, "/api/campuses/7/members/1/suspend", Some(json!({"reason": "baja"}))),
+        async {
+            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+            por_australis(&app, &profe, "/api/campuses/7/members/1/reactivate", Some(json!({"reason": "vuelve"}))).await
+        }
+    );
+    assert_eq!((a.0, b.0), (200, 200));
+    assert_eq!(registro.lock().unwrap().miembros[1]["status"], "active");
+    assert_eq!(estado_en_el_nucleo(&app, &profe, id, "marta@univ.test").await, Some(false));
+}
+
+#[tokio::test]
+async fn un_docente_invitado_de_otro_dominio_no_llega_al_nucleo_y_el_pedido_lo_muestra() {
+    let (url, _registro) = australis_falso().await;
+    let app = nueva_app(Some(url)).await;
+    let uni = universidad(&app, "univ.test").await;
+    let (_, profe) = persona(&app, "profe@univ.test", uni, true).await;
+    let id = campus_creado(&app, &profe).await;
+    let (estado, cuerpo) = por_australis(&app, &profe, "/api/campuses/7/teachers", Some(json!({"email": "otra@gmail.com"}))).await;
+    assert_eq!(estado, 502);
+    assert_eq!(cuerpo["codigo"], "invitado_fuera_del_dominio");
+    assert!(cuerpo["error"].as_str().unwrap().contains("otra@gmail.com"));
+    assert_eq!(estado_en_el_nucleo(&app, &profe, id, "otra@gmail.com").await, None);
 }

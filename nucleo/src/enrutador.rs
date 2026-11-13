@@ -384,23 +384,32 @@ async fn atender_australis_interno(app: &App, puerto: Option<&str>, req: Request
     let identidad = app
         .identidad
         .firmar_australis(&PersonaAustralis::de_usuario(&usuario), app.cfg.identidad_vigencia_seg);
-    let importacion = importacion_confirmada(req.method(), req.uri().path());
+    let cambio = cambio_de_inscriptos(req.method(), req.uri().path());
+    let es_alta_de_docente = req.uri().path().trim_end_matches('/').ends_with("/teachers");
     let respuesta = reenviar_a_australis(cliente_australis(), destino, &identidad, req).await;
-    if let Some(campus) = importacion {
+    if let Some(campus) = cambio {
         if respuesta.status().is_success() {
-            crate::cursos::modulos::sincronizar_campus_externo(app, &usuario, campus).await;
+            match crate::cursos::modulos::sincronizar_campus_externo(app, &usuario, campus).await {
+                Err(_) => return Ok(crate::cursos::modulos::sincronizacion_fallida_para_australis()),
+                Ok(omitidos) if !omitidos.is_empty() && es_alta_de_docente => {
+                    return Ok(crate::cursos::modulos::docentes_fuera_del_dominio_para_australis(&omitidos));
+                }
+                Ok(_) => {}
+            }
         }
     }
     Ok(respuesta)
 }
 
-fn importacion_confirmada(metodo: &Method, ruta: &str) -> Option<i64> {
+fn cambio_de_inscriptos(metodo: &Method, ruta: &str) -> Option<i64> {
     if *metodo != Method::POST {
         return None;
     }
     let partes: Vec<&str> = ruta.trim_matches('/').split('/').collect();
     match partes.as_slice() {
-        ["api", "campuses", campus, "roster", "imports", _, "confirm"] => campus.parse().ok(),
+        ["api", "campuses", campus, "roster", "imports", _, "confirm"]
+        | ["api", "campuses", campus, "members", _, "suspend" | "reactivate" | "invite"]
+        | ["api", "campuses", campus, "teachers"] => campus.parse().ok(),
         _ => None,
     }
 }
