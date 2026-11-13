@@ -2,6 +2,7 @@ import { expect, test } from '@playwright/test';
 import { Cliente, tokenDeInvitacion } from '../../comun/cliente.ts';
 import {
   CLAVE,
+  ETICA,
   alumnoConSesion,
   crearCampus,
   crearClaseDeHoy,
@@ -26,11 +27,51 @@ test.describe('Checkpoint A: lo que debe rechazarse', () => {
   let alumnoA: { cliente: Cliente; id: number; correo: string };
   let alumnoB: { cliente: Cliente; id: number; correo: string };
   let ajeno: Cliente;
+  let correoIntruso: string;
+  let vivoId: number;
+
+  type Ruta = { metodo: 'post' | 'patch' | 'get'; ruta: string; cuerpo?: unknown };
+
+  async function rutasProtegidas(incluirLectura: boolean): Promise<Ruta[]> {
+    const propuesta = await duena.post(`/api/campuses/${campus}/ai/proposals`, { instruction: ETICA });
+    expect(propuesta.estado, propuesta.texto).toBe(201);
+    const rutas: Ruta[] = [
+      { metodo: 'post', ruta: `/api/campuses/${campus}/ai/proposals/${propuesta.json.id}/accept`, cuerpo: {} },
+      { metodo: 'post', ruta: `/api/campuses/${campus}/ai/proposals/${propuesta.json.id}/reject`, cuerpo: {} },
+      { metodo: 'post', ruta: `/api/campuses/${campus}/members/${alumnoA.id}/invite`, cuerpo: {} },
+      { metodo: 'post', ruta: `/api/campuses/${campus}/teachers`, cuerpo: { email: correoIntruso } },
+      { metodo: 'post', ruta: `/api/live/${vivoId}/goto`, cuerpo: { page: 2 } },
+      { metodo: 'post', ruta: `/api/live/${vivoId}/end`, cuerpo: {} },
+      { metodo: 'patch', ruta: `/api/classes/${claseId}`, cuerpo: { title: 'Clase tomada' } },
+    ];
+    if (incluirLectura) {
+      rutas.push({ metodo: 'get', ruta: `/api/live/${vivoId}/stream` }, { metodo: 'post', ruta: `/api/classes/${claseId}/recording/sync`, cuerpo: {} });
+    }
+    return rutas;
+  }
+
+  async function rechazadas(cliente: Cliente, rutas: Ruta[]) {
+    for (const r of rutas) {
+      const respuesta = r.metodo === 'get' ? await cliente.get(r.ruta) : r.metodo === 'post' ? await cliente.post(r.ruta, r.cuerpo) : await cliente.patch(r.ruta, r.cuerpo);
+      expect(respuesta.estado, r.ruta).toBe(403);
+    }
+  }
+
+  async function intactoTrasIntento() {
+    const miembros = (await duena.get(`/api/campuses/${campus}/members`)).json;
+    expect(miembros.some((m: any) => m.email === correoIntruso)).toBe(false);
+    expect((await duena.get(`/api/classes/${claseId}`)).json.title).toBe('Clase 1');
+    const estado = await duena.get(`/api/live/${vivoId}/state`);
+    expect(estado.json.status).toBe('live');
+    expect(estado.json.current_page).toBe(1);
+  }
 
   test.beforeAll(async () => {
     sec = await secretaria();
     duena = (await crearDocente(sec, 'Docente Dueña')).cliente;
-    intruso = (await crearDocente(sec, 'Docente Intruso')).cliente;
+    const docenteIntruso = await crearDocente(sec, 'Docente Intruso');
+    intruso = docenteIntruso.cliente;
+    correoIntruso = docenteIntruso.correo;
     campus = await crearCampus(duena, 'Campus de la dueña');
     otroCampus = await crearCampus(intruso, 'Campus del intruso');
     const lista = await importarAlumnos(duena, campus, 'Nombre,Correo\nAlumna Uno,uno@alumnos.test\nAlumno Dos,dos@alumnos.test');
@@ -46,6 +87,7 @@ test.describe('Checkpoint A: lo que debe rechazarse', () => {
     });
     claseId = await crearClaseDeHoy(duena, campus);
     presentacion = (await subirPdf(duena, campus, 2)).id;
+    vivoId = (await duena.post(`/api/presentations/${presentacion}/live`, {})).json.id;
     ajeno = await Cliente.nuevo();
   });
 
@@ -100,6 +142,9 @@ test.describe('Checkpoint A: lo que debe rechazarse', () => {
     ];
     for (const [ruta, cuerpo] of escrituras) expect((await intruso.post(ruta, cuerpo)).estado, ruta).toBe(403);
 
+    await rechazadas(intruso, await rutasProtegidas(true));
+    await intactoTrasIntento();
+
     const nota = await intruso.put(`/api/campuses/${campus}/gradebook/entries`, { entries: [{ item_id: item, student_id: alumnoA.id, score: 10 }] });
     expect(nota.estado).toBe(403);
     const documento = await intruso.put(`/api/campuses/${campus}/document`, { version: 1, document: { schema: 1, sections: [] } });
@@ -130,6 +175,9 @@ test.describe('Checkpoint A: lo que debe rechazarse', () => {
     expect((await alumnoA.cliente.post(`/api/presentations/${presentacion}/live`, {})).estado).toBe(403);
     expect((await alumnoA.cliente.post(`/api/classes/${claseId}/end`, {})).estado).toBe(403);
     expect((await alumnoA.cliente.post('/api/users', { email: 'x@alumnos.test', full_name: 'X', role: 'secretary' })).estado).toBe(403);
+
+    await rechazadas(alumnoA.cliente, await rutasProtegidas(false));
+    await intactoTrasIntento();
 
     const mias = (await alumnoA.cliente.get('/api/grades/mine')).json;
     expect(mias.courses[0].items[0].score).toBe(7);
@@ -207,6 +255,8 @@ test.describe('Checkpoint A: lo que debe rechazarse', () => {
     for (const ruta of [`/api/campuses/${campus}`, `/api/classes/${claseId}`, `/api/presentations/${presentacion}/file`]) {
       expect((await alumnoB.cliente.get(ruta)).estado, ruta).toBe(403);
     }
+    await rechazadas(alumnoB.cliente, await rutasProtegidas(true));
+    await intactoTrasIntento();
     const mias = await alumnoB.cliente.get('/api/grades/mine');
     expect(mias.json.courses.every((c: any) => c.campus_id !== campus)).toBe(true);
     const hoy = await alumnoB.cliente.get('/api/classes/today');
