@@ -248,7 +248,8 @@ instalar_australis() {
 		chown -R root:root "$AUSTRALIS_FRONTEND_DESTINO"
 		chmod -R u=rwX,go=rX "$AUSTRALIS_FRONTEND_DESTINO"
 		chown campusia:campusia "$AUSTRALIS" "$AUSTRALIS_DATOS" "$AUSTRALIS_ARCHIVOS"
-		chmod 0750 "$AUSTRALIS" "$AUSTRALIS_DATOS"
+		chmod 0751 "$AUSTRALIS"
+		chmod 0750 "$AUSTRALIS_DATOS"
 		find "$AUSTRALIS_DATOS" -maxdepth 1 -name 'australis.db*' -exec chown campusia:campusia {} +
 		chown -R campusia:campusia "$AUSTRALIS_ARCHIVOS"
 		chown campusia:campusia "$AUSTRALIS_ENTORNO"

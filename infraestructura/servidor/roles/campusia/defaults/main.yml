@@ -13,5 +13,6 @@ campusia_secretos:
   SESSION_SECRET: vault_secreto_sesion
   SECRETO_FIRMA: vault_secreto_firma
   SECRETO_WEBHOOK: vault_secreto_webhook
+  IDENTIDAD_CLAVE_PRIVADA: vault_identidad_clave_privada
 campusia_instalar_clave: "{{ servidor_raiz }}/.ssh/campusia_deploy"
 campusia_despliegue_dir: "{{ servidor_raiz }}/despliegue"
