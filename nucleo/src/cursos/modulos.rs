@@ -443,15 +443,17 @@ async fn sincronizar_completo(
             }
         }
     }
-    auditar(
-        &mut *tx,
-        Some(campus.universidad_id),
-        Some(usuario.id),
-        "inscripcion_modulos",
-        &format!("{} sincronizó las inscripciones del campus con módulos {}", usuario.email, campus.id),
-        ip,
-    )
-    .await?;
+    if agregados + actualizados > 0 {
+        auditar(
+            &mut *tx,
+            Some(campus.universidad_id),
+            Some(usuario.id),
+            "inscripcion_modulos",
+            &format!("{} sincronizó las inscripciones del campus con módulos {}", usuario.email, campus.id),
+            ip,
+        )
+        .await?;
+    }
     tx.commit().await?;
     Ok((agregados, actualizados, docentes_omitidos))
 }

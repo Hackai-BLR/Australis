@@ -815,7 +815,75 @@ async fn el_owner_sin_universidad_ve_los_campus_con_modulos_de_todas_las_univers
     for campus in [id, id_otra] {
         let (estado, lista) = pedir(&app, &owner, Method::GET, &format!("/api/cursos-modulos/{campus}/inscriptos"), None).await;
         assert_eq!(estado, 200, "{lista}");
+        let emails: Vec<&str> = lista["inscriptos"].as_array().unwrap().iter().map(|i| i["email"].as_str().unwrap()).collect();
+        if campus == id {
+            assert_eq!(emails, vec!["profe@univ.test"], "{lista}");
+        } else {
+            assert!(emails.is_empty(), "{lista}");
+        }
     }
     let (estado, _) = pedir(&app, &profe, Method::GET, "/api/admin/cursos", None).await;
     assert_eq!(estado, 403);
+}
+
+async fn filas_de_auditoria(app: &App) -> i64 {
+    sqlx::query_scalar("SELECT COUNT(*) FROM auditoria WHERE accion = 'inscripcion_modulos'").fetch_one(&app.db).await.unwrap()
+}
+
+#[tokio::test]
+async fn las_vistas_de_solo_lectura_no_escriben_auditoria_si_nada_cambio() {
+    let (url, registro) = australis_falso().await;
+    let app = nueva_app(Some(url)).await;
+    let uni = universidad(&app, "univ.test").await;
+    let (_, profe) = persona(&app, "profe@univ.test", uni, true).await;
+    let id = campus_creado(&app, &profe).await;
+    let admin = administrador(&app, "admin@univ.test", uni).await;
+    let base = filas_de_auditoria(&app).await;
+    for _ in 0..2 {
+        pedir(&app, &admin, Method::GET, "/api/admin/cursos", None).await;
+        pedir(&app, &admin, Method::GET, &format!("/api/cursos-modulos/{id}/inscriptos"), None).await;
+        pedir(&app, &profe, Method::GET, "/api/mis-cursos", None).await;
+    }
+    assert_eq!(filas_de_auditoria(&app).await, base);
+    registro.lock().unwrap().miembros.push(json!({"email": "ana@univ.test", "full_name": "Ana", "role": "student", "status": "active"}));
+    pedir(&app, &admin, Method::GET, "/api/admin/cursos", None).await;
+    assert_eq!(filas_de_auditoria(&app).await, base + 1);
+}
+
+#[tokio::test]
+async fn un_owner_con_universidad_lista_todas_las_universidades_con_cursos_libres_y_campus() {
+    let (url, _registro) = australis_falso().await;
+    let app = nueva_app(Some(url)).await;
+    let uni = universidad(&app, "univ.test").await;
+    let otra = universidad(&app, "otra.test").await;
+    let (profe_id, profe) = persona(&app, "profe@univ.test", uni, true).await;
+    let id = campus_creado(&app, &profe).await;
+    let (otro_id, _) = persona(&app, "otro@otra.test", otra, true).await;
+    curso_libre(&app, "libre-uno", otra, otro_id).await;
+    curso_libre(&app, "libre-dos", uni, profe_id).await;
+    let (owner_id, owner) = persona(&app, "owner@univ.test", uni, false).await;
+    sqlx::query("UPDATE usuarios SET owner = 1 WHERE id = ?").bind(owner_id).execute(&app.db).await.unwrap();
+    let (estado, cursos) = pedir(&app, &owner, Method::GET, "/api/admin/cursos", None).await;
+    assert_eq!(estado, 200, "{cursos}");
+    let ids: Vec<String> = cursos["cursos"].as_array().unwrap().iter().map(|c| c["id"].as_str().unwrap().to_string()).collect();
+    for esperado in ["libre-uno".to_string(), "libre-dos".to_string(), format!("campus-{id}")] {
+        assert!(ids.contains(&esperado), "{esperado} falta en {cursos}");
+    }
+    let (estado, lista) = pedir(&app, &owner, Method::GET, &format!("/api/cursos-modulos/{id}/inscriptos"), None).await;
+    assert_eq!(estado, 200);
+    assert_eq!(lista["inscriptos"][0]["email"], "profe@univ.test");
+}
+
+#[tokio::test]
+async fn un_owner_suspendido_no_ve_ni_el_listado_ni_los_inscriptos() {
+    let (url, _registro) = australis_falso().await;
+    let app = nueva_app(Some(url)).await;
+    let uni = universidad(&app, "univ.test").await;
+    let (_, profe) = persona(&app, "profe@univ.test", uni, true).await;
+    let id = campus_creado(&app, &profe).await;
+    let owner = owner_sin_universidad(&app, "owner@campusia.test").await;
+    sqlx::query("UPDATE usuarios SET suspendida_en = '2026-01-01T00:00:00Z' WHERE email = 'owner@campusia.test'").execute(&app.db).await.unwrap();
+    let (a, _) = pedir(&app, &owner, Method::GET, "/api/admin/cursos", None).await;
+    let (b, _) = pedir(&app, &owner, Method::GET, &format!("/api/cursos-modulos/{id}/inscriptos"), None).await;
+    assert!(a >= 400 && b >= 400, "{a} {b}");
 }

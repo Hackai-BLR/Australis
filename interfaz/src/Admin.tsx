@@ -326,6 +326,7 @@ function Personas({ uni, yo, esOwner, conUni }: { uni: UniversidadAdmin | null; 
 function Cursos({ dominioBase, conUni }: { dominioBase: string; conUni: ConUni }) {
   const [cursos, setCursos] = useState<CursoAdmin[] | null>(null);
   const [transferir, setTransferir] = useState<CursoAdmin | null>(null);
+  const [inscriptos, setInscriptos] = useState<CursoAdmin | null>(null);
   const confirmar = useConfirmar();
   const cargar = useCallback(async () => {
     try {
@@ -375,7 +376,11 @@ function Cursos({ dominioBase, conUni }: { dominioBase: string; conUni: ConUni }
                 <td>{c.tipo === 'modulos' ? <span className="pill">Campus con módulos</span> : c.archivado ? <PastillaArchivado /> : c.version_publicada ? <span className="pill verde">Publicado · v{c.version_publicada}</span> : <span className="pill">Sin publicar</span>}</td>
                 <td className="num">USD {usd(c.uso_usd_mes)}</td>
                 {c.tipo === 'modulos' ? (
-                  <td></td>
+                  <td>
+                    <button className="btn" data-inscriptos-campus={c.id} onClick={() => setInscriptos(c)}>
+                      Ver inscriptos
+                    </button>
+                  </td>
                 ) : (
                   <CeldaAccionCursoAdmin
                     c={c}
@@ -391,8 +396,63 @@ function Cursos({ dominioBase, conUni }: { dominioBase: string; conUni: ConUni }
         </table>
       </div>
       {confirmar.elemento}
+      {inscriptos && <ModalInscriptosCampus c={inscriptos} alCerrar={() => setInscriptos(null)} />}
       {transferir && <ModalTransferir c={transferir} conUni={conUni} alCerrar={() => setTransferir(null)} alTransferir={cargar} />}
     </>
+  );
+}
+
+interface InscriptoCampus {
+  id: number;
+  nombre: string;
+  email: string;
+  rol: string;
+  pendiente: boolean;
+  suspendida: boolean;
+}
+
+function ModalInscriptosCampus({ c, alCerrar }: { c: CursoAdmin; alCerrar: () => void }) {
+  const [lista, setLista] = useState<InscriptoCampus[] | null>(null);
+  const cerrar = useRef(alCerrar);
+  cerrar.current = alCerrar;
+  useEffect(() => {
+    get<{ inscriptos: InscriptoCampus[] }>(`/api/cursos-modulos/${c.id.replace('campus-', '')}/inscriptos`)
+      .then((r) => setLista(r.inscriptos))
+      .catch((e) => {
+        avisarError(e);
+        cerrar.current();
+      });
+  }, [c.id]);
+  return (
+    <Modal alCerrar={alCerrar}>
+      <h3>Inscriptos · {c.nombre}</h3>
+      <table className="tabla" data-inscriptos-lista>
+        <thead>
+          <tr>
+            <th>Persona</th>
+            <th>Rol</th>
+            <th>Estado</th>
+          </tr>
+        </thead>
+        <tbody>
+          {(lista ?? []).map((i) => (
+            <tr key={i.id}>
+              <td>
+                {i.nombre}
+                <small>{i.email}</small>
+              </td>
+              <td>{i.rol}</td>
+              <td>{i.suspendida ? 'Suspendida' : i.pendiente ? 'Pendiente' : 'Activa'}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <div className="acciones">
+        <button className="btn" onClick={alCerrar}>
+          Cerrar
+        </button>
+      </div>
+    </Modal>
   );
 }
 
