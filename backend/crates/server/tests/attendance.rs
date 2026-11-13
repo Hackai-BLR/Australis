@@ -111,7 +111,12 @@ async fn a_change_needs_a_reason_and_writes_an_audit_row() {
     )
     .await;
 
-    for reason in [None, Some("   ")] {
+    for reason in [
+        None,
+        Some("   "),
+        Some("\u{200B}"),
+        Some("\u{FEFF}\u{2060} "),
+    ] {
         let (status, body) = save(
             &app,
             &prof,
