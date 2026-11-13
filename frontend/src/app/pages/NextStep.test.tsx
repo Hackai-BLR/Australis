@@ -35,9 +35,14 @@ const recorded = {
   ended_at: ago(1),
 };
 const grades = {
-  scale: { pass: 6 },
   courses: [
-    { campus_id: 1, campus_name: "Seminario A", final: 8, items: [{ item_id: 3, score: 8 }] },
+    {
+      campus_id: 1,
+      campus_name: "Seminario A",
+      final: 8,
+      scale: { pass: 6 },
+      items: [{ item_id: 3, score: 8 }],
+    },
   ],
 };
 
@@ -50,8 +55,7 @@ function mock(opts: { today?: unknown[]; classes?: unknown[]; grades?: unknown }
       if (url === "/api/campuses") return json(200, [{ id: 1, name: "Seminario A" }]);
       if (url === "/api/campuses/1/classes") return json(200, opts.classes ?? []);
       if (url === "/api/classes/today") return json(200, opts.today ?? []);
-      if (url === "/api/grades/mine")
-        return json(200, opts.grades ?? { scale: { pass: 6 }, courses: [] });
+      if (url === "/api/grades/mine") return json(200, opts.grades ?? { courses: [] });
       return json(404, { error: "no" });
     }),
   );
@@ -99,7 +103,6 @@ describe("pickStep", () => {
 
 describe("pickStep details", () => {
   const multi = {
-    scale: { pass: 6 },
     courses: [
       { campus_name: "Curso A", items: [{ item_id: 1, score: 5 }] },
       {

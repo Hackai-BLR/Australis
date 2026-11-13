@@ -47,14 +47,13 @@ function mock(
       if (url === "/api/classes/today") return json(200, opts.today ?? []);
       if (url === "/api/grades/mine")
         return json(200, {
-          scale: { pass: 6 },
           courses: [
             {
               campus_id: 1,
               campus_name: "Seminario A",
               final: 8.4,
               items: [],
-              scale: opts.courseScale,
+              scale: opts.courseScale ?? { pass: 6 },
             },
           ],
         });
