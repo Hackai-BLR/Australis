@@ -289,7 +289,25 @@ pub async fn agregar_inscriptos(
     Ok(ok(json!({"agregados": agregados, "actualizados": actualizados})))
 }
 
+fn cerrojo_del_campus(campus_id: i64) -> std::sync::Arc<tokio::sync::Mutex<()>> {
+    static CERROJOS: std::sync::OnceLock<std::sync::Mutex<std::collections::HashMap<i64, std::sync::Arc<tokio::sync::Mutex<()>>>>> =
+        std::sync::OnceLock::new();
+    let mut mapa = CERROJOS.get_or_init(Default::default).lock().unwrap_or_else(|e| e.into_inner());
+    mapa.entry(campus_id).or_default().clone()
+}
+
 async fn sincronizar_con(app: &App, usuario: &Usuario, ip: Option<&str>, campus: &CampusModulos) -> Result<(usize, usize), ApiError> {
+    sincronizar_completo(app, usuario, ip, campus).await.map(|(a, b, _)| (a, b))
+}
+
+async fn sincronizar_completo(
+    app: &App,
+    usuario: &Usuario,
+    ip: Option<&str>,
+    campus: &CampusModulos,
+) -> Result<(usize, usize, Vec<String>), ApiError> {
+    let cerrojo = cerrojo_del_campus(campus.id);
+    let _turno = cerrojo.lock().await;
     let ruta = format!("/api/campuses/{}/members", campus.campus_externo);
     let (estado, miembros) = llamar_australis(app, usuario, reqwest::Method::GET, &ruta, None).await?;
     if !estado.is_success() {
@@ -300,10 +318,13 @@ async fn sincronizar_con(app: &App, usuario: &Usuario, ip: Option<&str>, campus:
     let mut agregados = 0;
     let mut actualizados = 0;
     let mut admitidos = Vec::new();
+    let mut docentes_omitidos = Vec::new();
     for m in lista {
         let Some(email) = m["email"].as_str().and_then(normalizar_email) else { continue };
         if de_la_universidad(app, &email, campus.universidad_id).await? {
             admitidos.push((email, m));
+        } else if rol_desde_australis(m["role"].as_str().unwrap_or("student")) == "profesor" {
+            docentes_omitidos.push(email);
         }
     }
     let mut tx = app.db.begin().await?;
@@ -372,7 +393,7 @@ async fn sincronizar_con(app: &App, usuario: &Usuario, ip: Option<&str>, campus:
     )
     .await?;
     tx.commit().await?;
-    Ok((agregados, actualizados))
+    Ok((agregados, actualizados, docentes_omitidos))
 }
 
 pub async fn sincronizar(State(app): State<Estado>, ctx: Ctx, Path(id): Path<String>) -> Resultado {
@@ -398,16 +419,16 @@ pub async fn sincronizar_docentes(app: &App, ctx: &Ctx) {
     }
 }
 
-pub async fn sincronizar_campus_externo(app: &App, usuario: &Usuario, campus_externo: i64) -> Result<(), ApiError> {
+pub async fn sincronizar_campus_externo(app: &App, usuario: &Usuario, campus_externo: i64) -> Result<Vec<String>, ApiError> {
     let Some(f) = sqlx::query("SELECT id, campus_externo, universidad_id FROM campus_modulos WHERE campus_externo = ?")
         .bind(campus_externo)
         .fetch_optional(&app.db)
         .await?
     else {
-        return Ok(());
+        return Ok(Vec::new());
     };
     let campus = CampusModulos { id: f.get("id"), campus_externo: f.get("campus_externo"), universidad_id: f.get("universidad_id") };
-    sincronizar_con(app, usuario, None, &campus).await.map(|_| ())
+    sincronizar_completo(app, usuario, None, &campus).await.map(|(_, _, omitidos)| omitidos)
 }
 
 pub fn sincronizacion_fallida() -> ApiError {
@@ -421,5 +442,18 @@ pub fn sincronizacion_fallida() -> ApiError {
 pub fn sincronizacion_fallida_para_australis() -> axum::response::Response {
     use axum::response::IntoResponse;
     let e = sincronizacion_fallida();
+    (e.estado, axum::Json(json!({"error": e.mensaje, "codigo": e.codigo}))).into_response()
+}
+
+pub fn docentes_fuera_del_dominio_para_australis(emails: &[String]) -> axum::response::Response {
+    use axum::response::IntoResponse;
+    let e = ApiError::nuevo(
+        StatusCode::BAD_GATEWAY,
+        "invitado_fuera_del_dominio",
+        &format!(
+            "El docente se agregó al campus, pero no llegó a las inscripciones de Campus IA porque su email no es del dominio de la universidad: {}.",
+            emails.join(", ")
+        ),
+    );
     (e.estado, axum::Json(json!({"error": e.mensaje, "codigo": e.codigo}))).into_response()
 }
