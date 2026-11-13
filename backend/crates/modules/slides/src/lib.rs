@@ -30,7 +30,6 @@ use serde::{Deserialize, Serialize};
 use sqlx::SqliteConnection;
 use tokio_stream::wrappers::BroadcastStream;
 
-
 pub fn router() -> Router<AppState> {
     Router::new()
         .route(
