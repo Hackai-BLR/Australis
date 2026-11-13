@@ -51,7 +51,11 @@ async fn override_replaces_value_for_one_campus_only_and_is_audited() {
         .await;
     assert_eq!(status, StatusCode::OK, "{body}");
     assert_eq!(body["source"], "campus");
-    assert_eq!(body["unconfirmed"], false);
+    assert_eq!(
+        body["unconfirmed"], true,
+        "a manager cannot confirm a value"
+    );
+    assert_eq!(body["value"]["confirmed"], false);
     assert_eq!(body["global_value"]["max"], 10.0);
 
     let (_, body) = app
@@ -311,4 +315,36 @@ async fn a_scale_that_leaves_stored_scores_outside_it_is_refused() {
         .await;
     assert_eq!(find(&body, "grading.scale")["source"], "global");
     assert!(body["changes"].as_array().unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn an_override_stores_only_the_known_fields_and_a_small_body() {
+    let app = TestApp::new().await;
+    let prof = app.login_as(Role::Professor).await;
+    let campus = app.seed_campus(&prof).await;
+    let url = format!("/api/campuses/{campus}/settings/attendance.rule");
+    let (status, body) = app
+        .put_json(
+            &url,
+            Some(&prof.cookie),
+            json!({ "value": { "min_percent": 80, "confirmed": true, "junk": "x" },
+                    "reason": "Pedido del coordinador" }),
+        )
+        .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(
+        body["value"],
+        json!({ "min_percent": 80.0, "confirmed": false })
+    );
+    assert_eq!(body["unconfirmed"], true);
+
+    let huge = "a".repeat(5000);
+    let (status, _) = app
+        .put_json(
+            &url,
+            Some(&prof.cookie),
+            json!({ "value": { "min_percent": 70, "junk": huge }, "reason": "x" }),
+        )
+        .await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
 }
