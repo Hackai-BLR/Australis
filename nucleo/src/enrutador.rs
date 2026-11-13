@@ -384,7 +384,25 @@ async fn atender_australis_interno(app: &App, puerto: Option<&str>, req: Request
     let identidad = app
         .identidad
         .firmar_australis(&PersonaAustralis::de_usuario(&usuario), app.cfg.identidad_vigencia_seg);
-    Ok(reenviar_a_australis(cliente_australis(), destino, &identidad, req).await)
+    let importacion = importacion_confirmada(req.method(), req.uri().path());
+    let respuesta = reenviar_a_australis(cliente_australis(), destino, &identidad, req).await;
+    if let Some(campus) = importacion {
+        if respuesta.status().is_success() {
+            crate::cursos::modulos::sincronizar_campus_externo(app, &usuario, campus).await;
+        }
+    }
+    Ok(respuesta)
+}
+
+fn importacion_confirmada(metodo: &Method, ruta: &str) -> Option<i64> {
+    if *metodo != Method::POST {
+        return None;
+    }
+    let partes: Vec<&str> = ruta.trim_matches('/').split('/').collect();
+    match partes.as_slice() {
+        ["api", "campuses", campus, "roster", "imports", _, "confirm"] => campus.parse().ok(),
+        _ => None,
+    }
 }
 
 pub(crate) async fn reenviar_a_australis(

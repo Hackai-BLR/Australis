@@ -471,3 +471,39 @@ async fn mis_cursos_de_un_docente_trae_lo_inscripto_en_australis() {
     pedir(&app, &profe, Method::GET, "/api/mis-cursos", None).await;
     assert_eq!(super::de_la_persona(&app, marta).await.unwrap().len(), 0);
 }
+
+#[tokio::test]
+async fn confirmar_una_importacion_en_australis_inscribe_en_el_nucleo_sin_sincronizar() {
+    let (url, _registro) = australis_falso().await;
+    let app = nueva_app(Some(url)).await;
+    let uni = universidad(&app, "univ.test").await;
+    let (_, profe) = persona(&app, "profe@univ.test", uni, true).await;
+    let id = campus_creado(&app, &profe).await;
+    let propio = crate::enrutador::origen_de(&app, crate::servidor::SUBDOMINIO_AUSTRALIS, None);
+    let host = propio.split("://").nth(1).unwrap().to_string();
+    let mut resultados = Vec::new();
+    for (ruta, cuerpo) in [
+        ("/api/campuses/7/roster/imports", Some(json!({"text": "Marta Gomez;marta@univ.test"}))),
+        ("/api/campuses/7/roster/imports/1/confirm", None),
+    ] {
+        let mut b = Request::builder()
+            .method(Method::POST)
+            .uri(ruta)
+            .header(header::HOST, &host)
+            .header(header::ORIGIN, &propio)
+            .header(header::COOKIE, format!("{COOKIE}={profe}"));
+        let cuerpo = match cuerpo {
+            Some(c) => {
+                b = b.header(header::CONTENT_TYPE, "application/json");
+                Body::from(c.to_string())
+            }
+            None => Body::empty(),
+        };
+        let mut router = crate::servidor::router(app.clone());
+        resultados.push(router.call(b.body(cuerpo).unwrap()).await.unwrap().status().as_u16());
+    }
+    assert!(resultados.iter().all(|e| *e < 300), "{resultados:?}");
+    let (_, lista) = pedir(&app, &profe, Method::GET, &format!("/api/cursos-modulos/{id}/inscriptos"), None).await;
+    let todos = lista["inscriptos"].as_array().unwrap();
+    assert!(todos.iter().any(|i| i["email"] == "marta@univ.test"), "{lista}");
+}
