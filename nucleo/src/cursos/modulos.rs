@@ -398,14 +398,28 @@ pub async fn sincronizar_docentes(app: &App, ctx: &Ctx) {
     }
 }
 
-pub async fn sincronizar_campus_externo(app: &App, usuario: &Usuario, campus_externo: i64) {
-    let Ok(Some(f)) = sqlx::query("SELECT id, campus_externo, universidad_id FROM campus_modulos WHERE campus_externo = ?")
+pub async fn sincronizar_campus_externo(app: &App, usuario: &Usuario, campus_externo: i64) -> Result<(), ApiError> {
+    let Some(f) = sqlx::query("SELECT id, campus_externo, universidad_id FROM campus_modulos WHERE campus_externo = ?")
         .bind(campus_externo)
         .fetch_optional(&app.db)
-        .await
+        .await?
     else {
-        return;
+        return Ok(());
     };
     let campus = CampusModulos { id: f.get("id"), campus_externo: f.get("campus_externo"), universidad_id: f.get("universidad_id") };
-    let _ = sincronizar_con(app, usuario, None, &campus).await;
+    sincronizar_con(app, usuario, None, &campus).await.map(|_| ())
+}
+
+pub fn sincronizacion_fallida() -> ApiError {
+    ApiError::nuevo(
+        StatusCode::BAD_GATEWAY,
+        "sincronizacion_fallida",
+        "El cambio se hizo en el campus, pero no llegó a las inscripciones de Campus IA. Sincronizá las inscripciones para reintentar.",
+    )
+}
+
+pub fn sincronizacion_fallida_para_australis() -> axum::response::Response {
+    use axum::response::IntoResponse;
+    let e = sincronizacion_fallida();
+    (e.estado, axum::Json(json!({"error": e.mensaje, "codigo": e.codigo}))).into_response()
 }
