@@ -125,7 +125,9 @@ fi
 FUENTES="$DESPLIEGUE_DIR/fuentes/$COMMIT"
 
 TIENE_AUSTRALIS=0
-if git --git-dir="$ESPEJO" cat-file -e "$COMMIT:backend" 2>/dev/null   && git --git-dir="$ESPEJO" cat-file -e "$COMMIT:frontend" 2>/dev/null   && { [ -e "$FUENTES/compilado/bin/australis-server" ] || [ -L "$FUENTES/compilado/bin/australis-server" ]; }; then
+if git --git-dir="$ESPEJO" cat-file -e "$COMMIT:backend" 2>/dev/null \
+  && git --git-dir="$ESPEJO" cat-file -e "$COMMIT:frontend" 2>/dev/null \
+  && { [ -e "$FUENTES/compilado/bin/australis-server" ] || [ -L "$FUENTES/compilado/bin/australis-server" ]; }; then
   TIENE_AUSTRALIS=1
 fi
 
@@ -206,8 +208,12 @@ fi
 
 OPCIONES_AUSTRALIS=()
 if [ "$TIENE_AUSTRALIS" = 1 ]; then
-  leer_como_fuentes tar -C "$FUENTES" --no-recursion -cf - compilado/bin/australis-server     | tar -x --no-same-owner --no-same-permissions -C "$ARTEFACTOS"     || falla "no se pudo copiar el binario de Australis"
-  (cd "$FUENTES" && leer_como_fuentes tar -cf - frontend/dist)     | tar -x --no-same-owner --no-same-permissions -C "$ARTEFACTOS"     || falla "no se pudo copiar el frontend de Australis"
+  leer_como_fuentes tar -C "$FUENTES" --no-recursion -cf - compilado/bin/australis-server \
+    | tar -x --no-same-owner --no-same-permissions -C "$ARTEFACTOS" \
+    || falla "no se pudo copiar el binario de Australis"
+  (cd "$FUENTES" && leer_como_fuentes tar -cf - frontend/dist) \
+    | tar -x --no-same-owner --no-same-permissions -C "$ARTEFACTOS" \
+    || falla "no se pudo copiar el frontend de Australis"
 fi
 
 BINARIO="$ARTEFACTOS/compilado/bin/campusia-nucleo"

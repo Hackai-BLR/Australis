@@ -340,6 +340,8 @@ def artefactos(instantanea, tmp_sesion):
     a.fuentes = fuentes
     a.binario = fuentes / "compilado" / "bin" / "campusia-nucleo"
     a.interfaz = fuentes / "interfaz" / "dist"
+    a.australis_binario = fuentes / "compilado" / "bin" / "australis-server"
+    a.australis_frontend = fuentes / "frontend" / "dist"
     yield a
     correr(["docker", "rmi", "-f", etiqueta], timeout=300)
 

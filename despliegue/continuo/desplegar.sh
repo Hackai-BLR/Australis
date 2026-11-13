@@ -70,7 +70,9 @@ en_contenedor() {
     -e COMMIT="$COMMIT" \
     -e DIRECTORIOS_NODE="$directorios" \
     -e CARGO_HOME=/cache/cargo \
-    -e CARGO_TARGET_DIR=/cache/target     -e CARGO_TARGET_DIR_AUSTRALIS=/cache/target-australis     -e npm_config_cache=/cache/npm \
+    -e CARGO_TARGET_DIR=/cache/target \
+    -e CARGO_TARGET_DIR_AUSTRALIS=/cache/target-australis \
+    -e npm_config_cache=/cache/npm \
     -e npm_config_store_dir=/cache/pnpm/store \
     -e npm_config_cache_dir=/cache/pnpm/cache \
     -e pnpm_config_store_dir=/cache/pnpm/store \
