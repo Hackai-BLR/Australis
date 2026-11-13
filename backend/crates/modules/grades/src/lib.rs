@@ -108,7 +108,7 @@ async fn find_item(conn: &mut SqliteConnection, item_id: i64) -> AppResult<Item>
 fn clean_reason(reason: &Option<String>) -> Option<String> {
     reason
         .as_deref()
-        .map(str::trim)
+        .map(australis_core::audit::trim_reason)
         .filter(|r| !r.is_empty())
         .map(str::to_string)
 }

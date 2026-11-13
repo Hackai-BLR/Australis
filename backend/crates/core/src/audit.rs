@@ -28,6 +28,25 @@ pub struct AuditEntry<'a> {
     pub reason: Option<&'a str>,
 }
 
+/// Trims whitespace and invisible format characters (zero-width space, joiners, BOM, soft
+/// hyphen, bidi marks) from both ends, so a reason made only of them counts as empty.
+pub fn trim_reason(text: &str) -> &str {
+    text.trim_matches(|c: char| {
+        c.is_whitespace()
+            || matches!(
+                c,
+                '\u{00AD}'
+                    | '\u{034F}'
+                    | '\u{061C}'
+                    | '\u{180E}'
+                    | '\u{200B}'..='\u{200F}'
+                    | '\u{202A}'..='\u{202E}'
+                    | '\u{2060}'..='\u{206F}'
+                    | '\u{FEFF}'
+            )
+    })
+}
+
 /// Appends a row and returns its id.
 pub async fn record(conn: &mut SqliteConnection, entry: AuditEntry<'_>) -> AppResult<i64> {
     let result = sqlx::query(

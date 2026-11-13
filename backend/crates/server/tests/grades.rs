@@ -111,6 +111,14 @@ async fn overwrite_needs_a_reason_and_each_change_is_audited() {
     assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
     assert_eq!(s.audit_rows("grades.entry").await, 1);
 
+    for invisible in ["\u{200B}", "\u{FEFF}\u{2060} "] {
+        let mut hidden = second.clone();
+        hidden["reason"] = json!(invisible);
+        let (status, _) = s.put(&s.prof.cookie, hidden).await;
+        assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+    }
+    assert_eq!(s.audit_rows("grades.entry").await, 1);
+
     let mut with_reason = second;
     with_reason["reason"] = json!("recuperatorio");
     assert_eq!(s.put(&s.prof.cookie, with_reason).await.0, StatusCode::OK);

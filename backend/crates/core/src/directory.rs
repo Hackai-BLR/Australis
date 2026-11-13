@@ -966,7 +966,7 @@ pub fn normalize_email(email: &str) -> AppResult<String> {
 }
 
 fn required_text(value: &str, what: &str, max_chars: usize) -> AppResult<String> {
-    let value = value.trim();
+    let value = crate::audit::trim_reason(value);
     if value.is_empty() {
         return Err(AppError::Unprocessable(format!("{what} is required")));
     }
@@ -1012,6 +1012,7 @@ mod tests {
     fn required_text_trims_and_limits() {
         assert_eq!(required_text("  hola ", "x", 10).unwrap(), "hola");
         assert!(required_text("   ", "x", 10).is_err());
+        assert!(required_text("\u{200B}", "x", 10).is_err());
         assert!(required_text("abcdef", "x", 5).is_err());
     }
 }

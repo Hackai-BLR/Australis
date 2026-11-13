@@ -161,6 +161,10 @@ async fn invalid_values_and_missing_reason_are_refused() {
             json!({ "value": { "min": 1, "max": 10, "pass": 4 }, "reason": "  " }),
         ),
         (
+            &scale,
+            json!({ "value": { "min": 1, "max": 10, "pass": 4 }, "reason": "\u{200B}" }),
+        ),
+        (
             &format!("/api/campuses/{campus}/settings/grading.final_rule"),
             json!({ "value": { "kind": "median" }, "reason": "x" }),
         ),
@@ -311,4 +315,28 @@ async fn a_scale_that_leaves_stored_scores_outside_it_is_refused() {
         .await;
     assert_eq!(find(&body, "grading.scale")["source"], "global");
     assert!(body["changes"].as_array().unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn reset_refuses_an_invisible_only_reason() {
+    let app = TestApp::new().await;
+    let prof = app.login_as(Role::Professor).await;
+    let campus = app.seed_campus(&prof).await;
+    let url = format!("/api/campuses/{campus}/settings/attendance.rule");
+    let (status, _) = app
+        .put_json(
+            &url,
+            Some(&prof.cookie),
+            json!({ "value": { "min_percent": 50 }, "reason": "Prueba" }),
+        )
+        .await;
+    assert_eq!(status, StatusCode::OK);
+    let (status, _) = app
+        .post_json(
+            &format!("{url}/reset"),
+            Some(&prof.cookie),
+            json!({ "reason": "\u{200B}" }),
+        )
+        .await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
 }

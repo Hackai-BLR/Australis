@@ -194,7 +194,9 @@ struct Existing {
 }
 
 fn clean_reason(raw: Option<&str>) -> AppResult<Option<String>> {
-    let reason = raw.map(str::trim).filter(|r| !r.is_empty());
+    let reason = raw
+        .map(australis_core::audit::trim_reason)
+        .filter(|r| !r.is_empty());
     if reason.is_some_and(|r| r.chars().count() > MAX_REASON_CHARS) {
         return Err(AppError::Unprocessable("the reason is too long".into()));
     }
