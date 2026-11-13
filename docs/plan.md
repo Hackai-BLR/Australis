@@ -36,8 +36,8 @@ A phase is open when its kickoff branch is published. The kickoff does the work 
 
 | Phase | Name | Depends on | Status |
 |---|---|---|---|
-| 0 | Join Australis and Campus IA | First build, the CampusAi merge | Next |
-| 1 | Test and stabilise the first build | First build | Next |
+| 0 | Join Australis and Campus IA | First build, the CampusAi merge | Done except M6 (2026-11-13). Checkpoint B next |
+| 1 | Test and stabilise the first build | First build | Done (2026-11-13). Checkpoint A next |
 | 2 | Records and staff basics | Phase 1 | Not open |
 | 3 | Follow-up and closing | Phase 2 | Not open |
 | 4 | Student extras | Phase 3 | Not open |
@@ -199,6 +199,8 @@ How they fit together:
 - **A course has a kind.** "Campus with modules" is an Australis campus (gradebook, classes, recordings, slides, AI proposals). "Free course" is a Campus IA container shaped by the agent. Both appear in the same course list.
 - **One model access.** Australis's `AiProvider` gets a real implementation that calls the core's model proxy, so the token quotas and usage records are shared. The placeholder stays for development and tests.
 
+**Status: M1, M2, M3, M4, M5, M7 and M8 are merged (2026-11-13).** M6 is done by a person after checkpoint B passes on a local stack.
+
 There is no kickoff. The tasks own different folders, except where a dependency is listed.
 
 | Id | Task | Depends on | Owns |
@@ -228,6 +230,8 @@ Decisions for phase 0 (agreed 2026-11-13):
 3. **Enrolments.** Australis keeps its student import (Excel, CSV or pasted list, with the preview). On confirm it writes the enrolments to the core, which is the record of who is enrolled.
 
 ## Phase 1: test and stabilise the first build
+
+**Status: T1, T2, T3 and T4 are done (2026-11-13).** The test pass found one thing above minor: screens show the API's error messages in English. Decision: they stay in English for now (pull request #27 was closed, its branch `fix/p1-app` is kept). This is an accepted exception to "screen text is Spanish" and is not a finding at any checkpoint.
 
 No new features. The goal is a first build that works in a browser, not only in automated tests.
 
