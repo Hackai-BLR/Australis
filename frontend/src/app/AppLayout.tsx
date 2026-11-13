@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { Link, NavLink, Outlet, useNavigate } from "react-router-dom";
 import { HealthStatus } from "../modules/health";
 import { ROLE_LABELS, hasRole, useAuth } from "../shared/auth";
@@ -6,7 +6,13 @@ import type { NavItem } from "../shared/routing";
 import { Button } from "../shared/ui";
 
 /** Signed-in shell: sidebar with role-aware navigation, user box and the current page. */
-export function AppLayout({ navItems }: { navItems: NavItem[] }) {
+export function AppLayout({
+  navItems,
+  globalWidgets = [],
+}: {
+  navItems: NavItem[];
+  globalWidgets?: ReactNode[];
+}) {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const [leaving, setLeaving] = useState(false);
@@ -69,6 +75,7 @@ export function AppLayout({ navItems }: { navItems: NavItem[] }) {
           </footer>
         </div>
       </main>
+      {globalWidgets}
     </div>
   );
 }

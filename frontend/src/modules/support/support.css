@@ -1,0 +1,32 @@
+.au-report-fab {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 40;
+  padding: 8px 14px;
+  border-radius: 999px;
+  border: 1px solid #ccc;
+  background: #fff;
+  color: #222;
+  font: inherit;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgb(0 0 0 / 15%);
+}
+.au-report-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.au-report-form__page {
+  margin: 0;
+  word-break: break-all;
+}
+.au-report-body {
+  white-space: pre-wrap;
+  margin: 0 0 8px;
+}
+.au-report-meta {
+  margin: 0;
+  font-size: 0.875rem;
+  word-break: break-all;
+}

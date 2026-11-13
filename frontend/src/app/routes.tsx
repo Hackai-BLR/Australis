@@ -8,6 +8,7 @@ import * as grades from "../modules/grades";
 import * as health from "../modules/health";
 import * as roster from "../modules/roster";
 import * as slides from "../modules/slides";
+import * as support from "../modules/support";
 import { RequireAuth } from "../shared/auth";
 import type { CampusTab, NavItem } from "../shared/routing";
 import { AppLayout } from "./AppLayout";
@@ -15,7 +16,9 @@ import { CampusLayout, CampusTabRoute } from "./CampusLayout";
 import { HomePage } from "./pages/HomePage";
 import { NotFoundPage } from "./pages/NotFoundPage";
 
-const modules = [auth, campus, roster, grades, classes, slides, health];
+const modules = [auth, campus, roster, grades, classes, slides, support, health];
+
+const globalWidgets = [...support.globalWidgets];
 
 const navItems: NavItem[] = modules.flatMap((m) => m.navItems);
 const campusTabs: CampusTab[] = modules
@@ -32,7 +35,7 @@ export const appRoutes: RouteObject[] = [
   {
     element: (
       <RequireAuth>
-        <AppLayout navItems={navItems} />
+        <AppLayout navItems={navItems} globalWidgets={globalWidgets} />
       </RequireAuth>
     ),
     children: [
