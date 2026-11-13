@@ -783,3 +783,18 @@ async fn extra_columns_are_dropped_without_a_header_or_a_name_column() {
         .unwrap();
     assert!(stored.iter().all(|n| !n.contains("3011")));
 }
+
+#[tokio::test]
+async fn reinvite_is_forbidden_for_a_student_and_a_non_member() {
+    let app = TestApp::new().await;
+    let professor = app.login_as(Role::Professor).await;
+    let campus = app.seed_campus(&professor).await;
+    let student = app.seed_student(campus).await;
+    let other = app.seed_student(campus).await;
+    let outsider = app.login_as(Role::Student).await;
+    let url = format!("/api/campuses/{campus}/members/{}/invite", other.id);
+    for who in [&student, &outsider] {
+        let (status, body) = app.post_json(&url, Some(&who.cookie), json!({})).await;
+        assert_eq!(status, StatusCode::FORBIDDEN, "{body}");
+    }
+}

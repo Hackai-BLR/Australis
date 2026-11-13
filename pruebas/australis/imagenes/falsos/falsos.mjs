@@ -45,6 +45,11 @@ function pedidoDelProfesor(texto) {
 
 const GUION = [
   {
+    clave: ['resumi', 'resumen'],
+    texto: "Resumen de la clase (borrador simulado)\n\nPuntos clave\n- El problema de gobierno aparece antes que el problema técnico: en el caso, nadie tenía claro quién decidía los plazos.\n- Sin una única fuente de datos, cada decisión se discute dos veces: primero los números y después el fondo.\n- El marco de la clase ordena cualquier diagnóstico con cuatro ejes: actores, incentivos, información y reglas. Para cada actor, qué gana, qué pierde y qué sabe.\n- El marco también sirve en organizaciones chicas, donde el conflicto de incentivos queda dentro de una sola persona.\n\nTareas para la próxima clase\n- Elegir una decisión real del propio trabajo y analizarla con el marco (individual, una página como máximo, sin nombrar a la organización).\n- Traer dudas sobre el marco para la puesta en común.\n\nBorrador de ejemplo del modelo falso de las pruebas.",
+    herramientas: [],
+  },
+  {
     clave: ['nota', 'calificacion', 'asistencia', 'acta'],
     texto: 'No puedo cambiar notas, asistencia ni actas cerradas. Solo propongo cambios en la estructura y el contenido del campus.',
     herramientas: [],

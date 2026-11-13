@@ -305,3 +305,18 @@ async fn a_student_cannot_end_a_class() {
         .await;
     assert_eq!(status, StatusCode::FORBIDDEN);
 }
+
+#[tokio::test]
+async fn a_student_cannot_call_sync_but_a_guest_can() {
+    let app = TestApp::new().await;
+    let prof = app.login_as(Role::Professor).await;
+    let campus = app.seed_campus(&prof).await;
+    let id = create_class(&app, &prof, campus, PAST).await;
+    let student = app.seed_student(campus).await;
+    let guest = app.seed_guest(campus).await;
+    let url = format!("/api/classes/{id}/recording/sync");
+    let (status, _) = app.post_json(&url, Some(&student.cookie), json!({})).await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+    let (status, body) = app.post_json(&url, Some(&guest.cookie), json!({})).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+}

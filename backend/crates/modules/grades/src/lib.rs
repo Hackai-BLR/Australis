@@ -424,11 +424,11 @@ async fn put_entries(
         .into_iter()
         .map(|i| (i.id, i))
         .collect();
-    let students: HashMap<i64, ()> = directory::list_members(&mut tx, campus_id)
+    let students: HashMap<i64, bool> = directory::list_members(&mut tx, campus_id)
         .await?
         .into_iter()
         .filter(|m| m.role == MemberRole::Student)
-        .map(|m| (m.user_id, ()))
+        .map(|m| (m.user_id, m.status == MemberStatus::Suspended))
         .collect();
 
     // Validate everything first, so a bad row changes nothing.
@@ -488,6 +488,11 @@ async fn put_entries(
         }
         if before.is_some() {
             overwrites = true;
+        }
+        if students.get(&change.student_id) == Some(&true) {
+            return Err(AppError::Unprocessable(
+                "un estudiante suspendido no puede recibir calificaciones nuevas".into(),
+            ));
         }
         changes.push((change, before));
     }
