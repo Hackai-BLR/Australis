@@ -217,6 +217,13 @@ test.describe('una persona inhabilitada en el núcleo', () => {
     expect(llamarAlIntermediario(e.nucleo, `cmt_${'A'.repeat(43)}`, PROFE_AUSTRAL)).toBe(401);
     expect(llamarAlIntermediario(e.nucleo, null, PROFE_AUSTRAL)).toBe(401);
   });
+
+  test('el token de Australis solo no sirve: hace falta la identidad firmada por el núcleo de esa misma persona', async () => {
+    const e = estadoB();
+    expect(llamarAlIntermediario(e.nucleo, e.tokenModelo, PROFE_AUSTRAL, null)).toBe(401);
+    expect(llamarAlIntermediario(e.nucleo, e.tokenModelo, PROFE_AUSTRAL, PROFE2_AUSTRAL)).toBe(401);
+    expect(llamarAlIntermediario(e.nucleo, e.tokenModelo, null, PROFE_AUSTRAL)).toBe(200);
+  });
 });
 
 test.describe('un profesor sin cupo de tokens en el núcleo', () => {

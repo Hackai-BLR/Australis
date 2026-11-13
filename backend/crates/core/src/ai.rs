@@ -61,6 +61,10 @@ pub struct AiRequest {
     pub tools: Vec<AiTool>,
     /// Errors from the previous attempt's tool calls, so the model can correct itself.
     pub feedback: Vec<String>,
+    /// The signed identity header (`x-campus-identidad`) of the HTTP request that triggered
+    /// the call. `ProxyAi` forwards it: the model proxy refuses its token without it. The
+    /// placeholder provider ignores it, and password mode has none.
+    pub identity: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -372,11 +376,23 @@ impl AiProvider for ProxyAi {
         if reservation.user_email.is_empty() {
             return Err(ProviderError::Failed("the user has no email".into()));
         }
+        // The token alone is never sent: the proxy also needs the core-signed identity of the
+        // person who made the request, so a leaked token cannot spend anyone's quota.
+        let identity = request
+            .identity
+            .as_deref()
+            .filter(|value| !value.is_empty())
+            .ok_or_else(|| {
+                ProviderError::Failed(
+                    "the model proxy needs the signed identity of the request".into(),
+                )
+            })?;
         let response = self
             .client
             .post(&self.url)
             .header("x-api-key", &self.token)
             .header("anthropic-version", "2023-06-01")
+            .header(crate::auth::IDENTITY_HEADER, identity)
             .header(PROXY_USER_HEADER, &reservation.user_email)
             .json(&self.body(request))
             .send()

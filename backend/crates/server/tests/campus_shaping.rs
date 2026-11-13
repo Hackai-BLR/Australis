@@ -10,7 +10,7 @@ use australis_core::{
     ai::{AiProvider, AiReply, AiRequest, AiToolCall, Reservation},
     AppState, ProviderError, Role,
 };
-use axum::http::StatusCode;
+use axum::http::{Method, Request, StatusCode};
 use common::{TestApp, TestUser};
 use serde_json::{json, Value};
 use sqlx::Row;
@@ -769,4 +769,59 @@ async fn propose_and_accept_touch_no_table_outside_the_campus_and_ai_tables() {
         .unwrap();
     assert_eq!(usage, 2);
     assert_eq!(calls, 2);
+}
+
+struct IdentityRecorder(Arc<Mutex<Vec<Option<String>>>>);
+
+#[async_trait]
+impl AiProvider for IdentityRecorder {
+    fn name(&self) -> &'static str {
+        "recorder"
+    }
+
+    fn is_placeholder(&self) -> bool {
+        false
+    }
+
+    async fn complete(
+        &self,
+        request: &AiRequest,
+        _reservation: &Reservation,
+    ) -> Result<AiReply, ProviderError> {
+        self.0.lock().unwrap().push(request.identity.clone());
+        Ok(AiReply {
+            text: "ok".into(),
+            tool_calls: vec![],
+            model: "test-model".into(),
+            input_tokens: 1,
+            output_tokens: 1,
+        })
+    }
+}
+
+#[tokio::test]
+async fn the_identity_header_of_the_request_reaches_the_provider() {
+    let seen = Arc::new(Mutex::new(Vec::new()));
+    let provider = IdentityRecorder(seen.clone());
+    let app = TestApp::with(|state: &mut AppState| state.ai = Arc::new(provider)).await;
+    let professor = app.login_as(Role::Professor).await;
+    let campus = create_campus(&app, &professor).await["id"]
+        .as_i64()
+        .unwrap();
+    let uri = format!("/api/campuses/{campus}/ai/proposals");
+    let body = json!({ "instruction": ETHICS });
+
+    let with_header = common::json_request(Method::POST, &uri, Some(&professor.cookie), &body);
+    let (mut parts, payload) = with_header.into_parts();
+    parts
+        .headers
+        .insert("x-campus-identidad", "payload.signature".parse().unwrap());
+    let response = app.send(Request::from_parts(parts, payload)).await;
+    assert_eq!(response.status, StatusCode::CREATED);
+    let (status, _) = propose(&app, &professor, campus, ETHICS).await;
+    assert_eq!(status, StatusCode::CREATED);
+
+    let seen = seen.lock().unwrap();
+    assert_eq!(seen[0].as_deref(), Some("payload.signature"));
+    assert_eq!(seen[1], None);
 }

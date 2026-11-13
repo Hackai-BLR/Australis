@@ -605,8 +605,14 @@ async fn curso_del_token_modelo(app: &App, encabezados: &HeaderMap) -> Option<(S
     let token = token_de(encabezados)?;
     if let Some(propio) = app.cfg.australis_token_modelo.as_deref() {
         if iguales(propio, &token) {
-            let email = encabezados.get(ENCABEZADO_USUARIO_AUSTRALIS)?.to_str().ok()?;
-            let (usuario, universidad) = persona_de_australis(&app.db, email).await?;
+            let firmada = encabezados.get("x-campus-identidad")?.to_str().ok()?;
+            let email = app.identidad.verificar_australis(firmada, chrono::Utc::now().timestamp())?;
+            if let Some(declarado) = encabezados.get(ENCABEZADO_USUARIO_AUSTRALIS) {
+                if !declarado.to_str().ok()?.trim().eq_ignore_ascii_case(email.trim()) {
+                    return None;
+                }
+            }
+            let (usuario, universidad) = persona_de_australis(&app.db, &email).await?;
             return Some((CURSO_AUSTRALIS_USO.to_string(), universidad, Some(usuario)));
         }
     }
@@ -1132,7 +1138,19 @@ mod pruebas {
         })
     }
 
+    fn identidad_de(app: &Estado, email: &str) -> String {
+        app.identidad.firmar_australis(
+            &crate::identidad::PersonaAustralis { usuario: 1, email, nombre: "N", rol: "profesor", universidad: Some(1), administrador: false },
+            60,
+        )
+    }
+
     async fn llamar(app: &Estado, token: &str, usuario: Option<&str>) -> StatusCode {
+        let identidad = usuario.map(|u| identidad_de(app, u));
+        llamar_con(app, token, usuario, identidad.as_deref()).await
+    }
+
+    async fn llamar_con(app: &Estado, token: &str, usuario: Option<&str>, identidad: Option<&str>) -> StatusCode {
         let mut b = Request::builder()
             .method(Method::POST)
             .uri("/modelo/v1/messages")
@@ -1140,6 +1158,9 @@ mod pruebas {
             .header(header::CONTENT_TYPE, "application/json");
         if let Some(u) = usuario {
             b = b.header(ENCABEZADO_USUARIO_AUSTRALIS, u);
+        }
+        if let Some(i) = identidad {
+            b = b.header("x-campus-identidad", i);
         }
         let respuesta = intermediar(app.clone(), b.body(Body::from(r#"{"model":"claude-test","max_tokens":10,"messages":[]}"#)).unwrap()).await;
         let estado = respuesta.status();
@@ -1186,6 +1207,7 @@ mod pruebas {
                 .uri("/modelo/v1/messages")
                 .header("x-api-key", TOKEN_AUSTRALIS)
                 .header(ENCABEZADO_USUARIO_AUSTRALIS, "prof@demo.test")
+                .header("x-campus-identidad", identidad_de(&app, "prof@demo.test"))
                 .header(header::CONTENT_TYPE, "application/json")
                 .body(Body::from(r#"{"model":"claude-test","max_tokens":10,"messages":[]}"#))
                 .unwrap(),
@@ -1197,6 +1219,48 @@ mod pruebas {
         assert!(texto.contains(crate::cupos::Agotado::Profesor.mensaje()), "{texto}");
         assert_eq!(llamar(&app, TOKEN_AUSTRALIS, Some("otra@demo.test")).await, StatusCode::OK);
         assert_eq!(filas_de_uso(&app, 2).await.len(), 2);
+    }
+
+    #[tokio::test]
+    async fn el_token_solo_no_alcanza_ni_con_el_encabezado_de_usuario() {
+        let app = app_con_modelo().await;
+        assert_eq!(llamar_con(&app, TOKEN_AUSTRALIS, Some("prof@demo.test"), None).await, StatusCode::UNAUTHORIZED);
+        assert_eq!(llamar_con(&app, TOKEN_AUSTRALIS, None, None).await, StatusCode::UNAUTHORIZED);
+        assert!(filas_de_uso(&app, 1).await.is_empty());
+    }
+
+    #[tokio::test]
+    async fn la_identidad_de_otra_persona_no_sirve_para_cobrar_a_la_nombrada() {
+        let app = app_con_modelo().await;
+        let de_otra = identidad_de(&app, "otra@demo.test");
+        assert_eq!(llamar_con(&app, TOKEN_AUSTRALIS, Some("prof@demo.test"), Some(&de_otra)).await, StatusCode::UNAUTHORIZED);
+        assert!(filas_de_uso(&app, 1).await.is_empty());
+    }
+
+    #[tokio::test]
+    async fn una_identidad_vencida_falsificada_o_de_otro_destino_es_401() {
+        let app = app_con_modelo().await;
+        let persona = |email| crate::identidad::PersonaAustralis { usuario: 1, email, nombre: "N", rol: "profesor", universidad: Some(1), administrador: false };
+        let vencida = app.identidad.firmar_australis(&persona("prof@demo.test"), -5);
+        let larga = app.identidad.firmar_australis(&persona("prof@demo.test"), 3600);
+        let ajena = crate::identidad::Identidad::cargar(&app.db, Some("AQECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8")).await.unwrap();
+        let falsa = ajena.firmar_australis(&persona("prof@demo.test"), 60);
+        let de_curso = app.identidad.firmar(
+            &crate::identidad::Persona { curso: "otro", usuario: 1, email: "prof@demo.test", nombre: "N", rol: "profesor" },
+            60,
+        );
+        for i in [vencida, larga, falsa, de_curso, "basura".to_string()] {
+            assert_eq!(llamar_con(&app, TOKEN_AUSTRALIS, None, Some(&i)).await, StatusCode::UNAUTHORIZED);
+        }
+        assert!(filas_de_uso(&app, 1).await.is_empty());
+    }
+
+    #[tokio::test]
+    async fn con_la_identidad_firmada_se_cobra_a_esa_persona_sin_encabezado_de_usuario() {
+        let app = app_con_modelo().await;
+        let i = identidad_de(&app, "OTRA@demo.test");
+        assert_eq!(llamar_con(&app, TOKEN_AUSTRALIS, None, Some(&i)).await, StatusCode::OK);
+        assert_eq!(filas_de_uso(&app, 1).await, vec![(CURSO_AUSTRALIS_USO.to_string(), Some(2), 140)]);
     }
 
     #[tokio::test]

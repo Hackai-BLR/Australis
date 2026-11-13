@@ -10,7 +10,10 @@ Lo usan el intermediario del núcleo (que atiende) y el backend de Australis (qu
 ## Pedido
 
 - `POST <AI_PROXY_URL>/modelo/v1/messages` con el cuerpo de la API de mensajes (`model`, `max_tokens`, `system`, `messages`, `tools`), `x-api-key: <token>` y `anthropic-version`.
-- `X-Campus-Usuario: <mail>` con el mail de quien pide. El núcleo lo busca entre las personas de la plataforma. Tiene que ser una persona activa, con universidad, profesora o administradora. Si no, responde 401 como con un token inválido.
+- `X-Campus-Identidad: <valor>`: la identidad firmada por el núcleo (`identidad-australis.md`) de la persona que hizo el pedido a Australis, la misma que el núcleo agregó al reenviárselo. Australis la copia tal cual en cada llamada al modelo. El token solo nunca alcanza: sin una identidad válida el núcleo responde 401 y no cobra nada, así que filtrar el token no permite gastar el cupo de nadie.
+- El núcleo verifica su propia firma, que `curso` sea `australis`, que no esté vencida, que no se haya emitido más de 30 segundos en el futuro y que la vigencia no pase de 120 segundos. Cobra a la persona del mail firmado, que tiene que ser activa, con universidad, profesora o administradora; si no, 401 como con un token inválido.
+- `X-Campus-Usuario: <mail>` es opcional y redundante. Si está y no coincide con el mail firmado (sin distinguir mayúsculas), el núcleo responde 401. Nunca decide a quién se cobra.
+- Sin sesión de la persona no hay identidad: con `AUTH_MODE=password` (desarrollo y pruebas) el proveedor `proxy` falla cerrado con un error claro en lugar de mandar el token solo.
 - Un token de curso (`cmt_` de un espacio) no puede usar este encabezado: el encabezado solo cuenta con el token de Australis.
 
 ## Cupos y uso

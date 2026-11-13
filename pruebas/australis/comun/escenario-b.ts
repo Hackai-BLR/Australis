@@ -288,24 +288,30 @@ export function inspeccionar(contenedor: string): string {
   return execFileSync('docker', ['inspect', contenedor], { encoding: 'utf8' });
 }
 
-function llamarDesde(contenedor: string, guion: string, destino: string, token: string | null, correo: string | null): number {
+function llamarDesde(contenedor: string, guion: string, destino: string, token: string | null, correo: string | null, identidad: string | null = null): number {
   const args = ['exec', '-e', `DESTINO=${destino}`];
+  if (identidad) args.push('-e', `IDENTIDAD=${identidad}`);
   if (token) args.push('-e', `TOKEN=${token}`);
   if (correo) args.push('-e', `CORREO=${correo}`);
   args.push(contenedor, 'node', '-e', guion);
   return Number(execFileSync('docker', args, { encoding: 'utf8' }).trim());
 }
 
-export function llamarAlIntermediario(contenedor: string, token: string | null, correo: string | null): number {
+// `firmadaPara`: el mail de la identidad firmada por el núcleo que acompaña al token. Por defecto, el mismo del
+// encabezado de usuario; `null` manda el token sin identidad.
+export function llamarAlIntermediario(contenedor: string, token: string | null, correo: string | null, firmadaPara: string | null | undefined = undefined): number {
+  const firmante = firmadaPara === undefined ? correo : firmadaPara;
+  const identidad = firmante ? firmarIdentidad(cargaDeIdentidad(firmante), estadoB().semilla) : null;
   const guion = `
     const h = { 'content-type': 'application/json', 'anthropic-version': '2023-06-01' };
     if (process.env.TOKEN) h['x-api-key'] = process.env.TOKEN;
     if (process.env.CORREO) h['x-campus-usuario'] = process.env.CORREO;
+    if (process.env.IDENTIDAD) h['x-campus-identidad'] = process.env.IDENTIDAD;
     fetch(process.env.DESTINO, { method: 'POST', headers: h, body: JSON.stringify({ model: 'claude-sonnet-4-5', max_tokens: 16, messages: [{ role: 'user', content: 'hola' }] }) })
       .then((r) => { console.log(r.status); })
       .catch(() => { console.log(0); });
   `;
-  return llamarDesde(contenedor, guion, 'http://127.0.0.1:8082/modelo/v1/messages', token, correo);
+  return llamarDesde(contenedor, guion, 'http://127.0.0.1:8082/modelo/v1/messages', token, correo, identidad);
 }
 
 export function llamarAlModeloFalso(contenedor: string, token: string): number {
