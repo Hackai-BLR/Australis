@@ -167,6 +167,34 @@ async fn an_approved_summary_is_not_overwritten_by_generating_again() {
 }
 
 #[tokio::test]
+async fn generating_over_an_edited_draft_needs_confirmation() {
+    let app = TestApp::new().await;
+    let prof = app.login_as(Role::Professor).await;
+    let campus = app.seed_campus(&prof).await;
+    let id = finished_class(&app, &prof, campus).await;
+    generate(&app, &prof, id).await;
+    let uri = format!("/api/classes/{id}/summary");
+    app.put_json(&uri, Some(&prof.cookie), json!({ "body": "Texto propio" }))
+        .await;
+
+    let (status, _) = generate(&app, &prof, id).await;
+    assert_eq!(status, StatusCode::CONFLICT);
+    assert_eq!(summary(&app, &prof, id).await["body"], "Texto propio");
+    assert_eq!(count(&app, "SELECT COUNT(*) FROM core_ai_usage").await, 1);
+
+    let (status, body) = app
+        .post_json(
+            &format!("{uri}/generate"),
+            Some(&prof.cookie),
+            json!({ "overwrite": true }),
+        )
+        .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_ne!(body["body"], "Texto propio");
+    assert!(body["edited_at"].is_null());
+}
+
+#[tokio::test]
 async fn students_and_outsiders_cannot_generate_edit_or_approve() {
     let app = TestApp::new().await;
     let prof = app.login_as(Role::Professor).await;

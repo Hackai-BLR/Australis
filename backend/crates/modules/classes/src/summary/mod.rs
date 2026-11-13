@@ -154,24 +154,40 @@ fn truncate_chars(text: &str, max: usize) -> &str {
     }
 }
 
+#[derive(Deserialize, Default)]
+struct GenerateBody {
+    /// The professor confirmed replacing a draft she edited by hand.
+    #[serde(default)]
+    overwrite: bool,
+}
+
+/// Generating never silently discards hand edits: an edited draft needs `overwrite`, and an
+/// edit saved while the AI call was running makes the write fail with a conflict.
 async fn generate_summary(
     State(state): State<AppState>,
     user: CurrentUser,
     headers: HeaderMap,
     Path(class_id): Path<i64>,
+    Json(input): Json<GenerateBody>,
 ) -> AppResult<Json<SummaryView>> {
-    let (campus_id, transcript) = {
+    let (campus_id, transcript, edited_before) = {
         let mut conn = state.db.acquire().await?;
         let campus_id = class_campus(&mut conn, class_id).await?;
         require_campus(&mut conn, &user, campus_id, Access::Teach).await?;
-        let status: Option<String> =
-            sqlx::query_scalar("SELECT status FROM classes_summaries WHERE class_id = ?")
+        let current: Option<(String, Option<String>)> =
+            sqlx::query_as("SELECT status, edited_at FROM classes_summaries WHERE class_id = ?")
                 .bind(class_id)
                 .fetch_optional(&mut *conn)
                 .await?;
-        if status.as_deref() == Some("approved") {
+        let edited_before = current.as_ref().and_then(|(_, edited)| edited.clone());
+        if current.as_ref().map(|(status, _)| status.as_str()) == Some("approved") {
             return Err(AppError::Conflict(
                 "the summary is already approved; edit it to turn it back into a draft".into(),
+            ));
+        }
+        if edited_before.is_some() && !input.overwrite {
+            return Err(AppError::Conflict(
+                "the draft has manual edits; confirm to replace them".into(),
             ));
         }
         let transcript: Option<String> =
@@ -183,7 +199,7 @@ async fn generate_summary(
         let transcript = transcript.filter(|t| !t.trim().is_empty()).ok_or_else(|| {
             AppError::Unprocessable("the class has no transcript to summarize yet".into())
         })?;
-        (campus_id, transcript)
+        (campus_id, transcript, edited_before)
     };
 
     let identity = headers
@@ -207,15 +223,22 @@ async fn generate_summary(
     }
 
     let mut tx = australis_core::begin_write(&state.db).await?;
-    let status: Option<String> =
-        sqlx::query_scalar("SELECT status FROM classes_summaries WHERE class_id = ?")
+    let current: Option<(String, Option<String>)> =
+        sqlx::query_as("SELECT status, edited_at FROM classes_summaries WHERE class_id = ?")
             .bind(class_id)
             .fetch_optional(&mut *tx)
             .await?;
-    if status.as_deref() == Some("approved") {
-        return Err(AppError::Conflict(
-            "the summary was approved while it was being generated".into(),
-        ));
+    if let Some((status, edited_now)) = current {
+        if status == "approved" {
+            return Err(AppError::Conflict(
+                "the summary was approved while it was being generated".into(),
+            ));
+        }
+        if edited_now != edited_before {
+            return Err(AppError::Conflict(
+                "the draft was edited while it was being generated".into(),
+            ));
+        }
     }
     sqlx::query(
         "INSERT INTO classes_summaries

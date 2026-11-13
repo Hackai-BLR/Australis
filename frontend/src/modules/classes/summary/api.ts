@@ -17,8 +17,8 @@ export type ClassSummary = {
 const base = (classId: number) => `/classes/${classId}/summary`;
 
 export const getSummary = (classId: number) => apiGet<ClassSummary>(base(classId));
-export const generateSummary = (classId: number) =>
-  apiPost<ClassSummary>(`${base(classId)}/generate`, {});
+export const generateSummary = (classId: number, overwrite = false) =>
+  apiPost<ClassSummary>(`${base(classId)}/generate`, { overwrite });
 export const saveSummary = (classId: number, body: string) =>
   apiPut<ClassSummary>(base(classId), { body });
 export const approveSummary = (classId: number) =>

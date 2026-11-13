@@ -111,7 +111,17 @@ function SummaryPanel({ classItem }: { classItem: ClassItem }) {
               variant="secondary"
               loading={busy}
               disabled={exhausted}
-              onClick={() => run(() => generateSummary(classItem.id))}
+              onClick={() => {
+                const edited = summary.edited_at !== null;
+                if (
+                  edited &&
+                  !window.confirm(
+                    "El borrador tiene cambios tuyos. Volver a generar los reemplaza. ¿Continuar?",
+                  )
+                )
+                  return;
+                void run(() => generateSummary(classItem.id, edited));
+              }}
             >
               {summary.status === "none" ? "Generar borrador" : "Volver a generar"}
             </Button>
