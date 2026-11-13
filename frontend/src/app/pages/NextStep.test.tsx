@@ -16,7 +16,8 @@ const today = {
   id: 7,
   campus_name: "Seminario A",
   title: "Clase 1",
-  starts_at: "2026-11-13 21:00:00",
+  starts_at: "2099-11-13 21:00:00",
+  duration_min: 90,
   simulated: true,
   join_url: "http://x.test/join",
   ended_at: null,
@@ -73,6 +74,14 @@ describe("pickStep", () => {
   it("ignores a class that already ended", () => {
     const s = pickStep([{ ...today, ended_at: "2026-11-13 22:30:00" }], [recorded], grades, [], []);
     expect(s.kind).toBe("recording");
+  });
+  it("ignores a class past its duration that nobody ended, and shows the next one", () => {
+    const over = { ...today, id: 1, starts_at: "2026-11-13 09:00:00" };
+    const later = { ...today, id: 2, title: "Clase 2", starts_at: "2026-11-13 19:00:00" };
+    const now = new Date("2026-11-13T16:00:00Z");
+    const s = pickStep([over, later], [recorded], grades, [], [], now);
+    expect(s.kind === "class" && s.item.id).toBe(2);
+    expect(pickStep([over], [recorded], grades, [], [], now).kind).toBe("recording");
   });
   it("prefers a recording over a grade, and skips a seen recording", () => {
     expect(pickStep([], [recorded], grades, [], []).kind).toBe("recording");

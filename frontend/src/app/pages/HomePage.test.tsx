@@ -16,7 +16,7 @@ const classToday = {
   campus_id: 1,
   campus_name: "Seminario A",
   title: "Clase 1",
-  starts_at: "2026-11-13 21:00:00",
+  starts_at: "2099-11-13 21:00:00",
   duration_min: 90,
   source: "placeholder",
   simulated: true,

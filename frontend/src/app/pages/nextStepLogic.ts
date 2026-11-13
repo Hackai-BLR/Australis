@@ -3,6 +3,7 @@ export type TodayItem = {
   campus_name: string;
   title: string;
   starts_at: string;
+  duration_min: number;
   simulated: boolean;
   join_url: string;
   ended_at: string | null;
@@ -27,6 +28,12 @@ export type Step =
 
 const READY = ["available", "transcript_ready"];
 
+/** The backend treats a class as over once its start plus duration has passed. */
+function isOver(c: TodayItem, now: Date): boolean {
+  const start = new Date(c.starts_at.replace(" ", "T") + "Z").getTime();
+  return start + c.duration_min * 60_000 <= now.getTime();
+}
+
 /** Picks the single most urgent step: class today, then a new recording, then a new grade. */
 export function pickStep(
   today: TodayItem[],
@@ -34,9 +41,10 @@ export function pickStep(
   grades: MyGrades | null,
   seenRecordings: number[],
   seenGrades: number[],
+  now: Date = new Date(),
 ): Step {
   const live = today
-    .filter((c) => c.ended_at === null)
+    .filter((c) => c.ended_at === null && !isOver(c, now))
     .sort((a, b) => a.starts_at.localeCompare(b.starts_at));
   if (live.length > 0) return { kind: "class", item: live[0] };
   const fresh = classes
