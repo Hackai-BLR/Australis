@@ -1,0 +1,22 @@
+[package]
+name = "intermediario-experimento"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[[bin]]
+name = "intermediario-experimento"
+path = "src/main.rs"
+
+[dependencies]
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "time", "signal"] }
+hyper = { version = "1", features = ["server", "client", "http1"] }
+hyper-util = { version = "0.1", features = ["client-legacy", "tokio", "http1"] }
+hyper-rustls = { version = "0.27", default-features = false, features = ["http1", "ring", "webpki-roots", "tls12"] }
+http-body = "1"
+http-body-util = "0.1"
+bytes = "1"
+serde_json = "1"
+
+[profile.release]
+opt-level = 3

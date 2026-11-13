@@ -1,0 +1,19 @@
+---
+- name: Servidor de Campus IA
+  hosts: servidores
+  become: false
+  pre_tasks:
+    - name: Cargar los secretos del Vault
+      ansible.builtin.include_vars:
+        file: "{{ playbook_dir }}/secretos.vault.yml"
+      when: (playbook_dir ~ '/secretos.vault.yml') is file
+      no_log: true
+  roles:
+    - base
+    - usuario
+    - ssh
+    - firewall
+    - swap
+    - caddy
+    - docker
+    - campusia

@@ -1,0 +1,10 @@
+[Unit]
+Wants=user@{{ docker_uid }}.service
+After=user@{{ docker_uid }}.service
+StartLimitIntervalSec=0
+
+[Service]
+Environment=XDG_RUNTIME_DIR=/run/user/{{ docker_uid }}
+Environment=DOCKER_HOST=unix:///run/user/{{ docker_uid }}/docker.sock
+ExecStartPre=/usr/bin/timeout 90 /bin/sh -c 'until /usr/bin/docker version >/dev/null 2>&1; do sleep 1; done'
+TimeoutStartSec=120

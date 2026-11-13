@@ -1,0 +1,10 @@
+#!/bin/bash
+/usr/local/lib/sustitutos/registrar-como systemctl "$@"
+for a in "$@"; do
+  case "$a" in
+    is-active) echo active; exit 0 ;;
+    is-enabled) echo enabled; exit 0 ;;
+    show) echo "ActiveState=active"; exit 0 ;;
+  esac
+done
+exit 0

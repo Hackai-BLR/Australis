@@ -1,0 +1,115 @@
+#!/usr/bin/env python3
+import ipaddress
+import os
+import subprocess
+import sys
+import tempfile
+import urllib.parse
+import urllib.request
+
+TABLA = "inet filtro"
+ARCHIVO = os.environ.get("CLOUDFLARE_IPS_ARCHIVO", "/etc/nftables.d/campusia-cloudflare.nft")
+FUENTES = (
+    ("cloudflare_v4", 4, os.environ.get("CLOUDFLARE_IPS_V4_URL") or "https://www.cloudflare.com/ips-v4"),
+    ("cloudflare_v6", 6, os.environ.get("CLOUDFLARE_IPS_V6_URL") or "https://www.cloudflare.com/ips-v6"),
+)
+PREFIJO_MINIMO = {4: 8, 6: 16}
+TAMANO_MAXIMO = 256 * 1024
+
+
+class Rechazo(Exception):
+    pass
+
+
+def descargar(url):
+    esquema = urllib.parse.urlparse(url).scheme
+    if esquema not in ("http", "https", "file"):
+        raise Rechazo(f"esquema no permitido: {esquema}")
+    try:
+        pedido = urllib.request.Request(url, headers={"User-Agent": "campusia-firewall/1.0"})
+        with urllib.request.urlopen(pedido, timeout=30) as r:
+            datos = r.read(TAMANO_MAXIMO + 1)
+    except OSError as e:
+        raise Rechazo(f"no se pudo descargar {url}: {e}")
+    if len(datos) > TAMANO_MAXIMO:
+        raise Rechazo(f"{url}: respuesta demasiado grande")
+    try:
+        return datos.decode("ascii")
+    except UnicodeDecodeError:
+        raise Rechazo(f"{url}: contenido no ASCII")
+
+
+def validar(texto, familia, url):
+    redes = []
+    for numero, linea in enumerate(texto.splitlines(), 1):
+        linea = linea.strip()
+        if not linea:
+            continue
+        try:
+            red = ipaddress.ip_network(linea, strict=True)
+        except ValueError:
+            raise Rechazo(f"{url}: línea {numero} no es una red válida")
+        if red.version != familia:
+            raise Rechazo(f"{url}: línea {numero} no es IPv{familia}")
+        if red.prefixlen < PREFIJO_MINIMO[familia]:
+            raise Rechazo(f"{url}: línea {numero} tiene un prefijo más corto que /{PREFIJO_MINIMO[familia]}")
+        redes.append(red)
+    if not redes:
+        raise Rechazo(f"{url}: lista vacía")
+    return list(ipaddress.collapse_addresses(redes))
+
+
+def elementos(conjunto, redes):
+    return f"add element {TABLA} {conjunto} {{ " + ", ".join(str(r) for r in redes) + " }\n"
+
+
+def leer_actual():
+    try:
+        with open(ARCHIVO) as f:
+            return f.read()
+    except FileNotFoundError:
+        return None
+
+
+def guardar(contenido):
+    carpeta = os.path.dirname(ARCHIVO)
+    os.makedirs(carpeta, mode=0o755, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(dir=carpeta, prefix=".campusia-cloudflare.")
+    try:
+        with os.fdopen(fd, "w") as f:
+            f.write(contenido)
+            f.flush()
+            os.fsync(f.fileno())
+        os.chmod(tmp, 0o644)
+        os.replace(tmp, ARCHIVO)
+    except BaseException:
+        if os.path.exists(tmp):
+            os.unlink(tmp)
+        raise
+
+
+def main():
+    solo_archivo = "--solo-archivo" in sys.argv[1:]
+    try:
+        listas = [(conjunto, validar(descargar(url), familia, url)) for conjunto, familia, url in FUENTES]
+    except Rechazo as e:
+        print(f"rechazado: {e}", file=sys.stderr)
+        return 1
+    contenido = "".join(elementos(c, r) for c, r in listas)
+    cambio = leer_actual() != contenido
+    if not solo_archivo:
+        transaccion = "".join(f"flush set {TABLA} {c}\n" for c, _ in listas) + contenido
+        r = subprocess.run(["nft", "-f", "-"], input=transaccion, text=True, capture_output=True)
+        if r.returncode != 0:
+            print(f"nft rechazó la actualización: {r.stderr.strip()}", file=sys.stderr)
+            return 1
+    if cambio:
+        guardar(contenido)
+    for c, r in listas:
+        print(f"{c}: {len(r)} redes")
+    print(f"CAMBIOS={1 if cambio else 0}")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

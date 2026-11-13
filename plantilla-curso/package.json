@@ -1,0 +1,33 @@
+{
+  "name": "curso",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@12.18.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "vite build web --outDir ../dist/web --emptyOutDir && tsc -p tsconfig.json",
+    "dev": "vite build web --outDir ../dist/web --emptyOutDir --watch --logLevel warn & node --watch-path=servidor --watch-preserve-output --experimental-strip-types --no-warnings servidor/index.ts",
+    "start": "node dist/servidor/index.js",
+    "test": "tsc -p tsconfig.pruebas.json && node --test --experimental-strip-types --no-warnings --test-reporter=spec \"servidor/**/*.test.ts\""
+  },
+  "dependencies": {
+    "@campusia/sdk": "file:vendor/campusia-sdk-0.3.0.tgz",
+    "@hono/node-server": "2.1.6",
+    "better-sqlite3": "13.0.3",
+    "hono": "4.13.17"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "9.6.0",
+    "@types/node": "22.19.1",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "@vitejs/plugin-react": "6.2.1",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "typescript": "5.9.3",
+    "vite": "8.3.5"
+  }
+}

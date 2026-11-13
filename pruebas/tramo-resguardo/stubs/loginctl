@@ -1,0 +1,13 @@
+#!/bin/bash
+/usr/local/lib/sustitutos/registrar-como loginctl "$@"
+case "${1:-}" in
+  enable-linger)
+    [ "$(id -u)" -eq 0 ] || exit 1
+    mkdir -p /var/lib/systemd/linger
+    touch "/var/lib/systemd/linger/${2:?}"
+    ;;
+  show-user)
+    if [ -e "/var/lib/systemd/linger/${2:-}" ]; then echo Linger=yes; else echo Linger=no; fi
+    ;;
+esac
+exit 0

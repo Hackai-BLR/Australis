@@ -1,0 +1,10 @@
+[Unit]
+Description=Respaldo diario de Campus IA a las 04:30
+
+[Timer]
+OnCalendar=*-*-* 04:30:00
+Persistent=true
+Unit=campusia-respaldo.service
+
+[Install]
+WantedBy=timers.target

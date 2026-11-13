@@ -1,0 +1,156 @@
+---
+- name: Desinstalar podman y el Docker de la distribución
+  ansible.builtin.apt:
+    name: "{{ docker_paquetes_prohibidos }}"
+    state: absent
+    purge: true
+
+- name: Cargar y persistir los módulos del núcleo
+  ansible.builtin.include_tasks: modulos.yml
+
+- name: Preparar Docker con el repositorio oficial
+  ansible.builtin.include_tasks: repositorio.yml
+
+- name: Deshabilitar el Docker del sistema
+  ansible.builtin.systemd_service:
+    name: "{{ item }}"
+    enabled: false
+    state: stopped
+  loop:
+    - docker.socket
+    - docker.service
+
+- name: Leer los grupos del usuario de servicio
+  ansible.builtin.command: id -nG {{ servidor_usuario }}
+  register: docker_grupos
+  changed_when: false
+
+- name: Sacar al usuario de servicio del grupo docker
+  ansible.builtin.command: gpasswd -d {{ servidor_usuario }} docker
+  when: "'docker' in docker_grupos.stdout.split()"
+  changed_when: true
+
+- name: Crear las carpetas de configuración de systemd
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  loop:
+    - /etc/systemd/system/user@.service.d
+    - /etc/systemd/system/campusia-nucleo.service.d
+
+- name: Delegar los controladores de cgroups al systemd de usuario
+  ansible.builtin.template:
+    src: delegate.conf.j2
+    dest: /etc/systemd/system/user@.service.d/delegate.conf
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Recargar systemd
+
+- name: Conectar el núcleo con Docker sin root
+  ansible.builtin.template:
+    src: docker.conf.j2
+    dest: /etc/systemd/system/campusia-nucleo.service.d/docker.conf
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Recargar systemd
+
+- name: Aplicar los cambios pendientes de Docker
+  ansible.builtin.meta: flush_handlers
+
+- name: Verificar los paquetes de Docker
+  ansible.builtin.command: dpkg-query -W -f='${Status}\n' {{ docker_paquetes | join(' ') }}
+  register: docker_verificacion
+  changed_when: false
+  failed_when: >-
+    docker_verificacion.rc != 0
+    or (docker_verificacion.stdout_lines | reject('equalto', 'install ok installed') | list | length) > 0
+
+- name: Leer los paquetes prohibidos
+  ansible.builtin.command: dpkg-query -W -f='${Status}\n' {{ item }}
+  loop: "{{ docker_paquetes_prohibidos }}"
+  register: docker_prohibidos
+  changed_when: false
+  failed_when: "'install ok installed' in docker_prohibidos.stdout | default('')"
+
+- name: Leer el estado del Docker del sistema
+  ansible.builtin.systemd_service:
+    name: "{{ item }}"
+  loop:
+    - docker.socket
+    - docker.service
+  register: docker_sistema
+
+- name: Verificar que el Docker del sistema está deshabilitado
+  ansible.builtin.assert:
+    that:
+      - item.status.UnitFileState != 'enabled'
+      - item.status.ActiveState != 'active'
+    fail_msg: "{{ item.item }} del sistema sigue habilitado o activo"
+    quiet: true
+  loop: "{{ docker_sistema.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+
+- name: Verificar Docker sin root
+  ansible.builtin.command: >-
+    runuser -u {{ servidor_usuario }} --
+    env XDG_RUNTIME_DIR=/run/user/{{ docker_uid }}
+    systemctl --user is-enabled docker.service
+  register: docker_usuario
+  changed_when: false
+  failed_when: docker_usuario.stdout != 'enabled'
+  when: docker_sin_root | bool
+
+- name: Verificar que Docker sin root está activo
+  ansible.builtin.command: >-
+    runuser -u {{ servidor_usuario }} --
+    env XDG_RUNTIME_DIR=/run/user/{{ docker_uid }}
+    systemctl --user is-active docker.service
+  register: docker_usuario_activo
+  changed_when: false
+  failed_when: docker_usuario_activo.stdout != 'active'
+  when: docker_sin_root | bool
+
+- name: Leer los módulos cargados
+  ansible.builtin.stat:
+    path: /sys/module/{{ item }}
+  loop: "{{ docker_modulos }}"
+  register: docker_modulos_cargados
+  when: docker_sin_root | bool
+
+- name: Verificar los módulos cargados
+  ansible.builtin.assert:
+    that:
+      - item.stat.exists
+    fail_msg: "el módulo {{ item.item }} no está cargado"
+    quiet: true
+  loop: "{{ docker_modulos_cargados.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+  when: docker_sin_root | bool
+
+- name: Leer el archivo de módulos
+  ansible.builtin.slurp:
+    src: "{{ docker_archivo_modulos }}"
+  register: docker_modulos_archivo
+
+- name: Leer el dueño del archivo de módulos
+  ansible.builtin.stat:
+    path: "{{ docker_archivo_modulos }}"
+  register: docker_modulos_stat
+
+- name: Verificar el archivo de módulos
+  ansible.builtin.assert:
+    that:
+      - (docker_modulos_archivo.content | b64decode) == (docker_modulos | map('regex_replace', '$', '\n') | join(''))
+      - docker_modulos_stat.stat.pw_name == 'root'
+      - docker_modulos_stat.stat.gr_name == 'root'
+      - docker_modulos_stat.stat.mode == '0644'
+      - not docker_modulos_stat.stat.islnk
+    fail_msg: "{{ docker_archivo_modulos }} no tiene el contenido o los permisos esperados"
+    quiet: true

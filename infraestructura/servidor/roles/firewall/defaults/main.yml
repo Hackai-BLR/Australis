@@ -1,0 +1,5 @@
+---
+firewall_archivo_listas: /etc/nftables.d/campusia-cloudflare.nft
+firewall_carpeta_fijas: /etc/campusia/cloudflare-ips
+firewall_url_v4: "{{ ('file://' ~ firewall_carpeta_fijas ~ '/v4') if firewall_cloudflare_ipv4 is defined else 'https://www.cloudflare.com/ips-v4' }}"
+firewall_url_v6: "{{ ('file://' ~ firewall_carpeta_fijas ~ '/v6') if firewall_cloudflare_ipv6 is defined else 'https://www.cloudflare.com/ips-v6' }}"

@@ -1,0 +1,20 @@
+---
+- name: Instalar las herramientas de módulos del núcleo
+  ansible.builtin.apt:
+    name: "{{ docker_paquetes_modulos }}"
+    state: present
+
+- name: Persistir los módulos del núcleo de Docker
+  ansible.builtin.copy:
+    content: "{{ docker_modulos | map('regex_replace', '$', '\n') | join('') }}"
+    dest: "{{ docker_archivo_modulos }}"
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Cargar los módulos del núcleo de Docker
+  community.general.modprobe:
+    name: "{{ item }}"
+    state: present
+  loop: "{{ docker_modulos }}"
+  when: docker_sin_root | bool

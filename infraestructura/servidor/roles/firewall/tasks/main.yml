@@ -1,0 +1,140 @@
+---
+- name: Instalar nftables
+  ansible.builtin.apt:
+    name: nftables
+    state: present
+
+- name: Instalar el actualizador de rangos de Cloudflare
+  ansible.builtin.copy:
+    src: campusia-cloudflare-ips
+    dest: /usr/local/sbin/campusia-cloudflare-ips
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Crear las carpetas del firewall
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  loop:
+    - "{{ firewall_archivo_listas | dirname }}"
+    - "{{ firewall_carpeta_fijas }}"
+
+- name: Guardar las listas fijas de Cloudflare
+  ansible.builtin.copy:
+    content: "{{ (item.redes | join('\n')) ~ '\n' }}"
+    dest: "{{ firewall_carpeta_fijas }}/{{ item.nombre }}"
+    owner: root
+    group: root
+    mode: "0644"
+  loop:
+    - nombre: v4
+      redes: "{{ firewall_cloudflare_ipv4 | default([]) }}"
+      definida: "{{ firewall_cloudflare_ipv4 is defined }}"
+    - nombre: v6
+      redes: "{{ firewall_cloudflare_ipv6 | default([]) }}"
+      definida: "{{ firewall_cloudflare_ipv6 is defined }}"
+  loop_control:
+    label: "{{ item.nombre }}"
+  when: item.definida | bool
+
+- name: Configurar el origen de los rangos de Cloudflare
+  ansible.builtin.template:
+    src: campusia-cloudflare-ips.default.j2
+    dest: /etc/default/campusia-cloudflare-ips
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Obtener y validar los rangos de Cloudflare
+  ansible.builtin.command: /usr/local/sbin/campusia-cloudflare-ips --solo-archivo
+  environment:
+    CLOUDFLARE_IPS_V4_URL: "{{ firewall_url_v4 }}"
+    CLOUDFLARE_IPS_V6_URL: "{{ firewall_url_v6 }}"
+    CLOUDFLARE_IPS_ARCHIVO: "{{ firewall_archivo_listas }}"
+  register: firewall_listas
+  changed_when: "'CAMBIOS=1' in firewall_listas.stdout_lines"
+  notify: Recargar nftables
+
+- name: Instalar la configuración de nftables
+  ansible.builtin.template:
+    src: nftables.conf.j2
+    dest: /etc/nftables.conf
+    owner: root
+    group: root
+    mode: "0755"
+    validate: nft -c -f %s
+  notify: Recargar nftables
+
+- name: Instalar las unidades del actualizador
+  ansible.builtin.copy:
+    src: "{{ item }}"
+    dest: /etc/systemd/system/{{ item }}
+    owner: root
+    group: root
+    mode: "0644"
+  loop:
+    - campusia-cloudflare-ips.service
+    - campusia-cloudflare-ips.timer
+  register: firewall_unidades
+
+- name: Recargar systemd
+  ansible.builtin.systemd_service:
+    daemon_reload: true
+  when: firewall_unidades.changed
+
+- name: Habilitar nftables
+  ansible.builtin.systemd_service:
+    name: nftables
+    enabled: true
+    state: started
+
+- name: Aplicar los cambios pendientes del firewall
+  ansible.builtin.meta: flush_handlers
+
+- name: Habilitar el temporizador del actualizador
+  ansible.builtin.systemd_service:
+    name: campusia-cloudflare-ips.timer
+    enabled: true
+    state: started
+
+- name: Leer las reglas activas
+  ansible.builtin.command: nft -j list ruleset
+  register: firewall_reglas
+  changed_when: false
+
+- name: Verificar el firewall
+  vars:
+    firewall_objetos: "{{ (firewall_reglas.stdout | from_json).nftables }}"
+    firewall_cadenas: >-
+      {{ firewall_objetos | selectattr('chain', 'defined') | map(attribute='chain')
+      | selectattr('family', 'equalto', 'inet') | selectattr('table', 'equalto', 'filtro')
+      | selectattr('name', 'equalto', 'entrada') | list }}
+    firewall_conjuntos: "{{ firewall_objetos | selectattr('set', 'defined') | map(attribute='set') | selectattr('table', 'equalto', 'filtro') | list }}"
+  ansible.builtin.assert:
+    that:
+      - firewall_cadenas | length == 1
+      - firewall_cadenas[0].hook == 'input'
+      - firewall_cadenas[0].policy == 'drop'
+      - firewall_conjuntos | selectattr('name', 'equalto', 'cloudflare_v4') | selectattr('elem', 'defined') | list | length == 1
+      - firewall_conjuntos | selectattr('name', 'equalto', 'cloudflare_v6') | selectattr('elem', 'defined') | list | length == 1
+      - "'0.0.0.0/0' not in firewall_reglas.stdout"
+      - "'::/0' not in firewall_reglas.stdout"
+    fail_msg: el firewall no quedó como se esperaba
+    quiet: true
+
+- name: Leer el temporizador del actualizador
+  ansible.builtin.systemd_service:
+    name: campusia-cloudflare-ips.timer
+  register: firewall_temporizador
+
+- name: Verificar el temporizador del actualizador
+  ansible.builtin.assert:
+    that:
+      - firewall_temporizador.status.UnitFileState == 'enabled'
+      - firewall_temporizador.status.ActiveState == 'active'
+    fail_msg: el temporizador de rangos de Cloudflare no quedó habilitado
+    quiet: true

@@ -1,0 +1,10 @@
+[Unit]
+Description=Limpieza de caché, fuentes e imágenes del despliegue de Campus IA
+
+[Service]
+Type=oneshot
+EnvironmentFile=-/srv/campusia/config/continuo.env
+ExecStart=/srv/campusia/despliegue/bin/limpiar.sh
+SuccessExitStatus=75
+Nice=15
+IOSchedulingClass=idle

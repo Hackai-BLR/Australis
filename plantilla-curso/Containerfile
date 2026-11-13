@@ -1,0 +1,32 @@
+FROM node:22-alpine AS base
+WORKDIR /app
+RUN apk add --no-cache python3 make g++ \
+ && npm install -g pnpm@12.18.0 \
+ && pnpm config set --global store-dir /pnpm-store
+COPY package.json pnpm-lock.yaml* ./
+COPY vendor ./vendor
+
+FROM base AS compilacion
+RUN pnpm install --frozen-lockfile
+COPY . .
+RUN pnpm run build
+
+FROM base AS dependencias
+RUN pnpm install --frozen-lockfile --prod
+
+FROM node:22-alpine
+ENV NODE_ENV=production PORT=3000 CAMPUSIA_DATOS=/datos
+WORKDIR /app
+RUN rm -rf /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack /opt/yarn* /usr/local/bin/yarn /usr/local/bin/yarnpkg \
+ && mkdir -p /datos \
+ && chown node:node /datos \
+ && chmod 700 /datos
+COPY --from=dependencias /app/node_modules ./node_modules
+COPY --from=compilacion /app/dist ./dist
+COPY package.json ./
+USER node
+EXPOSE 3000
+VOLUME ["/datos"]
+HEALTHCHECK --interval=10s --timeout=3s --start-period=5s --retries=3 \
+  CMD ["node", "-e", "fetch('http://127.0.0.1:' + (process.env.PORT || 3000) + '/salud').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
+CMD ["node", "dist/servidor/index.js"]

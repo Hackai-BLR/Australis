@@ -1,0 +1,35 @@
+{
+  "permissions": {
+    "allow": ["Read", "Edit", "Write", "Glob", "Grep", "Bash"],
+    "deny": ["WebFetch", "WebSearch", "Task", "Agent", "NotebookEdit"],
+    "defaultMode": "acceptEdits",
+    "disableBypassPermissionsMode": "disable"
+  },
+  "allowManagedPermissionRulesOnly": true,
+  "allowManagedHooksOnly": true,
+  "disableAllHooks": false,
+  "includeCoAuthoredBy": false,
+  "cleanupPeriodDays": 30,
+  "env": {
+    "DISABLE_TELEMETRY": "1",
+    "DISABLE_ERROR_REPORTING": "1",
+    "DISABLE_AUTOUPDATER": "1",
+    "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1",
+    "CLAUDE_CODE_DISABLE_BACKGROUND_TASKS": "1",
+    "CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR": "1"
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/usr/local/lib/campusia/vigilar-herramienta.mjs",
+            "timeout": 30
+          }
+        ]
+      }
+    ]
+  }
+}

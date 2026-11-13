@@ -1,0 +1,11 @@
+[Unit]
+Description=Limpieza semanal del despliegue de Campus IA
+
+[Timer]
+OnCalendar=weekly
+Persistent=true
+RandomizedDelaySec=1h
+Unit=campusia-limpieza.service
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,6 @@
+---
+servidores:
+  hosts:
+    203.0.113.10:
+      ansible_user: root
+      ssh_claves_root: []

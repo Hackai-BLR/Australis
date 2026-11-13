@@ -1,0 +1,165 @@
+---
+- name: Verificar que están los secretos del Vault
+  ansible.builtin.assert:
+    that:
+      - lookup('ansible.builtin.vars', item, default='') | string | length > 0
+      - "'\n' not in (lookup('ansible.builtin.vars', item, default='') | string)"
+    fail_msg: falta {{ item }} (cargar secretos.vault.yml con ansible-vault o pasarlo con -e)
+    quiet: true
+  loop: "{{ campusia_secretos.values() | list }}"
+  no_log: true
+
+- name: Verificar que existe el ejemplo de campusia.env
+  ansible.builtin.assert:
+    that:
+      - campusia_env_ejemplo is file
+    fail_msg: "falta {{ campusia_env_ejemplo }}"
+    quiet: true
+
+- name: Armar las variables de campusia.env
+  ansible.builtin.set_fact:
+    campusia_env_valores: >-
+      {{ lookup('ansible.builtin.file', campusia_env_ejemplo).splitlines()
+      | map('trim') | select('match', '^[A-Za-z_][A-Za-z0-9_]*=')
+      | map('split', '=', 1) | community.general.dict
+      | combine(campusia_env_extra | dict2items | rejectattr('key', 'in', campusia_secretos.keys() | list) | items2dict)
+      | combine(dict(campusia_secretos.keys() | zip(query('ansible.builtin.vars', *(campusia_secretos.values() | list))))) }}
+  no_log: true
+
+- name: Verificar las variables de campusia.env
+  ansible.builtin.assert:
+    that:
+      - campusia_env_valores.values() | map('string') | select('equalto', 'completar') | list | length == 0
+      - campusia_env_valores.values() | map('string') | select('search', '\n') | list | length == 0
+      - campusia_env_valores.keys() | reject('match', '^[A-Za-z_][A-Za-z0-9_]*$') | list | length == 0
+      - campusia_env_valores['SESSION_SECRET'] | string | length >= 32
+    fail_msg: campusia.env quedaría con valores sin completar, inválidos o con SESSION_SECRET de menos de 32 caracteres
+    quiet: true
+  no_log: true
+
+- name: Armar las variables del despliegue continuo
+  ansible.builtin.set_fact:
+    campusia_continuo_valores: >-
+      {{ {'DESPLIEGUE_ORIGEN': despliegue_origen, 'DESPLIEGUE_RAMA': despliegue_rama} | combine(despliegue_continuo_env) }}
+
+- name: Verificar el origen y la rama del despliegue
+  ansible.builtin.assert:
+    that:
+      - despliegue_origen is match('^[A-Za-z0-9@][A-Za-z0-9@:/._~+-]*$')
+      - despliegue_rama is match('^[A-Za-z0-9][A-Za-z0-9._/-]*$')
+      - campusia_continuo_valores.keys() | reject('match', '^[A-Z_][A-Z0-9_]*$') | list | length == 0
+      - campusia_continuo_valores.values() | map('string') | select('search', '[\n\\\\]|^[\\s"\x27]|\\s$') | list | length == 0
+    fail_msg: despliegue_origen, despliegue_rama o despliegue_continuo_env tienen valores inválidos
+    quiet: true
+
+- name: Crear la carpeta de configuración
+  ansible.builtin.file:
+    path: "{{ servidor_raiz }}/config"
+    state: directory
+    owner: "{{ servidor_usuario }}"
+    group: "{{ servidor_usuario }}"
+    mode: "0750"
+
+- name: Generar campusia.env
+  ansible.builtin.template:
+    src: campusia.env.j2
+    dest: "{{ servidor_raiz }}/config/campusia.env"
+    owner: "{{ servidor_usuario }}"
+    group: "{{ servidor_usuario }}"
+    mode: "0600"
+  no_log: true
+  diff: false
+
+- name: Generar continuo.env
+  ansible.builtin.template:
+    src: continuo.env.j2
+    dest: "{{ servidor_raiz }}/config/continuo.env"
+    owner: "{{ servidor_usuario }}"
+    group: "{{ servidor_usuario }}"
+    mode: "0600"
+
+- name: Crear la carpeta de configuración del instalador
+  ansible.builtin.file:
+    path: /etc/campusia
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Generar la configuración del instalador
+  ansible.builtin.template:
+    src: instalar.env.j2
+    dest: /etc/campusia/instalar.env
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Guardar las claves de host del origen
+  ansible.builtin.template:
+    src: known_hosts.j2
+    dest: /etc/campusia/known_hosts
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Leer si existe el despliegue continuo
+  ansible.builtin.set_fact:
+    campusia_con_continuo: "{{ (campusia_continuo_origen ~ '/preparar-continuo.sh') is file }}"
+
+- name: Preparar el despliegue continuo
+  when: campusia_con_continuo | bool
+  block:
+    - name: Crear la carpeta de los scripts del despliegue continuo
+      ansible.builtin.file:
+        path: "{{ campusia_continuo_destino }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Copiar los scripts del despliegue continuo
+      ansible.builtin.copy:
+        src: "{{ campusia_continuo_origen }}/"
+        dest: "{{ campusia_continuo_destino }}/"
+        owner: root
+        group: root
+        mode: preserve
+
+    - name: Correr preparar-continuo.sh
+      ansible.builtin.command: bash {{ campusia_continuo_destino }}/preparar-continuo.sh
+      args:
+        chdir: "{{ campusia_continuo_destino }}"
+      environment:
+        CAMPUSIA_RAIZ: "{{ servidor_raiz }}"
+        CAMPUSIA_USUARIO: "{{ servidor_usuario }}"
+      register: campusia_continuo
+      changed_when: (campusia_continuo.stdout_lines | last | default('')) == 'CAMBIOS=1'
+      failed_when: >-
+        campusia_continuo.rc != 0
+        or (campusia_continuo.stdout_lines | last | default('')) not in ['CAMBIOS=0', 'CAMBIOS=1']
+
+- name: Leer los archivos de configuración
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  loop:
+    - "{{ servidor_raiz }}/config"
+    - "{{ servidor_raiz }}/config/campusia.env"
+    - "{{ servidor_raiz }}/config/continuo.env"
+    - /etc/campusia/instalar.env
+  register: campusia_archivos
+
+- name: Verificar los archivos de configuración
+  ansible.builtin.assert:
+    that:
+      - campusia_archivos.results[0].stat.pw_name == servidor_usuario
+      - campusia_archivos.results[0].stat.mode == '0750'
+      - campusia_archivos.results[1].stat.exists
+      - campusia_archivos.results[1].stat.pw_name == servidor_usuario
+      - campusia_archivos.results[1].stat.gr_name == servidor_usuario
+      - campusia_archivos.results[1].stat.mode == '0600'
+      - campusia_archivos.results[2].stat.pw_name == servidor_usuario
+      - campusia_archivos.results[2].stat.mode == '0600'
+      - campusia_archivos.results[3].stat.pw_name == 'root'
+      - campusia_archivos.results[3].stat.mode == '0644'
+    fail_msg: la configuración de campusia no tiene el dueño o los permisos esperados
+    quiet: true
