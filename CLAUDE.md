@@ -99,7 +99,7 @@ Nothing in this build calls an outside service. Each provider is a trait in core
 | `ZoomProvider` (`state.zoom`) | `PlaceholderZoom` | A made-up meeting whose links point at the app, and a sample recording with the transcript in `crates/core/samples/` |
 | `SlideConverter` (`state.slides`) | `NoConverter` | "Not configured": upload a PDF instead of a `.pptx` |
 
-`AI_PROVIDER` and `ZOOM_PROVIDER` accept only `placeholder`. The keys in `.env.example` are reserved for real providers.
+`ZOOM_PROVIDER` accepts only `placeholder`. `AI_PROVIDER` is `placeholder` (default) or `proxy`: `ProxyAi` calls the Campus IA core's model proxy (`AI_PROXY_URL`, `AI_API_KEY` = a `cmt_` token that only works there, `AI_MODEL`), the core counts the tokens against the professor's monthly quota, and the "Simulado" badge disappears only then. The other keys in `.env.example` are reserved for real providers.
 
 ## Commands
 - Dev with hot reload: `docker compose -f docker-compose.dev.yml up --build --watch` (frontend http://localhost:5173, API http://localhost:8080/api/health).

@@ -72,6 +72,7 @@ impl From<ProviderError> for AppError {
     fn from(err: ProviderError) -> Self {
         match err {
             ProviderError::NotConfigured(_) => AppError::Unprocessable(err.to_string()),
+            ProviderError::QuotaExhausted(message) => AppError::TooManyRequests(message),
             ProviderError::Failed(detail) => AppError::Internal(format!("provider: {detail}")),
         }
     }
@@ -103,6 +104,9 @@ pub enum ProviderError {
     /// The provider is a placeholder that cannot do this, or it has no credentials.
     #[error("{0} is not configured")]
     NotConfigured(&'static str),
+    /// The provider refused because a quota outside this app is used up.
+    #[error("{0}")]
+    QuotaExhausted(String),
     #[error("{0}")]
     Failed(String),
 }

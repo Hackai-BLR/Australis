@@ -18,6 +18,8 @@ use crate::util::*;
 
 pub const MAXIMO_CUERPO_MODELO: usize = 32 * 1024 * 1024;
 pub const MENSAJE_SIN_USO: &str = "No hay uso disponible del modelo por el momento.";
+pub const ENCABEZADO_USUARIO_AUSTRALIS: &str = "x-campus-usuario";
+pub const CURSO_AUSTRALIS_USO: &str = "australis";
 const REEMPLAZO: &[u8] = b"[token-oculto]";
 const RUTAS: [&str; 2] = ["/modelo/v1/messages", "/modelo/v1/messages/count_tokens"];
 const SALTO_A_SALTO: [&str; 10] = [
@@ -571,7 +573,7 @@ impl Intermediario {
     }
 }
 
-async fn curso_del_token_modelo(app: &App, encabezados: &HeaderMap) -> Option<(String, i64)> {
+fn token_de(encabezados: &HeaderMap) -> Option<String> {
     let autorizaciones: Vec<&HeaderValue> = encabezados.get_all(header::AUTHORIZATION).iter().collect();
     let claves: Vec<&HeaderValue> = encabezados.get_all("x-api-key").iter().collect();
     if autorizaciones.len() + claves.len() != 1 {
@@ -587,6 +589,27 @@ async fn curso_del_token_modelo(app: &App, encabezados: &HeaderMap) -> Option<(S
     if !token_valido(&token, "cmt_") {
         return None;
     }
+    Some(token)
+}
+
+pub const SQL_PERSONA_AUSTRALIS: &str = "SELECT u.id, u.universidad_id FROM usuarios u \
+     WHERE lower(u.email) = lower(?) AND u.universidad_id IS NOT NULL AND u.pendiente = 0 \
+     AND (u.profesor = 1 OR u.administrador = 1) AND NOT ";
+
+pub async fn persona_de_australis(db: &SqlitePool, email: &str) -> Option<(i64, i64)> {
+    let consulta = format!("{SQL_PERSONA_AUSTRALIS}{}", crate::inhabilitar::SQL_INHABILITADA);
+    sqlx::query_as(&consulta).bind(email.trim()).fetch_optional(db).await.ok().flatten()
+}
+
+async fn curso_del_token_modelo(app: &App, encabezados: &HeaderMap) -> Option<(String, i64, Option<i64>)> {
+    let token = token_de(encabezados)?;
+    if let Some(propio) = app.cfg.australis_token_modelo.as_deref() {
+        if iguales(propio, &token) {
+            let email = encabezados.get(ENCABEZADO_USUARIO_AUSTRALIS)?.to_str().ok()?;
+            let (usuario, universidad) = persona_de_australis(&app.db, email).await?;
+            return Some((CURSO_AUSTRALIS_USO.to_string(), universidad, Some(usuario)));
+        }
+    }
     let h = huella(&app.cfg.session_secret, &token);
     let fila: Option<(String, String, i64)> = sqlx::query_as(&format!(
         "SELECT e.curso_id, e.token_modelo_huella, c.universidad_id FROM espacios e JOIN cursos c ON c.id = e.curso_id \
@@ -601,7 +624,7 @@ async fn curso_del_token_modelo(app: &App, encabezados: &HeaderMap) -> Option<(S
     if !iguales(&guardada, &h) {
         return None;
     }
-    Some((curso, universidad))
+    Some((curso, universidad, None))
 }
 
 async fn curso_del_token_espacio(app: &App, encabezados: &HeaderMap) -> Result<String, ApiError> {
@@ -787,7 +810,7 @@ async fn registrar_uso(app: &App, curso: &str, universidad: i64, usuario: Option
 }
 
 async fn intermediar(app: Estado, req: Request) -> Response {
-    let Some((curso, universidad)) = curso_del_token_modelo(&app, req.headers()).await else {
+    let Some((curso, universidad, usuario_directo)) = curso_del_token_modelo(&app, req.headers()).await else {
         return no_autenticado();
     };
     let ruta = req.uri().path().to_string();
@@ -828,7 +851,11 @@ async fn intermediar(app: Estado, req: Request) -> Response {
         app.intermediario.cortar(&curso, MENSAJE_SIN_USO);
         return sin_reintento(StatusCode::TOO_MANY_REQUESTS, MENSAJE_SIN_USO);
     }
-    let admision = match app.intermediario.a_quien(&app.db, &curso).await {
+    let quien = match usuario_directo {
+        Some(u) => Ok(Some(u)),
+        None => app.intermediario.a_quien(&app.db, &curso).await,
+    };
+    let admision = match quien {
         Ok(profesor) => app.intermediario.admitir(&app.db, profesor, universidad).await.map(|a| (profesor, a)),
         Err(e) => Err(e),
     };
@@ -966,5 +993,232 @@ mod pruebas {
         assert!(token_valido(&format!("cmt_{}", "a".repeat(43)), "cmt_"));
         assert!(!token_valido(&format!("cmt_{}", "a".repeat(42)), "cmt_"));
         assert!(!token_valido(&format!("cct_{}", "a".repeat(43)), "cmt_"));
+    }
+
+    async fn base_con_personas() -> SqlitePool {
+        let db = sqlx::sqlite::SqlitePoolOptions::new().max_connections(1).connect("sqlite::memory:").await.unwrap();
+        crate::db::migrar(&db).await.unwrap();
+        sqlx::query("INSERT INTO universidades (id, nombre, creada_en) VALUES (1, 'Demo', 'x'), (2, 'Otra', 'x')").execute(&db).await.unwrap();
+        sqlx::query("UPDATE universidades SET deshabilitada_en = 'x' WHERE id = 2").execute(&db).await.unwrap();
+        for (id, email, uni, profesor, admin, pendiente, suspendida) in [
+            (1, "Prof@demo.test", 1, 1, 0, 0, None),
+            (2, "alumno@demo.test", 1, 0, 0, 0, None),
+            (3, "admin@demo.test", 1, 0, 1, 0, None),
+            (4, "baja@demo.test", 1, 1, 0, 0, Some("x")),
+            (5, "otra@demo.test", 2, 1, 0, 0, None),
+            (6, "pendiente@demo.test", 1, 1, 0, 1, None),
+        ] {
+            sqlx::query(
+                "INSERT INTO usuarios (id, email, nombre, universidad_id, profesor, administrador, pendiente, creado_en, suspendida_en) \
+                 VALUES (?, ?, 'N', ?, ?, ?, ?, 'x', ?)",
+            )
+            .bind(id)
+            .bind(email)
+            .bind(uni)
+            .bind(profesor)
+            .bind(admin)
+            .bind(pendiente)
+            .bind(suspendida)
+            .execute(&db)
+            .await
+            .unwrap();
+        }
+        db
+    }
+
+    #[tokio::test]
+    async fn australis_atribuye_el_uso_a_un_profesor_o_administrador_activo() {
+        let db = base_con_personas().await;
+        assert_eq!(persona_de_australis(&db, "prof@demo.test").await, Some((1, 1)));
+        assert_eq!(persona_de_australis(&db, " PROF@demo.test ").await, Some((1, 1)));
+        assert_eq!(persona_de_australis(&db, "admin@demo.test").await, Some((3, 1)));
+    }
+
+    #[tokio::test]
+    async fn australis_no_atribuye_el_uso_a_quien_no_corresponde() {
+        let db = base_con_personas().await;
+        for email in ["alumno@demo.test", "baja@demo.test", "otra@demo.test", "pendiente@demo.test", "nadie@demo.test", ""] {
+            assert_eq!(persona_de_australis(&db, email).await, None, "{email}");
+        }
+    }
+
+    #[test]
+    fn el_token_se_toma_de_un_solo_encabezado() {
+        let token = format!("cmt_{}", "a".repeat(43));
+        let mut h = HeaderMap::new();
+        h.insert("x-api-key", HeaderValue::from_str(&token).unwrap());
+        assert_eq!(token_de(&h), Some(token.clone()));
+        h.insert(header::AUTHORIZATION, HeaderValue::from_str(&format!("Bearer {token}")).unwrap());
+        assert_eq!(token_de(&h), None);
+        let mut otro = HeaderMap::new();
+        otro.insert("x-api-key", HeaderValue::from_static("cmt_corto"));
+        assert_eq!(token_de(&otro), None);
+    }
+
+    struct CorreoMudo;
+
+    #[async_trait::async_trait]
+    impl crate::email::ProveedorDeEmail for CorreoMudo {
+        async fn enviar(&self, _mail: &crate::email::Mail) -> anyhow::Result<()> {
+            Ok(())
+        }
+    }
+
+    const TOKEN_AUSTRALIS: &str = "cmt_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
+    const TOKEN_CURSO: &str = "cmt_BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB";
+
+    async fn destino_falso() -> String {
+        let router = Router::new().route(
+            "/v1/messages",
+            axum::routing::post(|| async {
+                Json(json!({
+                    "model": "claude-test",
+                    "content": [{ "type": "text", "text": "hola" }],
+                    "usage": { "input_tokens": 100, "output_tokens": 40 }
+                }))
+            }),
+        );
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let url = format!("http://{}", listener.local_addr().unwrap());
+        tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
+        url
+    }
+
+    async fn app_con_modelo() -> Estado {
+        let ruta = std::env::temp_dir().join(format!("campusia-modelo-{}.db", token_aleatorio()));
+        for (k, v) in [
+            ("SESSION_SECRET", "0123456789abcdef0123456789abcdef"),
+            ("PROVEEDOR_EMAIL", "archivo"),
+            ("ARCHIVO_EMAIL", "/dev/null"),
+            ("DOMINIO_BASE", "campusia.test"),
+            ("TURNSTILE_SITE_KEY", "x"),
+            ("TURNSTILE_SECRET", "x"),
+            ("ENTORNO", "desarrollo"),
+        ] {
+            std::env::set_var(k, v);
+        }
+        std::env::set_var("DATABASE_URL", format!("sqlite://{}", ruta.display()));
+        let mut cfg = crate::config::Config::desde_entorno().unwrap();
+        cfg.australis_token_modelo = Some(TOKEN_AUSTRALIS.to_string());
+        cfg.agente.proveedor = Some(Proveedor::Api { clave: "clave-falsa".to_string() });
+        cfg.agente.destino = destino_falso().await;
+        cfg.agente.reserva_tokens_pedido = 10;
+        let db = crate::db::conectar(&cfg.database_url).await.unwrap();
+        crate::db::migrar(&db).await.unwrap();
+        let identidad = crate::identidad::Identidad::cargar(&db, Some("AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8")).await.unwrap();
+        let intermediario = Arc::new(Intermediario::nuevo(&cfg.agente).unwrap());
+        sqlx::query("INSERT INTO universidades (id, nombre, creada_en) VALUES (1, 'Demo', 'x')").execute(&db).await.unwrap();
+        for (id, email, profesor) in [(1, "prof@demo.test", 1), (2, "otra@demo.test", 1)] {
+            sqlx::query(
+                "INSERT INTO usuarios (id, email, nombre, universidad_id, profesor, administrador, pendiente, creado_en) VALUES (?, ?, 'N', 1, ?, 0, 0, 'x')",
+            )
+            .bind(id)
+            .bind(email)
+            .bind(profesor)
+            .execute(&db)
+            .await
+            .unwrap();
+        }
+        Arc::new(App {
+            cfg,
+            db,
+            email: Box::new(CorreoMudo),
+            http: reqwest::Client::new(),
+            proxy: reqwest::Client::new(),
+            identidad,
+            supervisor: None,
+            espacios: None,
+            intermediario,
+        })
+    }
+
+    async fn llamar(app: &Estado, token: &str, usuario: Option<&str>) -> StatusCode {
+        let mut b = Request::builder()
+            .method(Method::POST)
+            .uri("/modelo/v1/messages")
+            .header("x-api-key", token)
+            .header(header::CONTENT_TYPE, "application/json");
+        if let Some(u) = usuario {
+            b = b.header(ENCABEZADO_USUARIO_AUSTRALIS, u);
+        }
+        let respuesta = intermediar(app.clone(), b.body(Body::from(r#"{"model":"claude-test","max_tokens":10,"messages":[]}"#)).unwrap()).await;
+        let estado = respuesta.status();
+        let _ = axum::body::to_bytes(respuesta.into_body(), 1 << 20).await;
+        estado
+    }
+
+    async fn filas_de_uso(app: &Estado, esperadas: usize) -> Vec<(String, Option<i64>, i64)> {
+        for _ in 0..100 {
+            let filas: Vec<(String, Option<i64>, i64)> = sqlx::query_as("SELECT curso_id, usuario_id, tokens FROM uso_modelo ORDER BY id")
+                .fetch_all(&app.db)
+                .await
+                .unwrap();
+            if filas.len() >= esperadas {
+                return filas;
+            }
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+        Vec::new()
+    }
+
+    #[tokio::test]
+    async fn la_llamada_de_australis_se_cobra_al_profesor_nombrado() {
+        let app = app_con_modelo().await;
+        let estado = llamar(&app, TOKEN_AUSTRALIS, Some("prof@demo.test")).await;
+        assert_eq!(estado, StatusCode::OK);
+        let filas = filas_de_uso(&app, 1).await;
+        assert_eq!(filas, vec![(CURSO_AUSTRALIS_USO.to_string(), Some(1), 140)]);
+    }
+
+    #[tokio::test]
+    async fn con_el_cupo_del_profesor_agotado_australis_recibe_429_con_su_mensaje() {
+        let app = app_con_modelo().await;
+        sqlx::query("INSERT INTO cupos_profesor (usuario_id, universidad_id, tokens, actualizado_en) VALUES (1, 1, 100, 'x')")
+            .execute(&app.db)
+            .await
+            .unwrap();
+        assert_eq!(llamar(&app, TOKEN_AUSTRALIS, Some("prof@demo.test")).await, StatusCode::OK);
+        assert_eq!(filas_de_uso(&app, 1).await.len(), 1);
+        let respuesta = intermediar(
+            app.clone(),
+            Request::builder()
+                .method(Method::POST)
+                .uri("/modelo/v1/messages")
+                .header("x-api-key", TOKEN_AUSTRALIS)
+                .header(ENCABEZADO_USUARIO_AUSTRALIS, "prof@demo.test")
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(r#"{"model":"claude-test","max_tokens":10,"messages":[]}"#))
+                .unwrap(),
+        )
+        .await;
+        assert_eq!(respuesta.status(), StatusCode::TOO_MANY_REQUESTS);
+        let cuerpo = axum::body::to_bytes(respuesta.into_body(), 1 << 20).await.unwrap();
+        let texto = String::from_utf8(cuerpo.to_vec()).unwrap();
+        assert!(texto.contains(crate::cupos::Agotado::Profesor.mensaje()), "{texto}");
+        assert_eq!(llamar(&app, TOKEN_AUSTRALIS, Some("otra@demo.test")).await, StatusCode::OK);
+        assert_eq!(filas_de_uso(&app, 2).await.len(), 2);
+    }
+
+    #[tokio::test]
+    async fn un_token_de_curso_se_cobra_al_dueno_y_no_a_quien_diga_el_encabezado() {
+        let app = app_con_modelo().await;
+        sqlx::query("INSERT INTO cursos (id, nombre, periodo, color, universidad_id, creado_en) VALUES ('c1', 'C', 'p', 'c', 1, 'x')")
+            .execute(&app.db)
+            .await
+            .unwrap();
+        sqlx::query("INSERT INTO inscripciones (curso_id, usuario_id, rol, creada_en) VALUES ('c1', 2, 'dueño', 'x')")
+            .execute(&app.db)
+            .await
+            .unwrap();
+        sqlx::query(
+            "INSERT INTO espacios (curso_id, nombre, estado, token_modelo_huella, token_curso_huella, creado_en, actualizado_en)              VALUES ('c1', 'e', 'encendido', ?, 'otra', 'x', 'x')",
+        )
+        .bind(huella(&app.cfg.session_secret, TOKEN_CURSO))
+        .execute(&app.db)
+        .await
+        .unwrap();
+        assert_eq!(llamar(&app, TOKEN_CURSO, Some("prof@demo.test")).await, StatusCode::OK);
+        let filas = filas_de_uso(&app, 1).await;
+        assert_eq!(filas, vec![("c1".to_string(), Some(2), 140)]);
     }
 }
