@@ -218,7 +218,9 @@ pub async fn list_users_for(
         return list_users(conn).await;
     };
     let users = sqlx::query_as::<_, User>(&format!(
-        "{USER_SELECT} WHERE u.university = ? ORDER BY u.full_name COLLATE NOCASE, u.id"
+        "{USER_SELECT} WHERE u.university = ?
+           AND NOT (u.role = 'secretary' AND u.administers_university = 0)
+         ORDER BY u.full_name COLLATE NOCASE, u.id"
     ))
     .bind(university)
     .fetch_all(conn)

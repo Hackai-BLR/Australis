@@ -738,3 +738,46 @@ async fn an_administrator_without_a_university_or_who_stops_administering_loses_
     let again = call(&t.app, Method::GET, &own, Some(&t.admin_a), None, None).await;
     assert_eq!(again.status, StatusCode::OK);
 }
+
+#[tokio::test]
+async fn an_administrator_cannot_see_or_act_on_the_owner_of_the_same_university() {
+    let t = two_universities().await;
+    let owner = sign(&in_university(
+        claims("owner@demo.test", "Dueño", "dueño", false),
+        "uni-a",
+    ));
+    let owner_id = me(&t.app, Some(&owner)).await.json()["id"]
+        .as_i64()
+        .unwrap();
+    let list = call(
+        &t.app,
+        Method::GET,
+        "/api/users",
+        Some(&t.admin_a),
+        None,
+        None,
+    )
+    .await;
+    assert!(!list.json().to_string().contains("owner@demo.test"));
+    for (method, uri, body) in [
+        (
+            Method::PATCH,
+            format!("/api/users/{owner_id}"),
+            Some(json!({ "status": "suspended", "reason": "intento" })),
+        ),
+        (
+            Method::PATCH,
+            format!("/api/users/{owner_id}"),
+            Some(json!({ "status": "active", "reason": "intento" })),
+        ),
+    ] {
+        let r = call(&t.app, method, &uri, Some(&t.admin_a), None, body).await;
+        assert_eq!(r.status, StatusCode::FORBIDDEN, "{uri}");
+    }
+    let mut conn = t.app.db.acquire().await.unwrap();
+    let user = directory::find_user(&mut conn, owner_id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(user.status, UserStatus::Active);
+}

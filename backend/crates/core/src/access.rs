@@ -79,14 +79,19 @@ pub async fn require_user_in_scope(
     let Some(scope) = directory::university_scope(conn, actor.id).await? else {
         return Ok(());
     };
-    let university: Option<Option<String>> =
-        sqlx::query_scalar("SELECT university FROM core_users WHERE id = ?")
-            .bind(user_id)
-            .fetch_optional(conn)
-            .await?;
-    match university {
+    let target: Option<(Option<String>, String, bool)> = sqlx::query_as(
+        "SELECT university, role, administers_university FROM core_users WHERE id = ?",
+    )
+    .bind(user_id)
+    .fetch_optional(conn)
+    .await?;
+    match target {
         None => Err(AppError::NotFound),
-        Some(university) if university.as_deref() == Some(scope.as_str()) => Ok(()),
+        // A secretary with rights on every campus (the owner) is out of reach.
+        Some((_, role, administers)) if role == "secretary" && !administers => {
+            Err(AppError::Forbidden)
+        }
+        Some((university, _, _)) if university.as_deref() == Some(scope.as_str()) => Ok(()),
         Some(_) => Err(AppError::Forbidden),
     }
 }

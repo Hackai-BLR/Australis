@@ -129,8 +129,11 @@ test.describe('un administrador de otra universidad', () => {
     const ajeno = await entrar(ADMIN_DEMO);
     const { ctx, pagina } = await paginaDe(browser, ajeno);
     await pagina.goto(`${origenDe('campus')}/campuses/${campus.australis}`);
+    await expect(pagina.getByText('No se pudo abrir el campus')).toBeVisible();
     await expect(pagina.getByText('Campus de los rechazos')).toHaveCount(0);
     await pagina.goto(`${origenDe('campus')}/`);
+    await expect(pagina.getByRole('heading', { name: 'Campus' }).first()).toBeVisible();
+    await expect(pagina.getByText('No se pudieron cargar los campus.')).toHaveCount(0);
     await expect(pagina.getByText('Campus de los rechazos')).toHaveCount(0);
     await ctx.close();
   });
