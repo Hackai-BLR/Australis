@@ -345,6 +345,58 @@ async fn a_new_stream_gets_the_current_state_first_then_changes() {
 }
 
 #[tokio::test]
+async fn a_suspended_student_stops_receiving_the_stream() {
+    let s = setup().await;
+    let live = go_live(&s, 4).await;
+    let request = common::request(
+        Method::GET,
+        &format!("/api/live/{}/stream", live["id"]),
+        Some(&s.student.cookie),
+    )
+    .body(Body::empty())
+    .unwrap();
+    let response = s.app.router.clone().oneshot(request).await.unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let mut body = Body::new(response.into_body());
+    let mut buffer = String::new();
+    next_state(&mut body, &mut buffer).await;
+
+    let mut conn = s.app.db.acquire().await.unwrap();
+    australis_core::directory::suspend_member(
+        &mut conn,
+        s.professor.id,
+        s.campus,
+        s.student.id,
+        "baja",
+    )
+    .await
+    .unwrap();
+    drop(conn);
+    goto(&s, &s.professor.cookie, &live, 3).await;
+
+    // The stream must end without delivering the change.
+    let ended = tokio::time::timeout(Duration::from_secs(10), async {
+        loop {
+            match body.frame().await {
+                None => return,
+                Some(Ok(frame)) => {
+                    if let Ok(data) = frame.into_data() {
+                        let text = String::from_utf8_lossy(&data).to_string();
+                        assert!(!text.contains("\"current_page\":3"), "leaked: {text}");
+                    }
+                }
+                Some(Err(_)) => return,
+            }
+        }
+    })
+    .await;
+    assert!(
+        ended.is_ok(),
+        "the stream stayed open for a suspended student"
+    );
+}
+
+#[tokio::test]
 async fn a_second_live_session_ends_the_first() {
     let s = setup().await;
     let first = go_live(&s, 2).await;
