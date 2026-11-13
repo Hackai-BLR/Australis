@@ -211,9 +211,7 @@ test.describe('checkpoint B: la historia con el núcleo, Australis y el modelo f
     expect(r.json.access).toBe('manage');
   });
 
-  test.fail('el curso libre arranca con la plantilla tal como está en el repositorio: hoy su bloqueo no coincide con el SDK empaquetado', async () => {
-    // The test image rewrites the lockfile hash of the SDK tarball so the free course can build.
-    // The production image does not, so a free course there fails with ERR_PNPM_TARBALL_INTEGRITY.
+  test('el curso libre arranca con la plantilla tal como está en el repositorio: su bloqueo coincide con el SDK empaquetado', async () => {
     const bloqueo = bloqueoDelSdk(estadoB().nucleo);
     expect(bloqueo.coincidia, `bloqueo ${bloqueo.original} contra paquete ${bloqueo.empaquetado}`).toBe(true);
   });
