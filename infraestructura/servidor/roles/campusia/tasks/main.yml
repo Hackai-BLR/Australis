@@ -37,6 +37,31 @@
     quiet: true
   no_log: true
 
+- name: Verificar que existe el ejemplo de australis.env
+  ansible.builtin.assert:
+    that:
+      - campusia_australis_env_ejemplo is file
+    fail_msg: "falta {{ campusia_australis_env_ejemplo }}"
+    quiet: true
+
+- name: Armar las variables de australis.env
+  ansible.builtin.set_fact:
+    campusia_australis_env_valores: >-
+      {{ lookup('ansible.builtin.file', campusia_australis_env_ejemplo).splitlines()
+      | map('trim') | select('match', '^[A-Za-z_][A-Za-z0-9_]*=')
+      | map('split', '=', 1) | community.general.dict
+      | combine(campusia_australis_env_extra) }}
+
+- name: Verificar las variables de australis.env
+  ansible.builtin.assert:
+    that:
+      - campusia_australis_env_valores.values() | map('string') | select('equalto', 'completar') | list | length == 0
+      - campusia_australis_env_valores.values() | map('string') | select('search', '\n') | list | length == 0
+      - campusia_australis_env_valores.keys() | reject('match', '^[A-Za-z_][A-Za-z0-9_]*$') | list | length == 0
+      - campusia_australis_env_valores.keys() | select('in', ['DATABASE_URL', 'BIND_ADDR', 'UPLOAD_DIR']) | list | length == 0
+    fail_msg: australis.env quedaría con valores sin completar o inválidos, o fija DATABASE_URL, BIND_ADDR o UPLOAD_DIR (los fija la unidad)
+    quiet: true
+
 - name: Armar las variables del despliegue continuo
   ansible.builtin.set_fact:
     campusia_continuo_valores: >-
@@ -68,6 +93,15 @@
     group: "{{ servidor_usuario }}"
     mode: "0600"
   no_log: true
+  diff: false
+
+- name: Generar australis.env
+  ansible.builtin.template:
+    src: australis.env.j2
+    dest: "{{ servidor_raiz }}/config/australis.env"
+    owner: "{{ servidor_usuario }}"
+    group: "{{ servidor_usuario }}"
+    mode: "0600"
   diff: false
 
 - name: Generar continuo.env
@@ -146,6 +180,7 @@
     - "{{ servidor_raiz }}/config/campusia.env"
     - "{{ servidor_raiz }}/config/continuo.env"
     - /etc/campusia/instalar.env
+    - "{{ servidor_raiz }}/config/australis.env"
   register: campusia_archivos
 
 - name: Verificar los archivos de configuración
@@ -161,5 +196,8 @@
       - campusia_archivos.results[2].stat.mode == '0600'
       - campusia_archivos.results[3].stat.pw_name == 'root'
       - campusia_archivos.results[3].stat.mode == '0644'
+      - campusia_archivos.results[4].stat.pw_name == servidor_usuario
+      - campusia_archivos.results[4].stat.gr_name == servidor_usuario
+      - campusia_archivos.results[4].stat.mode == '0600'
     fail_msg: la configuración de campusia no tiene el dueño o los permisos esperados
     quiet: true

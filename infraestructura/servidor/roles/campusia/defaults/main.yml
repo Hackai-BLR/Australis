@@ -1,6 +1,8 @@
 ---
 campusia_env_extra: {}
 campusia_env_ejemplo: "{{ playbook_dir }}/../../despliegue/campusia.env.ejemplo"
+campusia_australis_env_extra: {}
+campusia_australis_env_ejemplo: "{{ playbook_dir }}/../../despliegue/australis.env.ejemplo"
 campusia_continuo_origen: "{{ playbook_dir }}/../../despliegue/continuo"
 campusia_continuo_destino: /usr/local/lib/campusia/continuo
 campusia_secretos:
