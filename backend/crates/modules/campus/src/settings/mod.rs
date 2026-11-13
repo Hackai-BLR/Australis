@@ -1,12 +1,12 @@
 //! Settings per campus: a campus may override the grading scale, the final-grade rule and
 //! the attendance rule. A value without an override is inherited from the global setting.
 //!
-//! Overrides live in `campus_settings`; the global values stay in `core_settings` and are read
-//! through `australis_core::settings`. Every change writes an audit row in the same
-//! transaction, with the reason. Only Manage access may read or write.
+//! Overrides live in `core_settings` (scope `campus:<id>`) and are written and audited
+//! through `australis_core::settings`, so the gradebook and attendance read the same value
+//! this screen shows. Only Manage access may read or write.
 
 use australis_core::{
-    audit::{self, AuditEntry, AuditQuery},
+    audit::{self, AuditQuery},
     begin_write, require_campus, settings, Access, AppError, AppResult, AppState, CurrentUser,
 };
 use axum::{
@@ -18,13 +18,12 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use sqlx::SqliteConnection;
 
-const ATTENDANCE_RULE: &str = "attendance.rule";
 const KEYS: [&str; 3] = [
     settings::GRADING_SCALE,
     settings::GRADING_FINAL_RULE,
-    ATTENDANCE_RULE,
+    settings::ATTENDANCE_RULE,
 ];
-const AUDIT_ENTITY: &str = "campus.settings";
+const AUDIT_ENTITY: &str = "campus.setting";
 const MAX_REASON_CHARS: usize = 500;
 
 pub fn router() -> Router<AppState> {
@@ -72,25 +71,6 @@ fn static_key(key: &str) -> AppResult<&'static str> {
         .ok_or(AppError::NotFound)
 }
 
-async fn override_of(
-    conn: &mut SqliteConnection,
-    campus_id: i64,
-    key: &str,
-) -> AppResult<Option<Value>> {
-    let raw: Option<String> = sqlx::query_scalar(
-        "SELECT value_json FROM campus_settings WHERE campus_id = ? AND key = ?",
-    )
-    .bind(campus_id)
-    .bind(key)
-    .fetch_optional(conn)
-    .await?;
-    raw.map(|json| {
-        serde_json::from_str(&json)
-            .map_err(|err| AppError::Internal(format!("campus setting {key} is not JSON: {err}")))
-    })
-    .transpose()
-}
-
 async fn global_of(conn: &mut SqliteConnection, key: &str) -> AppResult<Value> {
     settings::get_value(conn, key)
         .await?
@@ -99,7 +79,7 @@ async fn global_of(conn: &mut SqliteConnection, key: &str) -> AppResult<Value> {
 
 async fn entry(conn: &mut SqliteConnection, campus_id: i64, key: &'static str) -> AppResult<Entry> {
     let global_value = global_of(conn, key).await?;
-    let own = override_of(conn, campus_id, key).await?;
+    let own = settings::campus_override(conn, campus_id, key).await?;
     let (value, source) = match own {
         Some(value) => (value, "campus"),
         None => (global_value.clone(), "global"),
@@ -206,14 +186,14 @@ fn validate(key: &str, value: &Value) -> AppResult<Value> {
             }
             Ok(json!({ "kind": kind, "confirmed": confirmed }))
         }
-        ATTENDANCE_RULE => {
-            let rate = number(value, "min_rate_percent")?;
+        settings::ATTENDANCE_RULE => {
+            let rate = number(value, "min_percent")?;
             if !(0.0..=100.0).contains(&rate) {
                 return Err(AppError::Unprocessable(
-                    "min_rate_percent must be between 0 and 100".into(),
+                    "min_percent must be between 0 and 100".into(),
                 ));
             }
-            Ok(json!({ "min_rate_percent": rate, "confirmed": confirmed }))
+            Ok(json!({ "min_percent": rate, "confirmed": confirmed }))
         }
         _ => Err(AppError::NotFound),
     }
@@ -252,36 +232,7 @@ async fn set_override(
     let mut tx = begin_write(&state.db).await?;
     require_campus(&mut tx, &user, campus_id, Access::Manage).await?;
     let value = validate(key, &body.value)?;
-    let before = entry(&mut tx, campus_id, key).await?;
-    sqlx::query(
-        "INSERT INTO campus_settings (campus_id, key, value_json, updated_by)
-         VALUES (?, ?, ?, ?)
-         ON CONFLICT (campus_id, key) DO UPDATE SET
-             value_json = excluded.value_json,
-             updated_by = excluded.updated_by,
-             updated_at = datetime('now')",
-    )
-    .bind(campus_id)
-    .bind(key)
-    .bind(value.to_string())
-    .bind(user.id)
-    .execute(&mut *tx)
-    .await?;
-    audit::record(
-        &mut tx,
-        AuditEntry {
-            actor_id: Some(user.id),
-            campus_id: Some(campus_id),
-            entity: AUDIT_ENTITY,
-            entity_id: campus_id,
-            subject_user_id: None,
-            action: "override",
-            before: Some(json!({ "key": key, "source": before.source, "value": before.value })),
-            after: Some(json!({ "key": key, "source": "campus", "value": value })),
-            reason: Some(&reason),
-        },
-    )
-    .await?;
+    settings::set_for_campus(&mut tx, user.id, campus_id, key, &value, Some(&reason)).await?;
     let after = entry(&mut tx, campus_id, key).await?;
     tx.commit().await?;
     Ok(Json(after))
@@ -303,27 +254,8 @@ async fn reset(
             "this setting is already inherited".into(),
         ));
     }
-    sqlx::query("DELETE FROM campus_settings WHERE campus_id = ? AND key = ?")
-        .bind(campus_id)
-        .bind(key)
-        .execute(&mut *tx)
-        .await?;
+    settings::clear_for_campus(&mut tx, user.id, campus_id, key, Some(&reason)).await?;
     let after = entry(&mut tx, campus_id, key).await?;
-    audit::record(
-        &mut tx,
-        AuditEntry {
-            actor_id: Some(user.id),
-            campus_id: Some(campus_id),
-            entity: AUDIT_ENTITY,
-            entity_id: campus_id,
-            subject_user_id: None,
-            action: "reset",
-            before: Some(json!({ "key": key, "source": "campus", "value": before.value })),
-            after: Some(json!({ "key": key, "source": "global", "value": after.value })),
-            reason: Some(&reason),
-        },
-    )
-    .await?;
     tx.commit().await?;
     Ok(Json(after))
 }

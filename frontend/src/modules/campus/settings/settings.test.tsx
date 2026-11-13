@@ -2,7 +2,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { ToastProvider } from "../../shared/ui";
+import { ToastProvider } from "../../../shared/ui";
 import { SettingsTab } from "./SettingsTab";
 import type { SettingsOverview } from "./types";
 
@@ -33,9 +33,9 @@ const overview: SettingsOverview = {
     },
     {
       key: "attendance.rule",
-      value: { min_rate_percent: 75, confirmed: false },
+      value: { min_percent: 75, confirmed: false },
       source: "global",
-      global_value: { min_rate_percent: 75, confirmed: false },
+      global_value: { min_percent: 75, confirmed: false },
       unconfirmed: true,
     },
   ],

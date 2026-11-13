@@ -100,6 +100,13 @@ describe("app routes", () => {
     expect(await screen.findByText("Estudiantes del campus")).toBeTruthy();
     const tabs = screen.getByRole("navigation", { name: "Secciones del campus" });
     expect(tabs.querySelectorAll("a")).toHaveLength(7);
+    expect(screen.getByRole("link", { name: "Configuración" })).toBeTruthy();
+  });
+
+  it("does not show the settings tab to a student, even by URL", async () => {
+    mockBackend("student");
+    renderAt("/campuses/4/settings");
+    expect(await screen.findByText("No tenés acceso a esta sección")).toBeTruthy();
   });
 
   it("stays signed in and shows an error when logout fails", async () => {

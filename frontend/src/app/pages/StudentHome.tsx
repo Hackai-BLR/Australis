@@ -5,7 +5,12 @@ import { useLoad } from "./useLoad";
 import "./home.css";
 
 export type CampusItem = { id: number; name: string };
-type MyCourse = { campus_id: number; campus_name: string; final: number | null };
+type MyCourse = {
+  campus_id: number;
+  campus_name: string;
+  final: number | null;
+  scale?: { pass: number };
+};
 type MyGrades = { scale: { pass: number }; courses: MyCourse[] };
 
 function score(value: number): string {
@@ -69,7 +74,7 @@ function GradesSummary() {
               {c.final === null ? (
                 <Badge>Sin nota final</Badge>
               ) : (
-                <Badge tone={c.final >= data.scale.pass ? "success" : "danger"}>
+                <Badge tone={c.final >= (c.scale ?? data.scale).pass ? "success" : "danger"}>
                   Final: {score(c.final)}
                 </Badge>
               )}

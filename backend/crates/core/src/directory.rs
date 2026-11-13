@@ -508,6 +508,93 @@ pub async fn campuses_for_user(
         .collect())
 }
 
+/// A campus with how many people it has, for the secretary's lists.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, sqlx::FromRow)]
+pub struct CampusSummary {
+    pub id: i64,
+    pub name: String,
+    pub owner_id: i64,
+    pub created_at: String,
+    pub university: Option<String>,
+    /// Active professor members.
+    pub professors: i64,
+    /// Active guest teachers.
+    pub guests: i64,
+    /// Active student members.
+    pub students: i64,
+    /// Suspended members of any role.
+    pub suspended: i64,
+}
+
+/// Every campus the secretary may see (all for the owner, only the administrator's own
+/// university for a university administrator), with member counts. 403 for anyone who is not
+/// a secretary.
+pub async fn list_campus_summaries(
+    conn: &mut SqliteConnection,
+    actor: &CurrentUser,
+) -> AppResult<Vec<CampusSummary>> {
+    crate::require_role(actor, &[Role::Secretary])?;
+    let scope = university_scope(conn, actor.id).await?;
+    let rows = sqlx::query_as::<_, CampusSummary>(
+        "SELECT c.id, c.name, c.owner_id, c.created_at, c.university,
+                COALESCE(SUM(m.role = 'professor' AND m.status = 'active'), 0) AS professors,
+                COALESCE(SUM(m.role = 'guest' AND m.status = 'active'), 0) AS guests,
+                COALESCE(SUM(m.role = 'student' AND m.status = 'active'), 0) AS students,
+                COALESCE(SUM(m.status = 'suspended'), 0) AS suspended
+         FROM core_campuses c
+         LEFT JOIN core_members m ON m.campus_id = c.id
+         WHERE ?1 IS NULL OR c.university = ?1
+         GROUP BY c.id
+         ORDER BY c.name COLLATE NOCASE, c.id",
+    )
+    .bind(scope)
+    .fetch_all(conn)
+    .await?;
+    Ok(rows)
+}
+
+/// One campus a person belongs to, with their standing in it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, sqlx::FromRow)]
+pub struct UserMembership {
+    pub campus_id: i64,
+    pub campus_name: String,
+    pub university: Option<String>,
+    pub role: MemberRole,
+    pub status: MemberStatus,
+    pub created_at: String,
+    pub suspended_reason: Option<String>,
+}
+
+/// Every membership of one person, suspended ones included, by campus name. For the
+/// secretary: 403 for anyone else, and for a university administrator 403 for a person outside
+/// their university; only the memberships in campuses of their university are listed. 404 if
+/// the person does not exist.
+pub async fn list_memberships_of_user(
+    conn: &mut SqliteConnection,
+    actor: &CurrentUser,
+    user_id: i64,
+) -> AppResult<Vec<UserMembership>> {
+    crate::require_role(actor, &[Role::Secretary])?;
+    crate::access::require_user_in_scope(conn, actor, user_id).await?;
+    if find_user(conn, user_id).await?.is_none() {
+        return Err(AppError::NotFound);
+    }
+    let scope = university_scope(conn, actor.id).await?;
+    let rows = sqlx::query_as::<_, UserMembership>(
+        "SELECT c.id AS campus_id, c.name AS campus_name, c.university, m.role, m.status,
+                m.created_at, m.suspended_reason
+         FROM core_members m
+         JOIN core_campuses c ON c.id = m.campus_id
+         WHERE m.user_id = ?1 AND (?2 IS NULL OR c.university = ?2)
+         ORDER BY c.name COLLATE NOCASE, c.id",
+    )
+    .bind(user_id)
+    .bind(scope)
+    .fetch_all(conn)
+    .await?;
+    Ok(rows)
+}
+
 // ---------------------------------------------------------------------------------------
 // Members
 // ---------------------------------------------------------------------------------------

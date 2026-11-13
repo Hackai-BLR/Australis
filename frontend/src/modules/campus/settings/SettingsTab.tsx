@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
-import { ApiError, apiGet, apiPost, apiPut } from "../../shared/api";
-import { Badge, Button, Card, EmptyState, Input, Modal, Spinner, useToast } from "../../shared/ui";
+import { ApiError, apiGet, apiPost, apiPut } from "../../../shared/api";
+import { Badge, Button, Card, EmptyState, Input, Modal, Spinner } from "../../../shared/ui";
 import type { SettingChange, SettingEntry, SettingsOverview } from "./types";
-import "./campus.css";
+import "../campus.css";
 
 const TITLES: Record<string, string> = {
   "grading.scale": "Escala de calificaciones",
@@ -11,7 +11,10 @@ const TITLES: Record<string, string> = {
   "attendance.rule": "Regla de asistencia",
 };
 
-const ACTIONS: Record<string, string> = { override: "Cambio", reset: "Vuelta al valor general" };
+const ACTIONS: Record<string, string> = {
+  update: "Cambio",
+  clear: "Vuelta al valor general",
+};
 
 function num(value: unknown): number {
   return typeof value === "number" ? value : Number(value);
@@ -24,7 +27,7 @@ function describe(key: string, value: Record<string, unknown> | null): string {
     return `De ${num(value.min)} a ${num(value.max)}, aprueba con ${num(value.pass)}`;
   }
   if (key === "grading.final_rule") return "Promedio ponderado";
-  if (key === "attendance.rule") return `Asistencia mínima del ${num(value.min_rate_percent)}%`;
+  if (key === "attendance.rule") return `Asistencia mínima del ${num(value.min_percent)}%`;
   return JSON.stringify(value);
 }
 
@@ -42,7 +45,7 @@ type Editing = { entry: SettingEntry; mode: "edit" | "reset" };
 /** "Configuración" tab: per-campus overrides of the grading and attendance rules. */
 export function SettingsTab() {
   const { id = "" } = useParams();
-  const toast = useToast();
+  const [notice, setNotice] = useState<{ tone: "success" | "error"; text: string } | null>(null);
   const [data, setData] = useState<SettingsOverview | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState<Editing | null>(null);
@@ -70,7 +73,7 @@ export function SettingsTab() {
       min: String(value.min ?? ""),
       max: String(value.max ?? ""),
       pass: String(value.pass ?? ""),
-      min_rate_percent: String(value.min_rate_percent ?? ""),
+      min_percent: String(value.min_percent ?? ""),
     });
     setConfirmed(value.confirmed === true);
     setReason("");
@@ -87,7 +90,7 @@ export function SettingsTab() {
       };
     }
     if (key === "attendance.rule") {
-      return { min_rate_percent: Number(fields.min_rate_percent), confirmed };
+      return { min_percent: Number(fields.min_percent), confirmed };
     }
     return { kind: "weighted_mean", confirmed };
   }
@@ -105,18 +108,24 @@ export function SettingsTab() {
       } else {
         await apiPost(`/campuses/${id}/settings/${entry.key}/reset`, { reason });
       }
-      toast.show({ tone: "success", message: "Se guardó el cambio." });
+      setNotice({ tone: "success", text: "Se guardó el cambio." });
       setEditing(null);
       await load();
     } catch (err) {
-      toast.show({ tone: "error", message: message(err, "No se pudo guardar el cambio.") });
+      setNotice({ tone: "error", text: message(err, "No se pudo guardar el cambio.") });
     } finally {
       setBusy(false);
     }
   }
 
   if (error) return <EmptyState title="No se pudo cargar la configuración" description={error} />;
-  if (!data) return <Spinner />;
+  if (!data)
+    return (
+      <div className="au-stack">
+        <h2 style={{ margin: 0 }}>Configuración del campus</h2>
+        <Spinner />
+      </div>
+    );
 
   const key = editing?.entry.key;
   const field = (name: string, label: string) => (
@@ -131,6 +140,12 @@ export function SettingsTab() {
 
   return (
     <div className="au-stack">
+      <h2 style={{ margin: 0 }}>Configuración del campus</h2>
+      {notice && (
+        <p role={notice.tone === "error" ? "alert" : "status"} style={{ margin: 0 }}>
+          {notice.text}
+        </p>
+      )}
       <p style={{ margin: 0 }}>
         Cada regla vale para todos los campus, salvo que este campus tenga un valor propio. Las
         reglas marcadas como sin confirmar son estimaciones que el programa todavía no validó.
@@ -222,7 +237,7 @@ export function SettingsTab() {
             </>
           )}
           {editing?.mode === "edit" && key === "attendance.rule" && (
-            <>{field("min_rate_percent", "Asistencia mínima (%)")}</>
+            <>{field("min_percent", "Asistencia mínima (%)")}</>
           )}
           {editing?.mode === "edit" && key === "grading.final_rule" && (
             <p style={{ margin: 0 }}>Promedio ponderado (la única regla disponible).</p>

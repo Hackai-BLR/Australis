@@ -62,10 +62,10 @@ async fn override_replaces_value_for_one_campus_only_and_is_audited() {
         .await;
     assert_eq!(find(&body, "grading.scale")["value"]["pass"], 60.0);
     let change = &body["changes"][0];
-    assert_eq!(change["action"], "override");
+    assert_eq!(change["action"], "update");
     assert_eq!(change["key"], "grading.scale");
     assert_eq!(change["reason"], "Escala del posgrado");
-    assert_eq!(change["before"]["pass"], 4.0);
+    assert!(change["before"].is_null());
     assert_eq!(change["after"]["pass"], 60.0);
     assert!(change["actor_name"].is_string());
 
@@ -88,13 +88,13 @@ async fn an_override_without_confirmation_stays_unconfirmed() {
         .put_json(
             &format!("/api/campuses/{campus}/settings/attendance.rule"),
             Some(&prof.cookie),
-            json!({ "value": { "min_rate_percent": 80 }, "reason": "Pedido del coordinador" }),
+            json!({ "value": { "min_percent": 80 }, "reason": "Pedido del coordinador" }),
         )
         .await;
     assert_eq!(status, StatusCode::OK, "{body}");
     assert_eq!(body["source"], "campus");
     assert_eq!(body["unconfirmed"], true);
-    assert_eq!(body["value"]["min_rate_percent"], 80.0);
+    assert_eq!(body["value"]["min_percent"], 80.0);
 }
 
 #[tokio::test]
@@ -115,7 +115,7 @@ async fn reset_returns_to_inherited_and_is_audited() {
     app.put_json(
         &url,
         Some(&prof.cookie),
-        json!({ "value": { "min_rate_percent": 50 }, "reason": "Prueba" }),
+        json!({ "value": { "min_percent": 50 }, "reason": "Prueba" }),
     )
     .await;
     let (status, body) = app
@@ -136,7 +136,7 @@ async fn reset_returns_to_inherited_and_is_audited() {
         .await;
     let changes = body["changes"].as_array().unwrap();
     assert_eq!(changes.len(), 2);
-    assert_eq!(changes[0]["action"], "reset");
+    assert_eq!(changes[0]["action"], "clear");
     assert_eq!(changes[0]["reason"], "Volver al valor general");
     assert_eq!(find(&body, "attendance.rule")["source"], "global");
 }
@@ -166,7 +166,7 @@ async fn invalid_values_and_missing_reason_are_refused() {
         ),
         (
             &format!("/api/campuses/{campus}/settings/attendance.rule"),
-            json!({ "value": { "min_rate_percent": 140 }, "reason": "x" }),
+            json!({ "value": { "min_percent": 140 }, "reason": "x" }),
         ),
     ];
     for (url, body) in cases {
@@ -228,4 +228,87 @@ async fn only_manage_access_reads_or_writes() {
     assert_eq!(status, StatusCode::OK);
     let (status, _) = app.put_json(&put_url, Some(&secretary.cookie), body).await;
     assert_eq!(status, StatusCode::OK);
+}
+
+#[tokio::test]
+async fn the_override_is_the_value_the_kernel_reads_and_the_audit_row_is_the_kernel_s() {
+    let app = TestApp::new().await;
+    let prof = app.login_as(Role::Professor).await;
+    let campus = app.seed_campus(&prof).await;
+    let other = app.seed_campus(&prof).await;
+    let (status, body) = app
+        .put_json(
+            &format!("/api/campuses/{campus}/settings/grading.scale"),
+            Some(&prof.cookie),
+            json!({ "value": { "min": 0, "max": 100, "pass": 60 }, "reason": "Escala" }),
+        )
+        .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let (status, _) = app
+        .put_json(
+            &format!("/api/campuses/{campus}/settings/attendance.rule"),
+            Some(&prof.cookie),
+            json!({ "value": { "min_percent": 80 }, "reason": "Asistencia" }),
+        )
+        .await;
+    assert_eq!(status, StatusCode::OK);
+
+    let mut conn = app.db.acquire().await.unwrap();
+    let scale = australis_core::settings::grading_scale(&mut conn, campus)
+        .await
+        .unwrap();
+    assert_eq!((scale.min, scale.max, scale.pass), (0.0, 100.0, 60.0));
+    let rule = australis_core::settings::attendance_rule(&mut conn, campus)
+        .await
+        .unwrap();
+    assert_eq!(rule.min_percent, 80.0);
+    let untouched = australis_core::settings::grading_scale(&mut conn, other)
+        .await
+        .unwrap();
+    assert_eq!(untouched.max, 10.0);
+    let rows: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM core_audit_log WHERE entity = 'campus.setting' AND campus_id = ?",
+    )
+    .bind(campus)
+    .fetch_one(&mut *conn)
+    .await
+    .unwrap();
+    assert_eq!(rows, 2);
+}
+
+#[tokio::test]
+async fn a_scale_that_leaves_stored_scores_outside_it_is_refused() {
+    let app = TestApp::new().await;
+    let prof = app.login_as(Role::Professor).await;
+    let campus = app.seed_campus(&prof).await;
+    let student = app.seed_student(campus).await;
+    let mut conn = app.db.acquire().await.unwrap();
+    sqlx::query("INSERT INTO grades_items (id, campus_id, title) VALUES (1, ?, 'TP')")
+        .bind(campus)
+        .execute(&mut *conn)
+        .await
+        .unwrap();
+    sqlx::query("INSERT INTO grades_entries (item_id, student_id, score) VALUES (1, ?, 8)")
+        .bind(student.id)
+        .execute(&mut *conn)
+        .await
+        .unwrap();
+    drop(conn);
+    let url = format!("/api/campuses/{campus}/settings/grading.scale");
+    let (status, body) = app
+        .put_json(
+            &url,
+            Some(&prof.cookie),
+            json!({ "value": { "min": 1, "max": 5, "pass": 3 }, "reason": "Escala" }),
+        )
+        .await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{body}");
+    let (_, body) = app
+        .get(
+            &format!("/api/campuses/{campus}/settings"),
+            Some(&prof.cookie),
+        )
+        .await;
+    assert_eq!(find(&body, "grading.scale")["source"], "global");
+    assert!(body["changes"].as_array().unwrap().is_empty());
 }

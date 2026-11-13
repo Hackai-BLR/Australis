@@ -38,6 +38,8 @@ export type AuditRow = {
 export type MyCourse = {
   campus_id: number;
   campus_name: string;
+  /** The course's own scale (a campus may override the program default). */
+  scale?: Scale & { confirmed?: boolean };
   final: number | null;
   items: { item_id: number; title: string; weight: number; score: number | null }[];
 };
