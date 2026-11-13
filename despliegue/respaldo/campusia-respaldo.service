@@ -12,6 +12,6 @@ NoNewPrivileges=yes
 PrivateTmp=yes
 ProtectSystem=strict
 ProtectHome=yes
-ReadWritePaths=/srv/campusia/respaldos /srv/campusia/datos /srv/campusia/cursos
+ReadWritePaths=/srv/campusia/respaldos /srv/campusia/datos /srv/campusia/cursos /srv/campusia/australis
 Nice=10
 IOSchedulingClass=idle

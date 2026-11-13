@@ -153,6 +153,18 @@ fi
 mkdir -- "$CONTENIDO/plataforma"
 copiar_base "$PLATAFORMA" "$CONTENIDO/plataforma/campusia.db" || fallar "no se pudo copiar $PLATAFORMA"
 
+BASE_AUSTRALIS="$RAIZ/australis/datos/australis.db"
+if [ -e "$BASE_AUSTRALIS" ] || [ -L "$BASE_AUSTRALIS" ]; then
+  if [ ! -f "$BASE_AUSTRALIS" ] || [ -L "$BASE_AUSTRALIS" ]; then
+    fallar "la base de Australis $BASE_AUSTRALIS no es un archivo regular"
+  fi
+  mkdir -p -- "$CONTENIDO/australis"
+  copiar_base "$BASE_AUSTRALIS" "$CONTENIDO/australis/australis.db" || fallar "no se pudo copiar $BASE_AUSTRALIS"
+  if [ -d "$RAIZ/australis/archivos" ] && [ ! -L "$RAIZ/australis/archivos" ]; then
+    copiar_arbol "$RAIZ/australis/archivos" "$CONTENIDO/australis/archivos" no
+  fi
+fi
+
 GIT=(git -c safe.directory='*' -c core.fsmonitor=false -c core.hooksPath=/dev/null)
 
 if [ -d "$RAIZ/cursos" ] && [ ! -L "$RAIZ/cursos" ]; then
@@ -191,7 +203,7 @@ fi
 mv -- "$TRABAJO/manifiesto" "$CONTENIDO/MANIFIESTO.sha256"
 
 ENTRADAS=(MANIFIESTO.sha256)
-for e in plataforma cursos archivos; do
+for e in plataforma cursos archivos australis; do
   if [ -e "$CONTENIDO/$e" ]; then ENTRADAS+=("$e"); fi
 done
 
