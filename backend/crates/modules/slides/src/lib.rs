@@ -363,6 +363,13 @@ async fn state(
     Ok(Json(live_for(&state, &user, lid, Access::View).await?))
 }
 
+const ACCESS_RECHECK: std::time::Duration = std::time::Duration::from_secs(3);
+
+/// The same rule that opened the stream; any failure (including a database error) closes it.
+async fn still_allowed(state: &AppState, user: &CurrentUser, live_id: i64) -> bool {
+    live_for(state, user, live_id, Access::View).await.is_ok()
+}
+
 async fn stream_state(
     State(state): State<AppState>,
     user: CurrentUser,
@@ -375,11 +382,44 @@ async fn stream_state(
     let current = live_for(&state, &user, lid, Access::View).await?;
     let first = serde_json::to_string(&current)
         .map_err(|err| AppError::Internal(format!("serialise state: {err}")))?;
+    // Access is re-checked on every change and on a periodic tick; the stream ends as soon
+    // as the caller no longer has View access (suspended, removed, disabled).
     // A lagged receiver skips ahead; the follower's safety poll fills any gap.
-    let changes = BroadcastStream::new(receiver).filter_map(|message| async move { message.ok() });
-    let events = stream::once(async move { first })
-        .chain(changes)
-        .map(|data| Ok(Event::default().data(data)));
+    let changes = BroadcastStream::new(receiver);
+    let mut tick = tokio::time::interval(ACCESS_RECHECK);
+    tick.tick().await;
+    let events = stream::unfold(
+        (Some(first), changes, tick),
+        move |(pending, mut changes, mut tick)| {
+            let state = state.clone();
+            let user = user.clone();
+            async move {
+                let data = match pending {
+                    Some(first) => first,
+                    None => loop {
+                        tokio::select! {
+                            message = changes.next() => match message {
+                                Some(Ok(data)) => {
+                                    if still_allowed(&state, &user, lid).await {
+                                        break data;
+                                    }
+                                    return None;
+                                }
+                                Some(Err(_)) => continue,
+                                None => return None,
+                            },
+                            _ = tick.tick() => {
+                                if !still_allowed(&state, &user, lid).await {
+                                    return None;
+                                }
+                            }
+                        }
+                    },
+                };
+                Some((Ok(Event::default().data(data)), (None, changes, tick)))
+            }
+        },
+    );
     Ok(Sse::new(events).keep_alive(KeepAlive::default()))
 }
 
