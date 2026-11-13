@@ -386,6 +386,28 @@ async fn suspended_students_stay_visible_and_marked() {
 }
 
 #[tokio::test]
+async fn a_suspended_student_receives_no_new_grades() {
+    let s = setup().await;
+    let item = s.item("Parcial", 1.0).await;
+    let st = s.app.seed_student(s.campus).await;
+    let mut conn = s.app.db.acquire().await.unwrap();
+    directory::suspend_member(&mut conn, s.prof.id, s.campus, st.id, "baja")
+        .await
+        .unwrap();
+    drop(conn);
+    let (status, body) = s
+        .put(
+            &s.prof.cookie,
+            json!({ "entries": [{ "item_id": item, "student_id": st.id, "score": 7 }] }),
+        )
+        .await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{body}");
+    assert!(body["error"].as_str().unwrap().contains("suspendido"));
+    let (_, book) = s.book(&s.prof.cookie).await;
+    assert!(book["entries"].as_array().unwrap().is_empty());
+}
+
+#[tokio::test]
 async fn an_item_of_another_campus_is_rejected() {
     let s = setup().await;
     let other = s.app.seed_campus(&s.prof).await;
