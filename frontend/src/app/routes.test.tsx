@@ -77,7 +77,7 @@ describe("app routes", () => {
     renderAt("/");
     const nav = await screen.findByRole("navigation", { name: "Navegación principal" });
     const labels = Array.from(nav.querySelectorAll("a")).map((a) => a.textContent);
-    expect(labels).toEqual(["Inicio", "Campus", "Usuarios"]);
+    expect(labels).toEqual(["Inicio", "Campus", "Directorio", "Usuarios"]);
   });
 
   it("renders campus tabs filtered by access", async () => {
