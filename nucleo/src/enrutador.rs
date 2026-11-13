@@ -560,8 +560,9 @@ mod pruebas {
         let casos = [
             (usuario(true, false, false), "dueño", false),
             (usuario(false, true, false), "profesor", false),
-            (usuario(false, false, true), "alumno", false),
-            (usuario(false, true, true), "profesor", false),
+            (usuario(false, true, true), "profesor", true),
+            (usuario(false, false, true), "alumno", true),
+            (usuario(true, false, true), "dueño", false),
             (usuario(false, false, false), "alumno", false),
         ];
         for (u, rol, administrador) in casos {
@@ -573,8 +574,20 @@ mod pruebas {
             assert_eq!(carga["email"], "ana@demo.test");
             assert_eq!(carga["rol"], rol);
             assert_eq!(carga["administrador"], administrador);
+            assert_eq!(carga["universidad"], "1");
             assert_eq!(carga["vence"].as_i64().unwrap() - carga["emitido"].as_i64().unwrap(), 60);
         }
+    }
+
+    #[tokio::test]
+    async fn un_administrador_sin_universidad_no_se_firma_como_administrador() {
+        let i = identidad().await;
+        let mut u = usuario(false, false, true);
+        u.universidad_id = None;
+        u.universidad_nombre = None;
+        let carga = verificar(&i, &i.firmar_australis(&PersonaAustralis::de_usuario(&u), 60));
+        assert_eq!(carga["administrador"], false);
+        assert_eq!(carga["universidad"], Value::Null);
     }
 
     #[tokio::test]

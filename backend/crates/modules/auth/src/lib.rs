@@ -4,6 +4,7 @@
 //! tables of its own.
 
 use australis_core::{
+    access::require_user_in_scope,
     audit::{self, AuditEntry},
     auth::{self, clear_session_cookie, session_cookie, session_token},
     begin_write,
@@ -119,7 +120,7 @@ async fn list_users(
 ) -> AppResult<Json<Vec<User>>> {
     require_secretary(&user)?;
     let mut conn = state.db.acquire().await?;
-    Ok(Json(directory::list_users(&mut conn).await?))
+    Ok(Json(directory::list_users_for(&mut conn, &user).await?))
 }
 
 #[derive(Deserialize)]
@@ -191,6 +192,7 @@ async fn update_user(
 ) -> AppResult<Json<User>> {
     require_secretary(&actor)?;
     let mut tx = begin_write(&state.db).await?;
+    require_user_in_scope(&mut tx, &actor, id).await?;
     let user = match body.status {
         UserStatus::Suspended => {
             directory::suspend_user(&mut tx, actor.id, id, &body.reason).await?
@@ -217,6 +219,7 @@ async fn reissue_invite(
 ) -> AppResult<Json<Value>> {
     require_secretary(&actor)?;
     let mut tx = begin_write(&state.db).await?;
+    require_user_in_scope(&mut tx, &actor, id).await?;
     let user = directory::find_user(&mut tx, id)
         .await?
         .ok_or(AppError::NotFound)?;

@@ -193,9 +193,7 @@ test.describe('checkpoint B: la historia con el núcleo, Australis y el modelo f
     expect(dosOk.estado, dosOk.texto).toBe(200);
   });
 
-  // Known gaps, kept as expected failures so they stay visible and turn red when fixed:
-  // remove `test.fail` as soon as they pass.
-  test.fail('5 (administrador). el administrador de la universidad ve esas inscripciones en el núcleo: falta M11', async () => {
+  test('5 (administrador). el administrador de la universidad ve esas inscripciones en el núcleo', async () => {
     const lista = await admin.get('/api/admin/cursos');
     expect(lista.estado, lista.texto).toBe(200);
     expect(lista.texto).toContain('Seminario de investigación');
@@ -205,10 +203,13 @@ test.describe('checkpoint B: la historia con el núcleo, Australis y el modelo f
     expect(alumnos).toEqual(ALUMNOS.map((a) => a.correo).sort());
   });
 
-  test.fail('6 (administrador). un administrador de la universidad abre el campus como secretaría: falta que el núcleo firme su rol (nucleo/src/identidad.rs)', async () => {
+  test('6 (administrador). un administrador de la universidad abre el campus de su universidad como secretaría y solo ve los de ella', async () => {
     const r = await admin.campus('GET', `/api/campuses/${campusUno.australis}`);
     expect(r.estado, r.texto).toBe(200);
     expect(r.json.access).toBe('manage');
+    const lista = await admin.campus('GET', '/api/campuses');
+    expect(lista.estado, lista.texto).toBe(200);
+    expect(lista.json.map((c: any) => c.id)).toEqual(expect.arrayContaining([campusUno.australis, campusDos.australis]));
   });
 
   test('el curso libre arranca con la plantilla tal como está en el repositorio: su bloqueo coincide con el SDK empaquetado', async () => {

@@ -107,6 +107,10 @@ pub struct Identity {
     pub email: String,
     pub full_name: String,
     pub role: Role,
+    /// The platform's id of the person's university, if any.
+    pub university: Option<String>,
+    /// Whether the person administers that university: a secretary limited to its campuses.
+    pub administers: bool,
 }
 
 #[derive(Deserialize)]
@@ -117,6 +121,8 @@ struct IdentityClaims {
     #[serde(default)]
     nombre: String,
     rol: String,
+    #[serde(default)]
+    universidad: Option<String>,
     #[serde(default)]
     administrador: bool,
     emitido: i64,
@@ -131,7 +137,8 @@ fn now_secs() -> i64 {
 }
 
 /// The Australis role for a platform identity: the owner and a university administrator are
-/// the secretary, a professor mark is a professor, everyone else is a student.
+/// the secretary (the administrator only on their own university's campuses, see
+/// `directory::university_scope`), a professor mark is a professor, everyone else is a student.
 pub fn role_for_platform(rol: &str, administrador: bool) -> Role {
     if rol == "dueño" || administrador {
         Role::Secretary
@@ -158,10 +165,14 @@ pub fn verify_identity(key: &VerifyingKey, header: &str, now: i64) -> Option<Ide
         && claims.vence > claims.emitido
         && claims.vence - claims.emitido <= IDENTITY_MAX_LIFETIME_SECS
         && claims.emitido <= now + IDENTITY_CLOCK_SKEW_SECS;
+    let university = claims.universidad.filter(|id| !id.trim().is_empty());
+    let administers = claims.rol != "dueño" && claims.administrador && university.is_some();
     valid.then(|| Identity {
         email: claims.email,
         full_name: claims.nombre,
-        role: role_for_platform(&claims.rol, claims.administrador),
+        role: role_for_platform(&claims.rol, administers),
+        university,
+        administers,
     })
 }
 
@@ -178,7 +189,9 @@ async fn user_for_identity(state: &AppState, identity: &Identity) -> AppResult<C
                 UserStatus::Suspended => return Err(AppError::Forbidden),
                 UserStatus::Active
                     if user.role == identity.role
-                        && (name.is_empty() || user.full_name == name) =>
+                        && (name.is_empty() || user.full_name == name)
+                        && directory::platform_university(&mut conn, user.id).await?
+                            == (identity.university.clone(), identity.administers) =>
                 {
                     return Ok(user.into());
                 }
@@ -202,6 +215,13 @@ async fn user_for_identity(state: &AppState, identity: &Identity) -> AppResult<C
             let user = directory::find_user_by_email(&mut tx, &email)
                 .await?
                 .ok_or(AppError::NotFound)?;
+            directory::set_university(
+                &mut tx,
+                user.id,
+                identity.university.as_deref(),
+                identity.administers,
+            )
+            .await?;
             audit::record(
                 &mut tx,
                 AuditEntry {
@@ -239,7 +259,18 @@ async fn user_for_identity(state: &AppState, identity: &Identity) -> AppResult<C
             let user = directory::find_user_by_email(&mut tx, &email)
                 .await?
                 .ok_or(AppError::NotFound)?;
-            if before.role != user.role || before.status != user.status {
+            let before_university = directory::platform_university(&mut tx, user.id).await?;
+            directory::set_university(
+                &mut tx,
+                user.id,
+                identity.university.as_deref(),
+                identity.administers,
+            )
+            .await?;
+            if before.role != user.role
+                || before.status != user.status
+                || before_university != (identity.university.clone(), identity.administers)
+            {
                 audit::record(
                     &mut tx,
                     AuditEntry {
@@ -250,12 +281,20 @@ async fn user_for_identity(state: &AppState, identity: &Identity) -> AppResult<C
                         subject_user_id: Some(user.id),
                         action: "sync_from_identity",
                         before: Some(
-                            serde_json::json!({ "role": before.role, "status": before.status }),
+                            serde_json::json!({
+                                "role": before.role,
+                                "status": before.status,
+                                "university": before_university.0,
+                                "administers": before_university.1,
+                            }),
                         ),
-                        after: Some(
-                            serde_json::json!({ "role": user.role, "status": user.status }),
-                        ),
-                        reason: Some("the platform changed the role or activated the account"),
+                        after: Some(serde_json::json!({
+                            "role": user.role,
+                            "status": user.status,
+                            "university": identity.university,
+                            "administers": identity.administers,
+                        })),
+                        reason: Some("the platform changed the role, the university or activated the account"),
                     },
                 )
                 .await?;

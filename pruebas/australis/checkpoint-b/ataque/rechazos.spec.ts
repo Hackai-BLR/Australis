@@ -10,6 +10,8 @@ import {
   llamarAlIntermediario,
   llamarAlModeloFalso,
   mailsEnviados,
+  origenDe,
+  paginaDe,
   pausa,
   pedirAlBackend,
   pedidosAlModelo,
@@ -17,7 +19,7 @@ import {
   semillaAjena,
   Sesion,
 } from '../../comun/escenario-b.ts';
-import { ADMIN_AUSTRAL, ALUMNO_AUSTRAL, OWNER, PROFE2_AUSTRAL, PROFE_AUSTRAL } from '../../comun/datos-b.ts';
+import { ADMIN_AUSTRAL, ADMIN_DEMO, ALUMNO_AUSTRAL, OWNER, PROFE2_AUSTRAL, PROFE_AUSTRAL } from '../../comun/datos-b.ts';
 import { estadoB } from '../../comun/pila-b.ts';
 
 let profe: Sesion;
@@ -97,6 +99,43 @@ test.describe('encabezado de identidad falso o vencido', () => {
     const anonimo = await entrar(ALUMNO_AUSTRAL);
     const r = await anonimo.campus('GET', '/api/auth/me', undefined, { sinCookies: true, encabezados: encabezado(OWNER, { rol: 'dueño', administrador: true }) });
     expect(r.estado).toBe(401);
+  });
+});
+
+test.describe('un administrador de otra universidad', () => {
+  test('no abre, no lista y no modifica el campus de otra universidad por la API', async () => {
+    const ajeno = await entrar(ADMIN_DEMO);
+    const yo = await ajeno.campus('GET', '/api/auth/me');
+    expect(yo.estado, yo.texto).toBe(200);
+    expect(yo.json.role).toBe('secretary');
+
+    const abrir = await ajeno.campus('GET', `/api/campuses/${campus.australis}`);
+    expect(abrir.estado, abrir.texto).toBe(403);
+    const documento = await ajeno.campus('PUT', `/api/campuses/${campus.australis}/document`, { version: 1, document: {} });
+    expect(documento.estado, documento.texto).toBe(403);
+    const importar = await ajeno.campus('POST', `/api/campuses/${campus.australis}/roster/imports`, { text: 'Intruso,intruso@demo.edu.ar' });
+    expect(importar.estado, importar.texto).toBe(403);
+
+    const lista = await ajeno.campus('GET', '/api/campuses');
+    expect(lista.estado, lista.texto).toBe(200);
+    expect(lista.json.map((c: any) => c.id)).not.toContain(campus.australis);
+
+    const personas = await ajeno.campus('GET', '/api/users');
+    expect(personas.estado, personas.texto).toBe(200);
+    expect(personas.texto).not.toContain('austral.edu.ar');
+  });
+
+  test('no abre el campus de otra universidad en la interfaz', async ({ browser }) => {
+    const ajeno = await entrar(ADMIN_DEMO);
+    const { ctx, pagina } = await paginaDe(browser, ajeno);
+    await pagina.goto(`${origenDe('campus')}/campuses/${campus.australis}`);
+    await expect(pagina.getByText('No se pudo abrir el campus')).toBeVisible();
+    await expect(pagina.getByText('Campus de los rechazos')).toHaveCount(0);
+    await pagina.goto(`${origenDe('campus')}/`);
+    await expect(pagina.getByRole('heading', { name: 'Campus' }).first()).toBeVisible();
+    await expect(pagina.getByText('No se pudieron cargar los campus.')).toHaveCount(0);
+    await expect(pagina.getByText('Campus de los rechazos')).toHaveCount(0);
+    await ctx.close();
   });
 });
 
