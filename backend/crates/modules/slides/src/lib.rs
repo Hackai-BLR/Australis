@@ -10,6 +10,8 @@
 
 use std::convert::Infallible;
 
+pub mod notes;
+
 use australis_core::{
     http::upload_body_limit, require_campus, Access, AppError, AppResult, AppState, CurrentUser,
 };
@@ -27,8 +29,6 @@ use futures::{stream, Stream, StreamExt};
 use serde::{Deserialize, Serialize};
 use sqlx::SqliteConnection;
 use tokio_stream::wrappers::BroadcastStream;
-
-mod notes;
 
 pub fn router() -> Router<AppState> {
     Router::new()

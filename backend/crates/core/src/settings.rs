@@ -142,6 +142,34 @@ fn validate_campus_value(key: &str, value: &Value) -> AppResult<()> {
     Ok(())
 }
 
+/// Refuses (422) a grading scale that leaves a score already stored for the campus outside
+/// it: that would change every student's result without a grade being touched. This reads
+/// the grades tables directly (read only) because the campus module cannot reach them and
+/// the kernel is the only place that sees both sides.
+async fn ensure_scores_fit(
+    conn: &mut SqliteConnection,
+    campus_id: i64,
+    value: &Value,
+) -> AppResult<()> {
+    let scale: GradingScale = serde_json::from_value(value.clone())
+        .map_err(|_| AppError::Unprocessable("the grading scale needs min, max and pass".into()))?;
+    let outside: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM grades_entries e JOIN grades_items i ON i.id = e.item_id
+         WHERE i.campus_id = ? AND e.score IS NOT NULL AND (e.score < ? OR e.score > ?)",
+    )
+    .bind(campus_id)
+    .bind(scale.min)
+    .bind(scale.max)
+    .fetch_one(conn)
+    .await?;
+    if outside > 0 {
+        return Err(AppError::Unprocessable(
+            "the grading scale leaves scores already entered outside it".into(),
+        ));
+    }
+    Ok(())
+}
+
 /// Sets a campus override and writes an audit row (entity `campus.setting`, entity id the
 /// campus, before and after carrying the key and the value) in the same transaction. The
 /// caller checks that `actor_id` may manage the campus.
@@ -158,6 +186,9 @@ pub async fn set_for_campus(
     directory::find_campus(&mut tx, campus_id)
         .await?
         .ok_or(AppError::NotFound)?;
+    if key == GRADING_SCALE {
+        ensure_scores_fit(&mut tx, campus_id, value).await?;
+    }
     let before = campus_override(&mut tx, campus_id, key).await?;
     sqlx::query(
         "INSERT INTO core_settings (scope, key, value_json, updated_by, updated_at)

@@ -651,3 +651,52 @@ async fn the_new_modules_and_seams_are_mounted_without_adding_routes() {
         assert_eq!(status, StatusCode::NOT_FOUND, "{path}");
     }
 }
+
+#[tokio::test]
+async fn a_scale_that_excludes_stored_scores_is_refused() {
+    let app = TestApp::new().await;
+    let prof = app.login_as(Role::Professor).await;
+    let campus = app.seed_campus(&prof).await;
+    let student = app.seed_student(campus).await;
+    let mut conn = app.db.acquire().await.unwrap();
+    sqlx::query("INSERT INTO grades_items (id, campus_id, title) VALUES (1, ?, 'TP')")
+        .bind(campus)
+        .execute(&mut *conn)
+        .await
+        .unwrap();
+    sqlx::query("INSERT INTO grades_entries (item_id, student_id, score) VALUES (1, ?, 9)")
+        .bind(student.id)
+        .execute(&mut *conn)
+        .await
+        .unwrap();
+
+    let too_small = json!({ "min": 0, "max": 5, "pass": 3, "confirmed": true });
+    let err = settings::set_for_campus(
+        &mut conn,
+        prof.id,
+        campus,
+        settings::GRADING_SCALE,
+        &too_small,
+        None,
+    )
+    .await
+    .unwrap_err();
+    assert!(matches!(err, australis_core::AppError::Unprocessable(_)));
+    assert_eq!(
+        settings::campus_override(&mut conn, campus, settings::GRADING_SCALE)
+            .await
+            .unwrap(),
+        None
+    );
+
+    settings::set_for_campus(
+        &mut conn,
+        prof.id,
+        campus,
+        settings::GRADING_SCALE,
+        &scale_0_100(),
+        None,
+    )
+    .await
+    .unwrap();
+}

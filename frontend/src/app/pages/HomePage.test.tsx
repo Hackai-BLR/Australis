@@ -16,7 +16,7 @@ const classToday = {
   campus_id: 1,
   campus_name: "Seminario A",
   title: "Clase 1",
-  starts_at: "2026-11-13 21:00:00",
+  starts_at: "2099-11-13 21:00:00",
   duration_min: 90,
   source: "placeholder",
   simulated: true,
@@ -27,7 +27,10 @@ const classToday = {
   ended_at: null,
 };
 
-function mock(role: Role, opts: { today?: unknown[]; campuses?: unknown[] } = {}) {
+function mock(
+  role: Role,
+  opts: { today?: unknown[]; campuses?: unknown[]; courseScale?: { pass: number } } = {},
+) {
   vi.stubGlobal(
     "fetch",
     vi.fn(async (url: string) => {
@@ -45,7 +48,15 @@ function mock(role: Role, opts: { today?: unknown[]; campuses?: unknown[] } = {}
       if (url === "/api/grades/mine")
         return json(200, {
           scale: { pass: 6 },
-          courses: [{ campus_id: 1, campus_name: "Seminario A", final: 8.4, items: [] }],
+          courses: [
+            {
+              campus_id: 1,
+              campus_name: "Seminario A",
+              final: 8.4,
+              items: [],
+              scale: opts.courseScale,
+            },
+          ],
         });
       return json(404, { error: "no" });
     }),
@@ -74,6 +85,13 @@ describe("HomePage", () => {
       "/grades",
     );
     expect(await screen.findByText("Final: 8,4")).toBeTruthy();
+  });
+
+  it("student: colours the final against the course's own scale", async () => {
+    mock("student", { courseScale: { pass: 9 } });
+    renderHome();
+    const badge = await screen.findByText("Final: 8,4");
+    expect(badge.className).toContain("danger");
   });
 
   it("student: no join button when there is no class today", async () => {
