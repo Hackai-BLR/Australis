@@ -349,6 +349,9 @@ async fn atender_australis_interno(app: &App, puerto: Option<&str>, req: Request
         None => None,
     };
     let Some(usuario) = usuario else {
+        if crate::inhabilitar::sesion_de_cuenta_inhabilitada(app, req.headers()).await? {
+            return Ok(rechazo_australis(api, StatusCode::FORBIDDEN, ApiError::cuenta_inhabilitada(), "Campus IA", "<h1>Cuenta inhabilitada</h1><p>Tu cuenta está inhabilitada. Consultá con la administración de tu universidad.</p>"));
+        }
         let entrada = match puerto {
             Some(p) => format!("{}://{}:{}/", app.cfg.esquema(), app.cfg.dominio_base, p),
             None => format!("{}://{}/", app.cfg.esquema(), app.cfg.dominio_base),
@@ -363,9 +366,9 @@ async fn atender_australis_interno(app: &App, puerto: Option<&str>, req: Request
         return Ok(rechazo_australis(
             api,
             StatusCode::FORBIDDEN,
-            ApiError::prohibido(),
+            ApiError::cuenta_inhabilitada(),
             "Campus IA",
-            "<h1>Sin acceso</h1><p>Tu cuenta no tiene acceso al campus.</p>",
+            "<h1>Cuenta inhabilitada</h1><p>Tu cuenta está inhabilitada. Consultá con la administración de tu universidad.</p>",
         ));
     }
     if !matches!(*req.method(), Method::GET | Method::HEAD | Method::OPTIONS) {
@@ -747,5 +750,38 @@ mod pruebas {
             .unwrap();
         let deshabilitada = atender_australis(&app, None, pedido(Method::GET, true, None)).await;
         assert_eq!(deshabilitada.status(), StatusCode::FORBIDDEN);
+    }
+
+    #[tokio::test]
+    async fn una_cuenta_inhabilitada_con_la_sesion_revocada_recibe_403_y_no_se_reenvia_nada() {
+        let destino = destino_eco().await;
+        let app = app_con_australis(&destino).await;
+        let id = persona_con_sesion(&app, "ana@demo.test").await;
+
+        sqlx::query("UPDATE usuarios SET suspendida_en = ? WHERE id = ?")
+            .bind(ahora_txt())
+            .bind(id)
+            .execute(&app.db)
+            .await
+            .unwrap();
+        sqlx::query("UPDATE sesiones SET revocada = 1 WHERE usuario_id = ?").bind(id).execute(&app.db).await.unwrap();
+        let r = atender_australis(&app, None, pedido(Method::GET, true, None)).await;
+        assert_eq!(r.status(), StatusCode::FORBIDDEN);
+        let cuerpo = axum::body::to_bytes(r.into_body(), 4096).await.unwrap();
+        assert!(String::from_utf8_lossy(&cuerpo).contains("inhabilitada"));
+
+        sqlx::query("UPDATE usuarios SET suspendida_en = NULL WHERE id = ?").bind(id).execute(&app.db).await.unwrap();
+        let reactivada = atender_australis(&app, None, pedido(Method::GET, true, None)).await;
+        assert_eq!(reactivada.status(), StatusCode::UNAUTHORIZED);
+
+        sqlx::query("UPDATE usuarios SET suspendida_en = ? WHERE id = ?").bind(ahora_txt()).bind(id).execute(&app.db).await.unwrap();
+        sqlx::query("UPDATE sesiones SET vence_en = ? WHERE usuario_id = ?")
+            .bind(fecha(en_segundos(-60)))
+            .bind(id)
+            .execute(&app.db)
+            .await
+            .unwrap();
+        let vencida = atender_australis(&app, None, pedido(Method::GET, true, None)).await;
+        assert_eq!(vencida.status(), StatusCode::UNAUTHORIZED);
     }
 }

@@ -190,9 +190,9 @@ test.describe('una persona inhabilitada en el núcleo', () => {
     expect(suspendida.estado, suspendida.texto).toBe(200);
 
     const campusSuspendido = await segundo.campus('GET', `/api/campuses/${australis}`);
-    expect([401, 403]).toContain(campusSuspendido.estado);
+    expect(campusSuspendido.estado).toBe(403);
     const propuesta = await segundo.campus('POST', `/api/campuses/${australis}/ai/proposals`, { instruction: 'Agregá una semana sobre ética' });
-    expect([401, 403]).toContain(propuesta.estado);
+    expect(propuesta.estado).toBe(403);
     expect(llamarAlIntermediario(e.nucleo, e.tokenModelo, PROFE2_AUSTRAL)).toBe(401);
     const desde = cantidadMails();
     const nuevoIngreso = await new Sesion().post('/api/login/codigo', { email: PROFE2_AUSTRAL });

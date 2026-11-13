@@ -47,6 +47,13 @@ impl ApiError {
     pub fn prohibido() -> ApiError {
         ApiError::nuevo(StatusCode::FORBIDDEN, "prohibido", "No tenés permiso para hacer esto.")
     }
+    pub fn cuenta_inhabilitada() -> ApiError {
+        ApiError::nuevo(
+            StatusCode::FORBIDDEN,
+            "cuenta_inhabilitada",
+            "Tu cuenta está inhabilitada. Consultá con la administración de tu universidad.",
+        )
+    }
     pub fn origen_invalido() -> ApiError {
         ApiError::nuevo(StatusCode::FORBIDDEN, "origen_invalido", "La petición no viene de un origen válido.")
     }

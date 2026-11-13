@@ -43,6 +43,24 @@ pub async fn cuenta_inhabilitada(db: &SqlitePool, usuario_id: i64) -> Result<boo
     Ok(r.map(|v| v != 0).unwrap_or(true))
 }
 
+pub async fn sesion_de_cuenta_inhabilitada(app: &App, encabezados: &HeaderMap) -> Result<bool, sqlx::Error> {
+    let Some(token) = valor_cookie(encabezados, COOKIE) else {
+        return Ok(false);
+    };
+    if token.len() < 32 || token.len() > 128 {
+        return Ok(false);
+    }
+    let usuario: Option<i64> = sqlx::query_scalar("SELECT usuario_id FROM sesiones WHERE huella = ? AND vence_en > ?")
+        .bind(huella(&app.cfg.session_secret, &token))
+        .bind(ahora_txt())
+        .fetch_optional(&app.db)
+        .await?;
+    match usuario {
+        Some(id) => cuenta_inhabilitada(&app.db, id).await,
+        None => Ok(false),
+    }
+}
+
 pub async fn exigir_habilitada(db: &SqlitePool, usuario_id: i64) -> Result<(), ApiError> {
     if cuenta_inhabilitada(db, usuario_id).await? {
         return Err(ApiError::no_autenticado());
