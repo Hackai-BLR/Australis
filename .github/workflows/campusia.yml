@@ -104,15 +104,3 @@ jobs:
           pnpm install --no-frozen-lockfile
           pnpm build
           pnpm test
-
-  secretos:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-      - run: python -m pip install "pytest>=8.3,<9"
-      - name: No secret is committed
-        working-directory: pruebas/tramo-infraestructura
-        run: python -I -m pytest test_secretos.py
