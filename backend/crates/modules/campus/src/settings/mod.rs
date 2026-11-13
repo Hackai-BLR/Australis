@@ -199,7 +199,7 @@ fn validate(key: &str, value: &Value) -> AppResult<Value> {
 }
 
 fn clean_reason(reason: &str) -> AppResult<String> {
-    let reason = reason.trim();
+    let reason = australis_core::audit::trim_reason(reason);
     if reason.is_empty() {
         return Err(AppError::Unprocessable("a reason is required".into()));
     }
