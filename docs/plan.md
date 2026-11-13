@@ -113,11 +113,11 @@ There is no kickoff. The tasks own different folders, except where a dependency 
 - **M7 CI.** GitHub jobs for `nucleo` (cargo test), `interfaz`, `sdk` and `plantilla-curso` (pnpm build and test), and a check that no secret is committed (`pruebas/tramo-infraestructura/test_secretos.py`).
 - **M8 Browser tests.** Playwright tests for the first-build features of Australis, in the style of `pruebas/fase-*`: acceptance (what must work) and attack (what must be refused). Later phases use them in place of a manual pass.
 
-Open decisions for phase 0, to settle before M2 and M3 start:
+Decisions for phase 0 (agreed 2026-11-13):
 
-1. The address Australis is served on (for example `campus.campusia.tech`, or inside each course's own subdomain).
-2. Whether the secretary is the university administrator, or a separate role the administrator grants.
-3. Whether student import (Australis) writes enrolments to the core, or the core's own enrolment screens replace it.
+1. **Address.** Australis is served on one reserved address, `campus.campusia.tech`. The core never gives that name to a course.
+2. **Secretary.** The university administrator is the secretary in Australis; so is the owner. There is no separate secretary role to grant.
+3. **Enrolments.** Australis keeps its student import (Excel, CSV or pasted list, with the preview). On confirm it writes the enrolments to the core, which is the record of who is enrolled.
 
 ## Phase 1: test and stabilise the first build
 
