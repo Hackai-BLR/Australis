@@ -41,6 +41,7 @@ export function ModalCrear({
   const [sub, setSub] = useState('');
   const [tocado, setTocado] = useState(false);
   const [periodo, setPeriodo] = useState(periodos[0]);
+  const [tipo, setTipo] = useState<'libre' | 'modulos'>('libre');
   const [error, setError] = useState('');
   const [ocupado, setOcupado] = useState(false);
 
@@ -52,13 +53,18 @@ export function ModalCrear({
       setError('Ponele un nombre.');
       return;
     }
-    if (!s) {
+    if (tipo === 'libre' && !s) {
       setError('Elegí una dirección.');
       return;
     }
     setError('');
     setOcupado(true);
     try {
+      if (tipo === 'modulos') {
+        const m = await post<CursoPropio>('/api/cursos-modulos', { nombre: n });
+        window.location.href = `${urlCurso('campus').replace(/\/$/, '')}/campuses/${m.campus_externo}`;
+        return;
+      }
       const c = await post<CursoPropio>('/api/cursos', { nombre: n, subdominio: s, periodo });
       window.location.href = urlCurso(c.id);
     } catch (e) {
@@ -76,7 +82,16 @@ export function ModalCrear({
   return (
     <Modal alCerrar={alCerrar} id="modal">
       <h3>Crear curso</h3>
-      <p className="desc">Después lo armás con el agente. Nadie lo ve hasta que lo publiques.</p>
+      <p className="desc">
+        {tipo === 'libre'
+          ? 'Después lo armás con el agente. Nadie lo ve hasta que lo publiques.'
+          : 'Con libro de calificaciones, clases, grabaciones y presentaciones.'}
+      </p>
+      <div className="etq">Tipo</div>
+      <select className="campo" id="c-tipo" value={tipo} onChange={(e) => setTipo(e.target.value as 'libre' | 'modulos')}>
+        <option value="libre">Curso libre</option>
+        <option value="modulos">Campus con módulos</option>
+      </select>
       <label className="etq" htmlFor="c-nombre">
         Nombre
       </label>
@@ -92,6 +107,8 @@ export function ModalCrear({
         }}
         onKeyDown={alTeclear}
       />
+      {tipo === 'libre' && (
+        <>
       <label className="etq" htmlFor="c-sub">
         Dirección
       </label>
@@ -121,6 +138,8 @@ export function ModalCrear({
           </option>
         ))}
       </select>
+        </>
+      )}
       <div className="err" id="c-err">
         {error}
       </div>

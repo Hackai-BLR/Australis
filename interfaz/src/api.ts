@@ -42,6 +42,8 @@ export interface CursoPropio {
   rol: 'dueño' | 'profesor' | 'alumno';
   version_publicada: number | null;
   archivado?: boolean;
+  tipo?: 'libre' | 'modulos';
+  campus_externo?: number;
 }
 
 export type RolCurso = 'dueño' | 'profesor' | 'alumno';

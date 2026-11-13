@@ -36,6 +36,7 @@ pub async fn mis_cursos(State(app): State<Estado>, ctx: Ctx) -> Resultado {
                 sin_acentos(&nombre),
                 json!({
                     "id": f.get::<String, _>("id"),
+                    "tipo": crate::cursos::modulos::TIPO_LIBRE,
                     "nombre": nombre,
                     "periodo": f.get::<String, _>("periodo"),
                     "color": f.get::<String, _>("color"),
@@ -46,6 +47,10 @@ pub async fn mis_cursos(State(app): State<Estado>, ctx: Ctx) -> Resultado {
             )
         })
         .collect();
+    for m in crate::cursos::modulos::de_la_persona(&app, ctx.usuario.id).await? {
+        let nombre = m["nombre"].as_str().unwrap_or_default().to_string();
+        cursos.push((sin_acentos(&nombre), m));
+    }
     cursos.sort_by(|a, b| a.0.cmp(&b.0));
     Ok(ok(json!({"cursos": cursos.into_iter().map(|c| c.1).collect::<Vec<_>>()})))
 }
