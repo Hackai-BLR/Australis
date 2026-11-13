@@ -48,6 +48,7 @@ pub async fn mis_cursos(State(app): State<Estado>, ctx: Ctx) -> Resultado {
         })
         .collect();
     crate::cursos::modulos::sincronizar_docentes(&app, &ctx).await;
+    crate::cursos::modulos::traer_mis_campus(&app, &ctx).await;
     for m in crate::cursos::modulos::de_la_persona(&app, ctx.usuario.id).await? {
         let nombre = m["nombre"].as_str().unwrap_or_default().to_string();
         cursos.push((sin_acentos(&nombre), m));

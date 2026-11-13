@@ -228,7 +228,11 @@ pub async fn invitaciones(State(app): State<Estado>, ctx: Ctx, encabezados: Head
 }
 
 pub async fn cursos(State(app): State<Estado>, ctx: Ctx) -> Resultado {
-    let uni = ctx.admin()?;
+    let uni = match ctx.admin() {
+        Ok(u) => Some(u),
+        Err(_) if ctx.usuario.owner && matches!(ctx.alcance, crate::roles::Alcance::Prohibido) => None,
+        Err(e) => return Err(e),
+    };
     let filas = sqlx::query(
         &format!("SELECT c.id, c.nombre, c.periodo, c.color, c.version_publicada, c.archivado_en IS NOT NULL AS archivado, \
          (SELECT COUNT(*) FROM inscripciones i JOIN usuarios u ON u.id = i.usuario_id WHERE i.curso_id = c.id AND i.rol IN ('dueño', 'profesor') AND NOT {x}) AS profesores, \
@@ -236,9 +240,10 @@ pub async fn cursos(State(app): State<Estado>, ctx: Ctx) -> Resultado {
          COALESCE((SELECT usd FROM uso_agente g WHERE g.curso_id = c.id AND g.mes = ?), 0.0) AS uso, \
          d.id AS dueno_id, d.nombre AS dueno_nombre, d.email AS dueno_email \
          FROM cursos c LEFT JOIN inscripciones di ON di.curso_id = c.id AND di.rol = 'dueño' \
-         LEFT JOIN usuarios d ON d.id = di.usuario_id WHERE c.universidad_id = ?", x = crate::inhabilitar::SQL_INHABILITADA),
+         LEFT JOIN usuarios d ON d.id = di.usuario_id WHERE (? IS NULL OR c.universidad_id = ?)", x = crate::inhabilitar::SQL_INHABILITADA),
     )
     .bind(mes_actual())
+    .bind(uni)
     .bind(uni)
     .fetch_all(&app.db)
     .await?;
@@ -258,6 +263,7 @@ pub async fn cursos(State(app): State<Estado>, ctx: Ctx) -> Resultado {
                 sin_acentos(&nombre),
                 json!({
                     "id": f.get::<String, _>("id"),
+                    "tipo": crate::cursos::modulos::TIPO_LIBRE,
                     "nombre": nombre,
                     "periodo": f.get::<String, _>("periodo"),
                     "color": f.get::<String, _>("color"),
@@ -271,6 +277,7 @@ pub async fn cursos(State(app): State<Estado>, ctx: Ctx) -> Resultado {
             )
         })
         .collect();
+    lista.extend(crate::cursos::modulos::de_la_universidad_para_admin(&app, uni).await?);
     lista.sort_by(|a, b| a.0.cmp(&b.0));
     Ok(ok(json!({"cursos": lista.into_iter().map(|c| c.1).collect::<Vec<_>>()})))
 }
