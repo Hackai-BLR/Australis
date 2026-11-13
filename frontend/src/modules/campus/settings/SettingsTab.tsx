@@ -50,7 +50,6 @@ export function SettingsTab() {
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState<Editing | null>(null);
   const [fields, setFields] = useState<Record<string, string>>({});
-  const [confirmed, setConfirmed] = useState(false);
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -75,7 +74,6 @@ export function SettingsTab() {
       pass: String(value.pass ?? ""),
       min_percent: String(value.min_percent ?? ""),
     });
-    setConfirmed(value.confirmed === true);
     setReason("");
     setEditing({ entry, mode });
   }
@@ -86,13 +84,12 @@ export function SettingsTab() {
         min: Number(fields.min),
         max: Number(fields.max),
         pass: Number(fields.pass),
-        confirmed,
       };
     }
     if (key === "attendance.rule") {
-      return { min_percent: Number(fields.min_percent), confirmed };
+      return { min_percent: Number(fields.min_percent) };
     }
-    return { kind: "weighted_mean", confirmed };
+    return { kind: "weighted_mean" };
   }
 
   async function save() {
@@ -243,14 +240,9 @@ export function SettingsTab() {
             <p style={{ margin: 0 }}>Promedio ponderado (la única regla disponible).</p>
           )}
           {editing?.mode === "edit" && (
-            <label>
-              <input
-                type="checkbox"
-                checked={confirmed}
-                onChange={(e) => setConfirmed(e.target.checked)}
-              />{" "}
-              El programa confirmó este valor
-            </label>
+            <p style={{ margin: 0 }}>
+              Un valor cargado acá queda sin confirmar hasta que el programa lo valide.
+            </p>
           )}
           <Input
             label="Motivo del cambio"

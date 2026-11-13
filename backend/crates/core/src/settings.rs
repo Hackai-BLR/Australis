@@ -142,6 +142,52 @@ fn validate_campus_value(key: &str, value: &Value) -> AppResult<()> {
     Ok(())
 }
 
+/// The largest value (as JSON text) a campus override may carry. Real values are under 100 bytes.
+const MAX_CAMPUS_VALUE_BYTES: usize = 1024;
+
+fn rebuild<T>(typed: T, global: T, set: fn(&mut T, bool), get: fn(&T) -> bool) -> AppResult<Value>
+where
+    T: Serialize + PartialEq + Clone,
+{
+    let mut probe = typed.clone();
+    set(&mut probe, get(&global));
+    let mut out = typed;
+    set(&mut out, probe == global && get(&global));
+    serde_json::to_value(out).map_err(|err| AppError::Internal(err.to_string()))
+}
+
+/// Rebuilds a validated value from its typed struct, so unknown keys are dropped, and sets
+/// the `confirmed` flag the system decides: only a value equal to the confirmed global one
+/// stays confirmed. Whatever the caller sent for `confirmed` is ignored.
+async fn canonical_campus_value(
+    conn: &mut SqliteConnection,
+    key: &str,
+    value: &Value,
+) -> AppResult<Value> {
+    let bad = || AppError::Unprocessable("the value has the wrong shape".into());
+    match key {
+        GRADING_SCALE => rebuild(
+            serde_json::from_value::<GradingScale>(value.clone()).map_err(|_| bad())?,
+            get(conn, key).await?,
+            |v, c| v.confirmed = c,
+            |v| v.confirmed,
+        ),
+        GRADING_FINAL_RULE => rebuild(
+            serde_json::from_value::<FinalRule>(value.clone()).map_err(|_| bad())?,
+            get(conn, key).await?,
+            |v, c| v.confirmed = c,
+            |v| v.confirmed,
+        ),
+        ATTENDANCE_RULE => rebuild(
+            serde_json::from_value::<AttendanceRule>(value.clone()).map_err(|_| bad())?,
+            get(conn, key).await?,
+            |v, c| v.confirmed = c,
+            |v| v.confirmed,
+        ),
+        _ => Err(bad()),
+    }
+}
+
 /// Refuses (422) a grading scale that leaves a score already stored for the campus outside
 /// it: that would change every student's result without a grade being touched. This reads
 /// the grades tables directly (read only) because the campus module cannot reach them and
@@ -181,11 +227,15 @@ pub async fn set_for_campus(
     value: &Value,
     reason: Option<&str>,
 ) -> AppResult<()> {
+    if value.to_string().len() > MAX_CAMPUS_VALUE_BYTES {
+        return Err(AppError::Unprocessable("the value is too large".into()));
+    }
     validate_campus_value(key, value)?;
     let mut tx = begin_nested(conn).await?;
     directory::find_campus(&mut tx, campus_id)
         .await?
         .ok_or(AppError::NotFound)?;
+    let value = &canonical_campus_value(&mut tx, key, value).await?;
     if key == GRADING_SCALE {
         ensure_scores_fit(&mut tx, campus_id, value).await?;
     }

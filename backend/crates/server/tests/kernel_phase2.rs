@@ -65,7 +65,15 @@ async fn an_override_applies_to_its_campus_only_and_clearing_it_restores_the_glo
     .unwrap();
     let on_a = settings::grading_scale(&mut conn, a).await.unwrap();
     assert_eq!((on_a.min, on_a.max, on_a.pass), (0.0, 100.0, 60.0));
-    assert!(on_a.confirmed);
+    assert!(!on_a.confirmed, "an override never claims to be confirmed");
+    let stored = settings::campus_override(&mut conn, a, settings::GRADING_SCALE)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        stored,
+        json!({ "min": 0.0, "max": 100.0, "pass": 60.0, "confirmed": false })
+    );
     let on_b = settings::grading_scale(&mut conn, b).await.unwrap();
     assert_eq!(on_b.max, 10.0, "another campus keeps the global scale");
 
@@ -154,6 +162,8 @@ async fn setting_and_clearing_an_override_are_audited_with_who_and_why() {
     .await
     .unwrap();
     rows.sort_by_key(|row| row.id);
+    // The system stores the flag, whatever the caller sent.
+    let stored = json!({ "min_percent": 80.0, "confirmed": false });
     assert_eq!(rows.len(), 3);
     assert_eq!(rows[0].action, "update");
     assert_eq!(rows[0].actor_id, Some(prof.id));
@@ -161,11 +171,11 @@ async fn setting_and_clearing_an_override_are_audited_with_who_and_why() {
     assert_eq!(rows[0].before, None);
     assert_eq!(
         rows[0].after,
-        Some(json!({ "key": "attendance.rule", "value": rule }))
+        Some(json!({ "key": "attendance.rule", "value": stored }))
     );
     assert_eq!(
         rows[1].before,
-        Some(json!({ "key": "attendance.rule", "value": rule }))
+        Some(json!({ "key": "attendance.rule", "value": stored }))
     );
     assert_eq!(rows[2].action, "clear");
     assert_eq!(rows[2].after, None);

@@ -154,12 +154,11 @@ fn validate(key: &str, value: &Value) -> AppResult<Value> {
     if !value.is_object() {
         return Err(AppError::Unprocessable("value must be an object".into()));
     }
-    let confirmed = match value.get("confirmed") {
-        None => false,
-        Some(v) => v
-            .as_bool()
-            .ok_or_else(|| AppError::Unprocessable("confirmed must be true or false".into()))?,
-    };
+    if value.to_string().len() > 1024 {
+        return Err(AppError::Unprocessable("the value is too large".into()));
+    }
+    // The system decides `confirmed` (the kernel overwrites it); a sent value is ignored.
+    let confirmed = false;
     match key {
         settings::GRADING_SCALE => {
             let (min, max, pass) = (
