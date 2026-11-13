@@ -258,6 +258,7 @@ pub async fn cursos(State(app): State<Estado>, ctx: Ctx) -> Resultado {
                 sin_acentos(&nombre),
                 json!({
                     "id": f.get::<String, _>("id"),
+                    "tipo": crate::cursos::modulos::TIPO_LIBRE,
                     "nombre": nombre,
                     "periodo": f.get::<String, _>("periodo"),
                     "color": f.get::<String, _>("color"),
@@ -271,6 +272,7 @@ pub async fn cursos(State(app): State<Estado>, ctx: Ctx) -> Resultado {
             )
         })
         .collect();
+    lista.extend(crate::cursos::modulos::de_la_universidad_para_admin(&app, uni).await?);
     lista.sort_by(|a, b| a.0.cmp(&b.0));
     Ok(ok(json!({"cursos": lista.into_iter().map(|c| c.1).collect::<Vec<_>>()})))
 }

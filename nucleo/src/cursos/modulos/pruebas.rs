@@ -44,11 +44,24 @@ async fn australis_falso() -> (String, Compartido) {
     let r2 = registro.clone();
     let r3 = registro.clone();
     let r4 = registro.clone();
+    let r5 = registro.clone();
     let app = Router::new()
         .route("/api/campus-templates", get(|| async { Json(json!([{"key": "basico"}])) }))
         .route(
             "/api/campuses",
-            post(move |h: axum::http::HeaderMap, Json(c): Json<Value>| {
+            get(move |h: axum::http::HeaderMap| {
+                let r = r5.clone();
+                async move {
+                    let quien = carga(&h);
+                    let r = r.lock().unwrap();
+                    let rol = r.miembros.iter().find(|m| m["email"] == quien["email"] && m["status"] == "active").map(|m| m["role"].clone());
+                    match rol {
+                        Some(rol) => Json(json!([{"id": 7, "name": "Campus", "member_role": rol}])),
+                        None => Json(json!([])),
+                    }
+                }
+            })
+            .post(move |h: axum::http::HeaderMap, Json(c): Json<Value>| {
                 let r = r1.clone();
                 async move {
                     let mut r = r.lock().unwrap();
@@ -470,4 +483,63 @@ async fn mis_cursos_de_un_docente_trae_lo_inscripto_en_australis() {
     registro.lock().unwrap().miembros.last_mut().unwrap()["status"] = json!("suspended");
     pedir(&app, &profe, Method::GET, "/api/mis-cursos", None).await;
     assert_eq!(super::de_la_persona(&app, marta).await.unwrap().len(), 0);
+}
+
+async fn administrador(app: &App, email: &str, universidad: i64) -> String {
+    let (id, token) = persona(app, email, universidad, false).await;
+    sqlx::query("UPDATE usuarios SET administrador = 1 WHERE id = ?").bind(id).execute(&app.db).await.unwrap();
+    token
+}
+
+#[tokio::test]
+async fn lo_que_se_importa_en_australis_llega_al_alumno_sin_sincronizar_a_mano() {
+    let (url, registro) = australis_falso().await;
+    let app = nueva_app(Some(url)).await;
+    let uni = universidad(&app, "univ.test").await;
+    let (_, profe) = persona(&app, "profe@univ.test", uni, true).await;
+    let id = campus_creado(&app, &profe).await;
+    let (_, ana) = persona(&app, "ana@univ.test", uni, false).await;
+    let (_, antes) = pedir(&app, &ana, Method::GET, "/api/mis-cursos", None).await;
+    assert_eq!(antes["cursos"].as_array().unwrap().len(), 0);
+    registro
+        .lock()
+        .unwrap()
+        .miembros
+        .push(json!({"email": "ana@univ.test", "full_name": "Ana", "role": "student", "status": "active"}));
+    let (estado, despues) = pedir(&app, &ana, Method::GET, "/api/mis-cursos", None).await;
+    assert_eq!(estado, 200);
+    let cursos = despues["cursos"].as_array().unwrap();
+    assert_eq!(cursos.len(), 1, "{despues}");
+    assert_eq!(cursos[0]["campus_id"], id);
+    assert_eq!(cursos[0]["rol"], "alumno");
+    let (_, lista) = pedir(&app, &profe, Method::GET, &format!("/api/cursos-modulos/{id}/inscriptos"), None).await;
+    assert!(lista["inscriptos"].as_array().unwrap().iter().any(|i| i["email"] == "ana@univ.test"));
+    registro.lock().unwrap().miembros.last_mut().unwrap()["status"] = json!("suspended");
+    let (_, fuera) = pedir(&app, &ana, Method::GET, "/api/mis-cursos", None).await;
+    assert_eq!(fuera["cursos"].as_array().unwrap().len(), 0);
+}
+
+#[tokio::test]
+async fn el_administrador_de_la_universidad_ve_el_campus_con_modulos_y_sus_inscriptos() {
+    let (url, _registro) = australis_falso().await;
+    let app = nueva_app(Some(url)).await;
+    let uni = universidad(&app, "univ.test").await;
+    let otra = universidad(&app, "otra.test").await;
+    let (_, profe) = persona(&app, "profe@univ.test", uni, true).await;
+    let id = campus_creado(&app, &profe).await;
+    pedir(&app, &profe, Method::POST, &format!("/api/cursos-modulos/{id}/inscriptos"), Some(json!({"emails": ["ana@univ.test"]}))).await;
+    let admin = administrador(&app, "admin@univ.test", uni).await;
+    let (estado, lista) = pedir(&app, &admin, Method::GET, &format!("/api/cursos-modulos/{id}/inscriptos"), None).await;
+    assert_eq!(estado, 200, "{lista}");
+    assert_eq!(lista["inscriptos"].as_array().unwrap().len(), 2);
+    let (estado, cursos) = pedir(&app, &admin, Method::GET, "/api/admin/cursos", None).await;
+    assert_eq!(estado, 200);
+    let campus = cursos["cursos"].as_array().unwrap().iter().find(|c| c["tipo"] == "modulos").expect("campus listed");
+    assert_eq!(campus["id"], format!("campus-{id}"));
+    assert_eq!(campus["alumnos"], 1);
+    assert_eq!(campus["profesores"], 1);
+    assert_eq!(campus["dueno"]["email"], "profe@univ.test");
+    let ajeno = administrador(&app, "admin@otra.test", otra).await;
+    let (estado, _) = pedir(&app, &ajeno, Method::GET, &format!("/api/cursos-modulos/{id}/inscriptos"), None).await;
+    assert_eq!(estado, 404);
 }
