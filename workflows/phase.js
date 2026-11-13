@@ -233,7 +233,7 @@ ${APP}
 
 Test folders the scout found (this checkpoint and earlier ones): ${JSON.stringify(cp.suites || [])}. How they say to run: ${cp.how_to_run_suites || 'not stated; read the folder'}.
 Also run backend/crates/server/tests/demo_flow.rs with the backend check image (see "Backend checks" in CLAUDE.md; run only that test file, target volume australis-target-checkpoint).
-If there is no end-to-end folder for this checkpoint, say so in "missing": that alone means the checkpoint cannot pass. Install test dependencies only inside the test folder. Report totals and one finding per failing test (name, what it expected, what happened); do not fix anything.`,
+If there is no end-to-end folder for this checkpoint, say so in "missing": that alone means the checkpoint cannot pass. Install test dependencies only inside the test folder. The stack above is in use by other agents at the same time: never run pila.sh bajar, never stop, remove or rebuild containers, images, networks or volumes you did not start yourself, and never remove a stack labelled checkpoint-b that is not yours. If the suite needs its own stack, let its script start one under its own prefix and leave cleanup of the assigned stack to the person. Report totals and one finding per failing test (name, what it expected, what happened); do not fix anything.`,
       { label: 'test:e2e-suite', phase: 'Test', model: CODER, isolation: 'worktree', schema: { type: 'object', required: ['ran', 'passed', 'failed'], properties: {
         ran: { type: 'boolean' }, passed: { type: 'integer' }, failed: { type: 'integer' },
         missing: { type: 'array', items: { type: 'string' } }, findings: { type: 'array', items: FINDING }, detail: { type: 'string' } } } }),
