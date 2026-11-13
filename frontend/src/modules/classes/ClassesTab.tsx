@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { Link, useParams } from "react-router-dom";
-import { ApiError } from "../../shared/api";
+import { apiErrorMessage } from "../../shared/errors";
 import {
   Badge,
   Button,
@@ -42,7 +42,7 @@ function NewClassForm({ campusId, onCreated }: { campusId: string; onCreated: ()
       setLink("");
       onCreated();
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : "No se pudo crear la clase.");
+      setError(apiErrorMessage(e, "No se pudo crear la clase."));
     } finally {
       setBusy(false);
     }
@@ -90,7 +90,7 @@ export function ClassesTab() {
   const load = useCallback(() => {
     listClasses(id)
       .then(setItems)
-      .catch((e: unknown) => setError(e instanceof ApiError ? e.message : "Error"));
+      .catch((e: unknown) => setError(apiErrorMessage(e, "Error")));
   }, [id]);
 
   useEffect(load, [load]);

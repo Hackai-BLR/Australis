@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ApiError } from "../../../shared/api";
+import { apiErrorMessage } from "../../../shared/errors";
 import { Badge, Button, Card, EmptyState, SimulatedBadge, Spinner } from "../../../shared/ui";
 import type { ClassItem } from "../api";
 import {
@@ -23,7 +23,7 @@ export function RecordingPanel({ classItem }: { classItem: ClassItem }) {
     let alive = true;
     getRecording(classItem.id)
       .then((value) => alive && setRecording(value))
-      .catch((e: unknown) => alive && setError(e instanceof ApiError ? e.message : "Error"));
+      .catch((e: unknown) => alive && setError(apiErrorMessage(e, "Error")));
     return () => {
       alive = false;
     };
@@ -33,7 +33,7 @@ export function RecordingPanel({ classItem }: { classItem: ClassItem }) {
     try {
       await downloadTranscript(classItem.id, "txt");
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : "No se pudo descargar la transcripción.");
+      setError(apiErrorMessage(e, "No se pudo descargar la transcripción."));
     }
   }
 

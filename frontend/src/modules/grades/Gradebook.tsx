@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ApiError, apiGet, apiPatch, apiPost, apiPut } from "../../shared/api";
+import { apiGet, apiPatch, apiPost, apiPut } from "../../shared/api";
 import { Button, Card, EmptyState, Input, Modal, Spinner, useToast } from "../../shared/ui";
 import { GradeGrid } from "./GradeGrid";
 import type { Cell } from "./nav";
@@ -14,6 +14,7 @@ import {
   type Scale,
 } from "./paste";
 import type { AuditRow, Gradebook as GradebookData, Item } from "./types";
+import { apiErrorMessage } from "../../shared/errors";
 
 const ACTIONS: Record<string, string> = {
   set: "cargó",
@@ -24,7 +25,7 @@ const ACTIONS: Record<string, string> = {
 };
 
 function errorMessage(e: unknown): string {
-  return e instanceof ApiError ? e.message : "No se pudo completar la operación.";
+  return apiErrorMessage(e, "No se pudo completar la operación.");
 }
 
 /** Asks for the reason of a change to a graded item; empty when cancelled or left blank. */

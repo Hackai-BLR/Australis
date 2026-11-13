@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { ApiError, apiPost, apiUpload } from "../../shared/api";
+import { apiPost, apiUpload } from "../../shared/api";
 import { Badge, Button, Card, Input, Table } from "../../shared/ui";
 import {
   FLAG_LABELS,
@@ -9,6 +9,7 @@ import {
   type InviteLink,
   type Preview,
 } from "./types";
+import { apiErrorMessage } from "../../shared/errors";
 
 type Step =
   | { name: "input" }
@@ -16,7 +17,7 @@ type Step =
   | { name: "done"; result: ConfirmResult };
 
 function message(err: unknown, fallback: string): string {
-  return err instanceof ApiError ? err.message : fallback;
+  return apiErrorMessage(err, fallback);
 }
 
 async function copy(text: string): Promise<boolean> {

@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
-import { ApiError, apiGet, apiPost } from "../../shared/api";
+import { apiGet, apiPost } from "../../shared/api";
 import { Badge, Button, Card, EmptyState, Modal, Spinner, useToast } from "../../shared/ui";
 import { DocumentView } from "./DocumentView";
 import { setCampusData, useCampusState } from "./store";
 import type { CampusDetail, Revision, RevisionEntry, RevisionVia } from "./types";
 import "./campus.css";
+import { apiErrorMessage } from "../../shared/errors";
 
 const VIA_LABELS: Record<RevisionVia, string> = {
   template: "Plantilla",
@@ -21,7 +22,7 @@ function formatDate(value: string): string {
 }
 
 function message(err: unknown, fallback: string): string {
-  return err instanceof ApiError ? err.message : fallback;
+  return apiErrorMessage(err, fallback);
 }
 
 /** Revision history of the campus; the professor can restore an earlier version. */

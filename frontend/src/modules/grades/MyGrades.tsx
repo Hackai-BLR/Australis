@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { ApiError, apiGet } from "../../shared/api";
+import { apiGet } from "../../shared/api";
 import { Badge, Card, EmptyState, PageHeader, Spinner, Table } from "../../shared/ui";
 import { formatScore } from "./paste";
 import type { MyGradesData } from "./types";
+import { apiErrorMessage } from "../../shared/errors";
 
 /** The student's grades. With `campusId`, only that course; without, every course. */
 export function MyGradesView({ campusId }: { campusId?: number }) {
@@ -13,9 +14,7 @@ export function MyGradesView({ campusId }: { campusId?: number }) {
   useEffect(() => {
     apiGet<MyGradesData>("/grades/mine")
       .then(setData)
-      .catch((e: unknown) =>
-        setError(e instanceof ApiError ? e.message : "No se pudieron cargar las notas."),
-      );
+      .catch((e: unknown) => setError(apiErrorMessage(e, "No se pudieron cargar las notas.")));
   }, []);
 
   if (error) return <EmptyState title="No se pudieron cargar las notas" description={error} />;

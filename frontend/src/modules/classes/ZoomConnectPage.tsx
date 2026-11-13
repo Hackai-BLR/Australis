@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ApiError } from "../../shared/api";
+import { apiErrorMessage } from "../../shared/errors";
 import { Button, Card, PageHeader, SimulatedBadge, Spinner } from "../../shared/ui";
 import { connectZoom, getZoomConnection, type ZoomConnection } from "./api";
 
@@ -12,7 +12,7 @@ export function ZoomConnectPage() {
     let alive = true;
     getZoomConnection()
       .then((value) => alive && setConnection(value))
-      .catch((e: unknown) => alive && setError(e instanceof ApiError ? e.message : "Error"));
+      .catch((e: unknown) => alive && setError(apiErrorMessage(e, "Error")));
     return () => {
       alive = false;
     };
@@ -24,7 +24,7 @@ export function ZoomConnectPage() {
     try {
       setConnection(await connectZoom());
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : "No se pudo conectar Zoom.");
+      setError(apiErrorMessage(e, "No se pudo conectar Zoom."));
     } finally {
       setBusy(false);
     }

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { useParams } from "react-router-dom";
-import { ApiError, apiGet, apiPost } from "../../shared/api";
+import { apiGet, apiPost } from "../../shared/api";
 import {
   Badge,
   Button,
@@ -15,9 +15,10 @@ import {
 } from "../../shared/ui";
 import { CopyButton, ImportWizard } from "./ImportWizard";
 import { MEMBER_ROLE_LABELS, type Member } from "./types";
+import { apiErrorMessage } from "../../shared/errors";
 
 function message(err: unknown, fallback: string): string {
-  return err instanceof ApiError ? err.message : fallback;
+  return apiErrorMessage(err, fallback);
 }
 
 function statusOf(m: Member): { label: string; tone: BadgeTone } {

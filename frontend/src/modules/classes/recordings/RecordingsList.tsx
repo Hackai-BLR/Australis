@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { ApiError } from "../../../shared/api";
+import { apiErrorMessage } from "../../../shared/errors";
 import { Badge, EmptyState, Spinner } from "../../../shared/ui";
 import { formatStart, listClasses, type ClassItem } from "../api";
 import { statusLabel, statusTone, type RecordingStatus } from "./api";
@@ -14,7 +14,7 @@ export function RecordingsList({ campusId }: { campusId: string }) {
     let alive = true;
     listClasses(campusId)
       .then((all) => alive && setItems(all.filter((c) => c.recording_status !== "none")))
-      .catch((e: unknown) => alive && setError(e instanceof ApiError ? e.message : "Error"));
+      .catch((e: unknown) => alive && setError(apiErrorMessage(e, "Error")));
     return () => {
       alive = false;
     };

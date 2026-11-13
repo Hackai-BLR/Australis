@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
-import { ApiError } from "../../shared/api";
+import { apiErrorMessage } from "../../shared/errors";
 import { useAuth } from "../../shared/auth";
 import { Badge, Button, Card, EmptyState, Input, Spinner, useToast } from "../../shared/ui";
 import {
@@ -31,7 +31,7 @@ export function SlidesTab() {
 }
 
 function errorMessage(err: unknown): string {
-  return err instanceof ApiError ? err.message : "Ocurrió un error inesperado.";
+  return apiErrorMessage(err, "Ocurrió un error inesperado.");
 }
 
 // --- presenter ---------------------------------------------------------------------------------

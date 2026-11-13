@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { ApiError } from "../../shared/api";
+import { apiErrorMessage } from "../../shared/errors";
 import {
   Badge,
   Button,
@@ -23,7 +23,7 @@ export function ClassPage() {
     let alive = true;
     getClass(cid)
       .then((value) => alive && setItem(value))
-      .catch((e: unknown) => alive && setError(e instanceof ApiError ? e.message : "Error"));
+      .catch((e: unknown) => alive && setError(apiErrorMessage(e, "Error")));
     return () => {
       alive = false;
     };
@@ -37,7 +37,7 @@ export function ClassPage() {
     try {
       setItem(await updateClass(current.id, { ended: !current.ended_at }));
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : "Error");
+      setError(apiErrorMessage(e, "Error"));
     } finally {
       setBusy(false);
     }
