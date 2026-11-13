@@ -1,8 +1,18 @@
 import { render, screen } from "@testing-library/react";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { AuthContext, type AuthContextValue, type AuthStatus, type Role } from "./context";
 import { RequireAuth, RequireRole } from "./guards";
+import { platformUrl } from "./mode";
+
+afterEach(() => vi.unstubAllGlobals());
+
+function modeResponse(status: number, body: unknown) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { "Content-Type": "application/json" },
+  });
+}
 
 function authValue(status: AuthStatus, role: Role | null = null): AuthContextValue {
   return {
@@ -48,11 +58,66 @@ describe("RequireAuth", () => {
     expect(screen.queryByText("secret page")).toBeNull();
   });
 
-  it("sends an anonymous visitor to /login with the return path", () => {
+  it("sends an anonymous visitor to /login with the return path in password mode", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => modeResponse(200, { mode: "password" })),
+    );
     renderAt("/campuses/1?tab=grades", authValue("anonymous"));
-    expect(screen.getByText(/login page/).textContent).toContain(
+    expect((await screen.findByText(/login page/)).textContent).toContain(
       `?next=${encodeURIComponent("/campuses/1?tab=grades")}`,
     );
+  });
+
+  it("falls back to /login when the mode cannot be read", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => modeResponse(404, { error: "not found" })),
+    );
+    renderAt("/campuses/1", authValue("anonymous"));
+    expect(await screen.findByText(/login page/)).toBeTruthy();
+  });
+
+  it("sends an anonymous visitor to the platform in header mode, never to /login", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => modeResponse(200, { mode: "header" })),
+    );
+    const assign = vi.fn();
+    vi.stubGlobal("location", {
+      protocol: "https:",
+      host: "campus.campusia.tech",
+      pathname: "/campuses/1",
+      search: "",
+      assign,
+    });
+    renderAt("/campuses/1", authValue("anonymous"));
+    expect(await screen.findByText("Tu sesión terminó")).toBeTruthy();
+    expect(assign).toHaveBeenCalledWith("https://campusia.tech/");
+    expect(screen.queryByText(/login page/)).toBeNull();
+  });
+
+  it("treats a 401 on the mode route as header mode", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => modeResponse(401, { error: "no_autenticado" })),
+    );
+    vi.stubGlobal("location", {
+      protocol: "http:",
+      host: "campus.localhost:8080",
+      pathname: "/",
+      search: "",
+      assign: vi.fn(),
+    });
+    renderAt("/campuses/1", authValue("anonymous"));
+    expect(await screen.findByText("Tu sesión terminó")).toBeTruthy();
+  });
+
+  it("finds the platform address from the campus address", () => {
+    expect(platformUrl({ protocol: "https:", host: "campus.campusia.tech" })).toBe(
+      "https://campusia.tech/",
+    );
+    expect(platformUrl({ protocol: "http:", host: "localhost:5173" })).toBe("/");
   });
 
   it("renders the page for a signed-in user", () => {
