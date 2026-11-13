@@ -55,7 +55,9 @@ struct SummaryView {
     /// `none`, `draft` or `approved`. A student only ever sees `none` or `approved`.
     status: String,
     body: Option<String>,
-    /// True when the text came from a placeholder AI: the screens show the "Simulado" badge.
+    /// True while the saved text is still the placeholder AI's draft: the screens show the
+    /// "Simulado" badge. Once the professor edits the text it is her text, so this is false
+    /// (`edited_at` tells the screen it was edited).
     simulated: bool,
     generated_at: Option<String>,
     edited_at: Option<String>,
@@ -113,7 +115,7 @@ async fn view(
         Some(r) => SummaryView {
             status: r.status,
             body: Some(r.body),
-            simulated: r.simulated,
+            simulated: r.simulated && r.edited_at.is_none(),
             generated_at: Some(r.generated_at),
             edited_at: r.edited_at,
             approved_at: r.approved_at,
@@ -214,7 +216,14 @@ async fn generate_summary(
         identity,
         ..AiRequest::default()
     };
-    let outcome = ai::run(&state, user.id, Some(campus_id), &request).await?;
+    let outcome = ai::run(&state, user.id, Some(campus_id), &request)
+        .await
+        .map_err(|err| match err {
+            AppError::TooManyRequests(_) => AppError::TooManyRequests(
+                "Alcanzaste el límite diario de resúmenes con IA. Probá de nuevo mañana.".into(),
+            ),
+            other => other,
+        })?;
     let body = outcome.reply.text.trim().to_string();
     if body.is_empty() {
         return Err(AppError::Unprocessable(
@@ -306,10 +315,17 @@ async fn edit_summary(
     Ok(Json(out))
 }
 
+#[derive(Deserialize)]
+struct ApproveBody {
+    /// The exact text the professor saw. Approving fails with 409 if the saved text differs.
+    body: String,
+}
+
 async fn approve_summary(
     State(state): State<AppState>,
     user: CurrentUser,
     Path(class_id): Path<i64>,
+    Json(input): Json<ApproveBody>,
 ) -> AppResult<Json<SummaryView>> {
     let mut tx = australis_core::begin_write(&state.db).await?;
     let campus_id = class_campus(&mut tx, class_id).await?;
@@ -317,23 +333,25 @@ async fn approve_summary(
     let result = sqlx::query(
         "UPDATE classes_summaries SET status = 'approved', approved_by = ?,
             approved_at = datetime('now')
-         WHERE class_id = ? AND status = 'draft'",
+         WHERE class_id = ? AND status = 'draft' AND body = ?",
     )
     .bind(user.id)
     .bind(class_id)
+    .bind(input.body.trim())
     .execute(&mut *tx)
     .await?;
     if result.rows_affected() == 0 {
-        let exists: bool = sqlx::query_scalar(
-            "SELECT EXISTS (SELECT 1 FROM classes_summaries WHERE class_id = ?)",
-        )
-        .bind(class_id)
-        .fetch_one(&mut *tx)
-        .await?;
-        return Err(if exists {
-            AppError::Conflict("the summary is already approved".into())
-        } else {
-            AppError::NotFound
+        let status: Option<String> =
+            sqlx::query_scalar("SELECT status FROM classes_summaries WHERE class_id = ?")
+                .bind(class_id)
+                .fetch_optional(&mut *tx)
+                .await?;
+        return Err(match status.as_deref() {
+            Some("approved") => AppError::Conflict("the summary is already approved".into()),
+            Some(_) => AppError::Conflict(
+                "the summary changed since you opened it; review the new text".into(),
+            ),
+            None => AppError::NotFound,
         });
     }
     let out = view(&mut tx, &user, class_id, true).await?;

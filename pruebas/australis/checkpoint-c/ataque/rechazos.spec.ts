@@ -142,7 +142,7 @@ test.describe('resumen de la clase', () => {
 
     const generarAlumna = await alumnaUno.campus('POST', `/api/classes/${claseId}/summary/generate`, {});
     expect(generarAlumna.estado, generarAlumna.texto).toBe(403);
-    const aprobarAlumna = await alumnaUno.campus('POST', `/api/classes/${claseId}/summary/approve`, {});
+    const aprobarAlumna = await alumnaUno.campus('POST', `/api/classes/${claseId}/summary/approve`, { body: secreto });
     expect(aprobarAlumna.estado, aprobarAlumna.texto).toBe(403);
     const editarAlumna = await alumnaUno.campus('PUT', `/api/classes/${claseId}/summary`, { body: 'Texto de una alumna' });
     expect(editarAlumna.estado, editarAlumna.texto).toBe(403);
@@ -152,7 +152,7 @@ test.describe('resumen de la clase', () => {
   });
 
   test('un resumen aprobado que se vuelve a editar deja de verse hasta que se aprueba otra vez', async () => {
-    const aprobado = await profe.campus('POST', `/api/classes/${claseId}/summary/approve`, {});
+    const aprobado = await profe.campus('POST', `/api/classes/${claseId}/summary/approve`, { body: 'BORRADOR-SIN-APROBAR-no-debe-salir' });
     expect(aprobado.estado, aprobado.texto).toBe(200);
     expect((await alumnaUno.campus('GET', `/api/classes/${claseId}/summary`)).json.status).toBe('approved');
     const reeditado = await profe.campus('PUT', `/api/classes/${claseId}/summary`, { body: 'Segunda versión sin aprobar' });
