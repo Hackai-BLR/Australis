@@ -1,8 +1,10 @@
 //! AI behind a trait, with a per-user daily quota that fails closed and a usage log.
 //!
-//! This build has no real provider and makes no outside call. `PlaceholderAi` answers from
+//! Two providers exist. `PlaceholderAi` (the default) makes no outside call and answers from
 //! scripted replies embedded in this crate (`scripts/*.json`); everything it returns is
-//! simulated and the screens must say so.
+//! simulated and the screens must say so. `ProxyAi` calls the Campus IA core's model proxy
+//! with a token that only works there, so no model credential enters this app; the core
+//! counts the tokens against the professor's monthly quota.
 //!
 //! Modules call [`run`], which reserves quota, calls the provider and writes the usage log.
 //! A provider cannot be called without a [`Reservation`], and only [`reserve`] makes one,
@@ -25,6 +27,8 @@
 //! ```
 //!
 //! A call is only returned if the request offers a tool with that name.
+
+use std::time::Duration;
 
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
@@ -230,6 +234,174 @@ fn normalize(text: &str) -> String {
 }
 
 // ---------------------------------------------------------------------------------------
+// Model proxy provider
+// ---------------------------------------------------------------------------------------
+
+const PROXY_MESSAGES_PATH: &str = "/modelo/v1/messages";
+const PROXY_USER_HEADER: &str = "x-campus-usuario";
+const PROXY_MAX_TOKENS: u32 = 4096;
+const PROXY_TIMEOUT: Duration = Duration::from_secs(120);
+const QUOTA_EXHAUSTED_REPLY: &str = "Se agotó el cupo de uso de la IA en la plataforma.";
+
+/// Calls the core's model proxy (Anthropic Messages format). The token is only valid at the
+/// proxy; the proxy holds the model credential and charges the professor named by the
+/// user header.
+pub struct ProxyAi {
+    client: reqwest::Client,
+    url: String,
+    token: String,
+    model: String,
+}
+
+impl ProxyAi {
+    pub fn new(base_url: &str, token: &str, model: &str) -> Result<Self, ProviderError> {
+        let client = reqwest::Client::builder()
+            .no_proxy()
+            .redirect(reqwest::redirect::Policy::none())
+            .connect_timeout(Duration::from_secs(10))
+            .timeout(PROXY_TIMEOUT)
+            .build()
+            .map_err(|_| ProviderError::Failed("cannot build the HTTP client".into()))?;
+        Ok(Self {
+            client,
+            url: format!("{}{PROXY_MESSAGES_PATH}", base_url.trim_end_matches('/')),
+            token: token.to_string(),
+            model: model.to_string(),
+        })
+    }
+
+    fn body(&self, request: &AiRequest) -> Value {
+        let mut text = String::new();
+        if !request.context.is_empty() {
+            text.push_str("Current state:\n");
+            text.push_str(&request.context);
+            text.push_str("\n\nRequest:\n");
+        }
+        text.push_str(&request.instruction);
+        if !request.feedback.is_empty() {
+            text.push_str("\n\nThe previous attempt had these errors, correct them:\n");
+            for line in &request.feedback {
+                text.push_str("- ");
+                text.push_str(line);
+                text.push('\n');
+            }
+        }
+        let mut body = serde_json::json!({
+            "model": self.model,
+            "max_tokens": PROXY_MAX_TOKENS,
+            "messages": [{ "role": "user", "content": text }],
+        });
+        if !request.system.is_empty() {
+            body["system"] = Value::String(request.system.clone());
+        }
+        if !request.tools.is_empty() {
+            body["tools"] = Value::Array(
+                request
+                    .tools
+                    .iter()
+                    .map(|tool| {
+                        serde_json::json!({
+                            "name": tool.name,
+                            "description": tool.description,
+                            "input_schema": tool.input_schema,
+                        })
+                    })
+                    .collect(),
+            );
+        }
+        body
+    }
+
+    fn reply(&self, value: &Value, request: &AiRequest) -> Result<AiReply, ProviderError> {
+        let blocks = value["content"]
+            .as_array()
+            .ok_or_else(|| ProviderError::Failed("the proxy reply has no content".into()))?;
+        let mut text = String::new();
+        let mut tool_calls = Vec::new();
+        for block in blocks {
+            match block["type"].as_str() {
+                Some("text") => {
+                    if let Some(part) = block["text"].as_str() {
+                        if !text.is_empty() {
+                            text.push('\n');
+                        }
+                        text.push_str(part);
+                    }
+                }
+                Some("tool_use") => {
+                    let name = block["name"].as_str().unwrap_or_default();
+                    if request.tools.iter().any(|tool| tool.name == name) {
+                        tool_calls.push(AiToolCall {
+                            name: name.to_string(),
+                            input: block["input"].clone(),
+                        });
+                    }
+                }
+                _ => {}
+            }
+        }
+        let usage = &value["usage"];
+        let count = |field: &str| usage[field].as_i64().unwrap_or(0).max(0);
+        Ok(AiReply {
+            text,
+            tool_calls,
+            model: value["model"].as_str().unwrap_or(&self.model).to_string(),
+            input_tokens: count("input_tokens")
+                + count("cache_creation_input_tokens")
+                + count("cache_read_input_tokens"),
+            output_tokens: count("output_tokens"),
+        })
+    }
+}
+
+#[async_trait]
+impl AiProvider for ProxyAi {
+    fn name(&self) -> &'static str {
+        "proxy"
+    }
+
+    fn is_placeholder(&self) -> bool {
+        false
+    }
+
+    async fn complete(
+        &self,
+        request: &AiRequest,
+        reservation: &Reservation,
+    ) -> Result<AiReply, ProviderError> {
+        if reservation.user_email.is_empty() {
+            return Err(ProviderError::Failed("the user has no email".into()));
+        }
+        let response = self
+            .client
+            .post(&self.url)
+            .header("x-api-key", &self.token)
+            .header("anthropic-version", "2023-06-01")
+            .header(PROXY_USER_HEADER, &reservation.user_email)
+            .json(&self.body(request))
+            .send()
+            .await
+            .map_err(|_| ProviderError::Failed("the model proxy did not answer".into()))?;
+        let status = response.status();
+        let value: Value = response.json().await.unwrap_or(Value::Null);
+        if status == reqwest::StatusCode::TOO_MANY_REQUESTS {
+            let message = value["error"]["message"]
+                .as_str()
+                .filter(|message| !message.is_empty())
+                .unwrap_or(QUOTA_EXHAUSTED_REPLY);
+            return Err(ProviderError::QuotaExhausted(message.to_string()));
+        }
+        if !status.is_success() {
+            return Err(ProviderError::Failed(format!(
+                "the model proxy answered {}",
+                status.as_u16()
+            )));
+        }
+        self.reply(&value, request)
+    }
+}
+
+// ---------------------------------------------------------------------------------------
 // Quota
 // ---------------------------------------------------------------------------------------
 
@@ -239,6 +411,8 @@ fn normalize(text: &str) -> String {
 #[non_exhaustive]
 pub struct Reservation {
     pub user_id: i64,
+    /// The user's email, which `ProxyAi` sends so the core charges the right professor.
+    pub user_email: String,
     pub feature: String,
     pub day: String,
 }
@@ -278,11 +452,17 @@ pub async fn reserve(
     .bind(feature)
     .bind(&day)
     .bind(limit)
-    .execute(conn)
+    .execute(&mut *conn)
     .await?;
     if result.rows_affected() == 1 {
+        let user_email: Option<String> =
+            sqlx::query_scalar("SELECT email FROM core_users WHERE id = ?")
+                .bind(user_id)
+                .fetch_optional(conn)
+                .await?;
         Ok(Reservation {
             user_id,
+            user_email: user_email.unwrap_or_default(),
             feature: feature.to_string(),
             day,
         })
@@ -558,6 +738,7 @@ mod tests {
     fn ticket() -> Reservation {
         Reservation {
             user_id: 1,
+            user_email: "prof@demo.test".into(),
             feature: FEATURE_SHAPING.into(),
             day: "2026-11-13".into(),
         }

@@ -2,10 +2,13 @@
 //! module. `main.rs` only adds logging, the startup seed and the TCP listener, so tests
 //! build the same app.
 
+use std::sync::Arc;
+
 use anyhow::bail;
 use australis_core::{
     auth,
-    config::{AuthMode, PLACEHOLDER_PROVIDER},
+    ai::{AiProvider, ProxyAi},
+    config::{AuthMode, PLACEHOLDER_PROVIDER, PROXY_PROVIDER},
     http, AppError, AppState, Config,
 };
 use axum::{
@@ -28,20 +31,36 @@ pub async fn init_db(database_url: &str) -> anyhow::Result<SqlitePool> {
     Ok(db)
 }
 
-/// Opens the database and builds the shared state. Every outside provider is a placeholder
-/// in this build; asking for another one is an error rather than a silent simulation.
+/// Opens the database and builds the shared state. Zoom and PowerPoint conversion are
+/// placeholders in this build. The AI is the placeholder unless `AI_PROVIDER=proxy` asks for
+/// the core's model proxy, which needs `AI_PROXY_URL` and `AI_API_KEY`. Asking for anything
+/// else is an error rather than a silent simulation.
 pub async fn build_state(config: Config) -> anyhow::Result<AppState> {
-    for (variable, value) in [
-        ("AI_PROVIDER", &config.ai_provider),
-        ("ZOOM_PROVIDER", &config.zoom_provider),
-    ] {
-        if value != PLACEHOLDER_PROVIDER {
-            bail!("{variable}={value} is not available in this build; use {PLACEHOLDER_PROVIDER}");
-        }
+    if config.zoom_provider != PLACEHOLDER_PROVIDER {
+        bail!(
+            "ZOOM_PROVIDER={} is not available in this build; use {PLACEHOLDER_PROVIDER}",
+            config.zoom_provider
+        );
     }
+    let ai: Option<Arc<dyn AiProvider>> = match config.ai_provider.as_str() {
+        PLACEHOLDER_PROVIDER => None,
+        PROXY_PROVIDER => {
+            let (Some(url), Some(token)) = (&config.ai_proxy_url, &config.ai_api_key) else {
+                bail!("AI_PROVIDER={PROXY_PROVIDER} needs AI_PROXY_URL and AI_API_KEY");
+            };
+            Some(Arc::new(ProxyAi::new(url, token, &config.ai_model)?))
+        }
+        other => bail!(
+            "AI_PROVIDER={other} is not available; use {PLACEHOLDER_PROVIDER} or {PROXY_PROVIDER}"
+        ),
+    };
     let db = init_db(&config.database_url).await?;
     auth::purge_expired_sessions(&mut *db.acquire().await?).await?;
-    Ok(AppState::with_placeholders(db, config))
+    let mut state = AppState::with_placeholders(db, config);
+    if let Some(ai) = ai {
+        state.ai = ai;
+    }
+    Ok(state)
 }
 
 /// `GET /api/auth/mode`: how the caller is identified, so the frontend knows whether to show

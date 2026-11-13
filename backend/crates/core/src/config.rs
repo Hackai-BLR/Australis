@@ -67,10 +67,15 @@ pub struct Config {
     pub max_upload_mb: u64,
     /// `APP_BASE_URL`: origin of the frontend, used to build invite links.
     pub app_base_url: String,
-    /// `AI_PROVIDER`: only `placeholder` exists in this build.
+    /// `AI_PROVIDER`: `placeholder` (default) or `proxy`.
     pub ai_provider: String,
-    /// `AI_API_KEY`: unused until a real provider exists.
+    /// `AI_API_KEY`: with `proxy`, the model-proxy token of the core. It is not a model
+    /// credential: it only works at the core's proxy.
     pub ai_api_key: Option<String>,
+    /// `AI_PROXY_URL`: base URL of the core's model proxy. Required with `proxy`.
+    pub ai_proxy_url: Option<String>,
+    /// `AI_MODEL`: the model the proxy is asked for.
+    pub ai_model: String,
     /// `ZOOM_PROVIDER`: only `placeholder` exists in this build.
     pub zoom_provider: String,
     /// `ZOOM_ACCOUNT_ID`, `ZOOM_CLIENT_ID`, `ZOOM_CLIENT_SECRET`: unused until a real provider exists.
@@ -94,6 +99,8 @@ pub struct Config {
 }
 
 pub const PLACEHOLDER_PROVIDER: &str = "placeholder";
+pub const PROXY_PROVIDER: &str = "proxy";
+pub const DEFAULT_AI_MODEL: &str = "claude-sonnet-4-5";
 pub const DEFAULT_MAX_UPLOAD_MB: u64 = 25;
 
 impl Default for Config {
@@ -108,6 +115,8 @@ impl Default for Config {
             app_base_url: "http://localhost:5173".into(),
             ai_provider: PLACEHOLDER_PROVIDER.into(),
             ai_api_key: None,
+            ai_proxy_url: None,
+            ai_model: DEFAULT_AI_MODEL.into(),
             zoom_provider: PLACEHOLDER_PROVIDER.into(),
             zoom_account_id: None,
             zoom_client_id: None,
@@ -185,6 +194,8 @@ impl Config {
                 .map(|name| name.to_lowercase())
                 .unwrap_or(defaults.ai_provider),
             ai_api_key: get("AI_API_KEY"),
+            ai_proxy_url: get("AI_PROXY_URL").map(|url| url.trim_end_matches('/').to_string()),
+            ai_model: get("AI_MODEL").unwrap_or(defaults.ai_model),
             zoom_provider: get("ZOOM_PROVIDER")
                 .map(|name| name.to_lowercase())
                 .unwrap_or(defaults.zoom_provider),

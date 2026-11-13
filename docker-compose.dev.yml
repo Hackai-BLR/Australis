@@ -17,6 +17,8 @@ services:
       APP_BASE_URL: ${APP_BASE_URL:-http://localhost:5173}
       AI_PROVIDER: ${AI_PROVIDER:-}
       AI_API_KEY: ${AI_API_KEY:-}
+      AI_PROXY_URL: ${AI_PROXY_URL:-}
+      AI_MODEL: ${AI_MODEL:-}
       ZOOM_PROVIDER: ${ZOOM_PROVIDER:-}
       ZOOM_ACCOUNT_ID: ${ZOOM_ACCOUNT_ID:-}
       ZOOM_CLIENT_ID: ${ZOOM_CLIENT_ID:-}
