@@ -1,0 +1,106 @@
+name: Campus IA
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "nucleo/**"
+      - "interfaz/**"
+      - "sdk/**"
+      - "plantilla-curso/**"
+      - "pruebas/tramo-infraestructura/**"
+      - "infraestructura/**"
+      - "despliegue/**"
+      - ".github/workflows/campusia.yml"
+  pull_request:
+    paths:
+      - "nucleo/**"
+      - "interfaz/**"
+      - "sdk/**"
+      - "plantilla-curso/**"
+      - "pruebas/tramo-infraestructura/**"
+      - "infraestructura/**"
+      - "despliegue/**"
+      - ".github/workflows/campusia.yml"
+
+env:
+  npm_config_manage_package_manager_versions: "false"
+
+jobs:
+  nucleo:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: nucleo
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: nucleo
+      - run: cargo test --locked
+
+  interfaz:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: interfaz
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: interfaz/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+
+  sdk:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: sdk
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: sdk/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - run: pnpm test
+
+  plantilla-curso:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: |
+            sdk/pnpm-lock.yaml
+            plantilla-curso/pnpm-lock.yaml
+      - name: Pack the SDK into the template
+        run: |
+          pnpm --dir sdk install --frozen-lockfile
+          pnpm --dir sdk build
+          mkdir -p plantilla-curso/vendor
+          rm -f plantilla-curso/vendor/campusia-sdk-*.tgz
+          pnpm --dir sdk pack --pack-destination ../plantilla-curso/vendor
+      - name: Install, build and test the template
+        working-directory: plantilla-curso
+        run: |
+          pnpm install --no-frozen-lockfile
+          pnpm build
+          pnpm test
