@@ -1,0 +1,10 @@
+*
+!nucleo
+!interfaz
+!sdk
+!plantilla-curso
+**/node_modules
+**/target
+**/dist
+**/*.tgz
+!pruebas/australis/imagenes/fijar-sdk.mjs
