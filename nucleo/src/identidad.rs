@@ -24,12 +24,11 @@ pub struct PersonaAustralis<'a> {
     pub email: &'a str,
     pub nombre: &'a str,
     pub rol: &'a str,
+    pub universidad: Option<i64>,
     pub administrador: bool,
 }
 
 impl<'a> PersonaAustralis<'a> {
-    /// A university administrator is not signed as an administrator: Australis has no notion of
-    /// universities, so that flag would grant power over every campus, including other universities'.
     pub fn de_usuario(u: &'a crate::auth::Usuario) -> PersonaAustralis<'a> {
         let rol = if u.owner {
             "dueño"
@@ -38,7 +37,7 @@ impl<'a> PersonaAustralis<'a> {
         } else {
             "alumno"
         };
-        PersonaAustralis { usuario: u.id, email: &u.email, nombre: &u.nombre, rol, administrador: u.owner && u.administrador }
+        PersonaAustralis { usuario: u.id, email: &u.email, nombre: &u.nombre, rol, universidad: u.universidad_id, administrador: !u.owner && u.administrador && u.universidad_id.is_some() }
     }
 }
 
@@ -104,6 +103,7 @@ impl Identidad {
                 "email": p.email,
                 "nombre": p.nombre,
                 "rol": p.rol,
+                "universidad": p.universidad.map(|id| id.to_string()),
                 "administrador": p.administrador,
             }),
             vigencia,

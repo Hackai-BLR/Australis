@@ -18,15 +18,19 @@ Lo usan el núcleo (que firma y reenvía) y el backend de Australis (que verific
 ## Encabezado
 
 - Nombre `X-Campus-Identidad`, valor `<carga>.<firma>`, igual que en `identidad-cursos.md` (carga JSON en base64url sin relleno, firma Ed25519 de los bytes ASCII de `<carga>`).
-- Carga: `{"v":1,"curso":"australis","usuario":"<id>","email":"<mail>","nombre":"<nombre>","rol":"dueño"|"profesor"|"alumno","administrador":true|false,"emitido":<epoch s>,"vence":<epoch s>}`.
-- `rol` es `dueño` para el owner, `profesor` para quien tiene la marca de profesor y `alumno` para el resto. `administrador` es aparte porque un administrador de universidad puede no tener la marca de profesor.
+- Carga: `{"v":1,"curso":"australis","usuario":"<id>","email":"<mail>","nombre":"<nombre>","rol":"dueño"|"profesor"|"alumno","universidad":"<id>"|null,"administrador":true|false,"emitido":<epoch s>,"vence":<epoch s>}`.
+- `rol` es `dueño` para el owner, `profesor` para quien tiene la marca de profesor y `alumno` para el resto.
+- `universidad` es el identificador de la universidad de la persona en el núcleo (texto), o `null` si no tiene.
+- `administrador` es `true` solo para quien administra su universidad y no es el owner: es aparte de `rol` porque un administrador puede no tener la marca de profesor. Nunca es `true` con `universidad` en `null`.
 - Vigencia máxima 120 segundos (`IDENTIDAD_VIGENCIA_SEG`, 60 por defecto).
 
 ## Lo que hace Australis
 
 - `AUTH_MODE=header` y `IDENTITY_PUBLIC_KEY` (clave pública del núcleo, 32 bytes en base64url sin relleno; el núcleo la publica con `Identidad::publica`). Sin la clave, el backend no arranca en ese modo.
 - Rechaza con 401: encabezado ausente, firma inválida, `v` distinto de 1, `curso` distinto de `australis`, vencido, emitido más de 30 segundos en el futuro o con vigencia mayor a 120 segundos.
-- Rol en Australis: `dueño` es secretaría (el núcleo firma `administrador: true` solo para el dueño, porque Australis no conoce universidades y un administrador de universidad vería las de las demás); `profesor`, profesor; todo lo demás, alumno. El rol y el nombre se actualizan en cada pedido si cambiaron en el núcleo.
+- Rol en Australis: `dueño` es secretaría en todos los campus; un `administrador` con `universidad` es secretaría solo en los campus de esa universidad; `profesor`, profesor; todo lo demás, alumno. Un `administrador` sin `universidad` no recibe ningún derecho extra. El rol, el nombre, la universidad y la marca de administrador se actualizan en cada pedido si cambiaron en el núcleo.
+- Cada campus de Australis guarda la universidad a la que pertenece, copiada de la universidad de quien lo crea. Un campus sin universidad (creado antes de este cambio o sin universidad de por medio) solo lo administra el owner.
+- Un administrador ve y modifica solo los campus de su universidad y solo las personas de su universidad; en otro campus responde 403. Las pantallas de secretaría que listan entre campus (campus, personas) le muestran solo su universidad; al owner, todo.
 - La cuenta se crea la primera vez que aparece (sin contraseña). Una cuenta invitada por la importación de alumnos se activa. Una cuenta suspendida en Australis responde 403.
 - En este modo no existen `POST /api/auth/login`, `/api/auth/invites/*`, `POST /api/users` ni `POST /api/users/{id}/invite` (404), y la cookie `australis_session` no autentica a nadie.
 - `GET /api/auth/mode` responde `{"mode":"password"|"header"}`. Con `AUTH_MODE=password` (por defecto, para desarrollo local y pruebas) el encabezado se ignora.
