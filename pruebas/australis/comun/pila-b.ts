@@ -10,7 +10,6 @@ import { RAIZ_REPO } from './pila.ts';
 
 export const ESTADO_B = path.join(os.tmpdir(), 'australis-pruebas-pila-b.json');
 export const ETIQUETA = 'australis.pruebas=checkpoint-b';
-export const CLAVE_MODELO_FALSA = 'sk-ant-clave-falsa-de-prueba';
 export const TURNSTILE_SECRET = '1x0000000000000000000000000000000AA';
 
 export type EstadoPilaB = {
@@ -27,6 +26,7 @@ export type EstadoPilaB = {
   volumenes: string[];
   prefijo: string;
   tokenModelo: string;
+  claveModelo: string;
   clavePublica: string;
   semilla: string;
 };
@@ -118,6 +118,7 @@ export async function levantarPilaB(): Promise<EstadoPilaB> {
   const falsos = `${prefijo}-falsos`;
   const { semilla, publica } = claveDeIdentidad();
   const tokenModelo = `cmt_${crypto.randomBytes(32).toString('base64url')}`;
+  const claveModelo = `sk-ant-oat01-PRUEBA-${crypto.randomBytes(24).toString('base64url')}`;
   const puerto = await puertoLibre();
 
   construirImagenes();
@@ -136,6 +137,7 @@ export async function levantarPilaB(): Promise<EstadoPilaB> {
     volumenes: [volDatos, volCursos],
     prefijo,
     tokenModelo,
+    claveModelo,
     clavePublica: publica,
     semilla,
   };
@@ -153,7 +155,7 @@ export async function levantarPilaB(): Promise<EstadoPilaB> {
     docker([
       'run', '-d', '--name', falsos, '--network', red, '--network-alias', 'falsos', '--label', ETIQUETA,
       '-p', '127.0.0.1::9000',
-      '-e', `CLAVE_MODELO=${CLAVE_MODELO_FALSA}`,
+      '-e', `CLAVE_MODELO=${claveModelo}`,
       '-e', `TURNSTILE_SECRET=${TURNSTILE_SECRET}`,
       'australis-b-falsos',
     ]);
@@ -183,7 +185,7 @@ export async function levantarPilaB(): Promise<EstadoPilaB> {
       AUSTRALIS_URL: 'http://frontend',
       AUSTRALIS_TOKEN_MODELO: tokenModelo,
       PROVEEDOR_MODELO: 'api',
-      ANTHROPIC_API_KEY: CLAVE_MODELO_FALSA,
+      ANTHROPIC_API_KEY: claveModelo,
       MODELO_DESTINO: 'http://falsos:8091',
       PROVEEDOR_CONTENEDORES: 'docker',
       CONTENEDORES_CLI: 'docker',

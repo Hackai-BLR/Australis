@@ -18,7 +18,7 @@ import {
   Sesion,
 } from '../../comun/escenario-b.ts';
 import { ADMIN_AUSTRAL, ALUMNO_AUSTRAL, OWNER, PROFE2_AUSTRAL, PROFE_AUSTRAL } from '../../comun/datos-b.ts';
-import { CLAVE_MODELO_FALSA, estadoB } from '../../comun/pila-b.ts';
+import { estadoB } from '../../comun/pila-b.ts';
 
 let profe: Sesion;
 let admin: Sesion;
@@ -211,28 +211,28 @@ test.describe('la credencial del modelo no se puede leer desde Australis', () =>
     const propuesta = await profe.campus('POST', `/api/campuses/${campus.australis}/ai/proposals`, { instruction: 'Agregá una semana sobre ética' });
     expect(propuesta.estado, propuesta.texto).toBe(201);
     await profe.campus('POST', `/api/campuses/${campus.australis}/ai/proposals/${propuesta.json.id}/reject`, {});
-    expect(propuesta.texto).not.toContain(CLAVE_MODELO_FALSA);
+    expect(propuesta.texto).not.toContain(e.claveModelo);
     for (const contenedor of [e.backend, e.frontend]) {
-      expect(inspeccionar(contenedor)).not.toContain(CLAVE_MODELO_FALSA);
-      expect(entornoDelContenedor(contenedor)).not.toContain(CLAVE_MODELO_FALSA);
+      expect(inspeccionar(contenedor)).not.toContain(e.claveModelo);
+      expect(entornoDelContenedor(contenedor)).not.toContain(e.claveModelo);
     }
-    expect(buscarEnContenedor(e.backend, CLAVE_MODELO_FALSA, ['/data', '/uploads', '/usr/local/bin'])).toBe('');
+    expect(buscarEnContenedor(e.backend, e.claveModelo, ['/data', '/uploads', '/usr/local/bin'])).toBe('');
     const usoRegistrado = await profe.campus('GET', `/api/campuses/${campus.australis}/ai/usage`);
-    expect(usoRegistrado.texto).not.toContain(CLAVE_MODELO_FALSA);
-    expect(inspeccionar(e.nucleo)).toContain(CLAVE_MODELO_FALSA);
+    expect(usoRegistrado.texto).not.toContain(e.claveModelo);
+    expect(inspeccionar(e.nucleo)).toContain(e.claveModelo);
   });
 
   test('el token que tiene Australis no es una credencial del modelo: solo sirve en el intermediario y con una persona', async () => {
     const e = estadoB();
     expect(e.tokenModelo.startsWith('cmt_')).toBe(true);
-    expect(e.tokenModelo).not.toBe(CLAVE_MODELO_FALSA);
+    expect(e.tokenModelo).not.toBe(e.claveModelo);
     await reiniciarModelo();
     const propuesta = await profe.campus('POST', `/api/campuses/${campus.australis}/ai/proposals`, { instruction: 'Agregá la bibliografía' });
     expect(propuesta.estado, propuesta.texto).toBe(201);
     await profe.campus('POST', `/api/campuses/${campus.australis}/ai/proposals/${propuesta.json.id}/reject`, {});
     const pedidos = await pedidosAlModelo();
     expect(pedidos).toHaveLength(1);
-    expect(pedidos[0].claveRecibida).toBe(CLAVE_MODELO_FALSA);
+    expect(pedidos[0].claveRecibida).toBe(e.claveModelo);
     expect(pedidos[0].autorizacion).toBeNull();
     expect(llamarAlModeloFalso(e.falsos, e.tokenModelo)).toBe(401);
   });

@@ -15,7 +15,7 @@ import {
   type Sesion,
 } from '../../comun/escenario-b.ts';
 import { ADMIN_AUSTRAL, ALUMNO_DEMO, OWNER, PROFE_AUSTRAL } from '../../comun/datos-b.ts';
-import { CLAVE_MODELO_FALSA, estadoB } from '../../comun/pila-b.ts';
+import { estadoB } from '../../comun/pila-b.ts';
 
 test.describe.configure({ mode: 'serial' });
 
@@ -155,7 +155,7 @@ test.describe('checkpoint B: la historia con el núcleo, Australis y el modelo f
 
     const pedidos = await pedidosAlModelo();
     expect(pedidos).toHaveLength(1);
-    expect(pedidos[0].claveRecibida).toBe(CLAVE_MODELO_FALSA);
+    expect(pedidos[0].claveRecibida).toBe(estadoB().claveModelo);
     expect(pedidos[0].claveRecibida).not.toBe(estadoB().tokenModelo);
     expect(pedidos[0].herramientas).toContain('add_section');
 

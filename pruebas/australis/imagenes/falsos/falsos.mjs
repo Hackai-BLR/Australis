@@ -3,7 +3,8 @@ import http from 'node:http';
 
 const SECRETO_TURNSTILE = process.env.TURNSTILE_SECRET ?? '1x0000000000000000000000000000000AA';
 const TOKEN_TURNSTILE = 'XXXX.DUMMY.TOKEN.XXXX';
-const CLAVE_MODELO = process.env.CLAVE_MODELO ?? 'sk-ant-clave-falsa-de-prueba';
+const CLAVE_MODELO = process.env.CLAVE_MODELO;
+if (!CLAVE_MODELO) throw new Error('falta CLAVE_MODELO');
 const USO = { input_tokens: 1000, output_tokens: 500, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 };
 
 const pedidos = [];
