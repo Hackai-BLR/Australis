@@ -29,7 +29,7 @@ export function MyGradesView({ campusId }: { campusId?: number }) {
       />
     );
   }
-  const scaleOf = (course: (typeof courses)[number]) => course.scale ?? data.scale;
+  const scaleOf = (course: (typeof courses)[number]) => course.scale;
   return (
     <div className="au-stack">
       {courses.map((course) => (

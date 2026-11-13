@@ -39,9 +39,9 @@ export type MyCourse = {
   campus_id: number;
   campus_name: string;
   /** The course's own scale (a campus may override the program default). */
-  scale?: Scale & { confirmed?: boolean };
+  scale: Scale & { confirmed?: boolean };
   final: number | null;
   items: { item_id: number; title: string; weight: number; score: number | null }[];
 };
 
-export type MyGradesData = { scale: Scale & { confirmed?: boolean }; courses: MyCourse[] };
+export type MyGradesData = { courses: MyCourse[] };

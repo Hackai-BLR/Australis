@@ -10,9 +10,9 @@ type MyCourse = {
   campus_id: number;
   campus_name: string;
   final: number | null;
-  scale?: { pass: number };
+  scale: { pass: number };
 };
-type MyGrades = { scale: { pass: number }; courses: MyCourse[] };
+type MyGrades = { courses: MyCourse[] };
 
 function score(value: number): string {
   return String(Math.round(value * 100) / 100).replace(".", ",");
@@ -75,7 +75,7 @@ function GradesSummary() {
               {c.final === null ? (
                 <Badge>Sin nota final</Badge>
               ) : (
-                <Badge tone={c.final >= (c.scale ?? data.scale).pass ? "success" : "danger"}>
+                <Badge tone={c.final >= c.scale.pass ? "success" : "danger"}>
                   Final: {score(c.final)}
                 </Badge>
               )}
