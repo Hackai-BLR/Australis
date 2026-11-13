@@ -166,10 +166,17 @@ async fn a_person_links_to_each_of_their_campuses() {
     assert!(body.get("password_hash").is_none());
     let memberships = body["memberships"].as_array().unwrap();
     assert_eq!(memberships.len(), 2);
-    assert_eq!(memberships[0]["campus_id"], first);
-    assert_eq!(memberships[0]["status"], "active");
-    assert_eq!(memberships[1]["campus_id"], second);
-    assert_eq!(memberships[1]["status"], "suspended");
+    // The list is ordered by campus name, and the seeded names ("Test campus 9",
+    // "Test campus 10") do not sort in creation order, so look each one up by id.
+    let status_of = |campus: i64| {
+        memberships
+            .iter()
+            .find(|m| m["campus_id"] == campus)
+            .unwrap_or_else(|| panic!("no membership for campus {campus}"))["status"]
+            .clone()
+    };
+    assert_eq!(status_of(first), "active");
+    assert_eq!(status_of(second), "suspended");
 
     let (status, _) = app
         .get("/api/admin/people/99999", Some(&secretary.cookie))
