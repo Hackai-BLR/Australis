@@ -559,7 +559,10 @@ async fn add_teacher(
             "only a professor account can be added as a guest teacher".into(),
         ));
     }
-    if !account.has_password {
+    // In header mode accounts come from the core and never have a password: the first sign-in
+    // through the core is what activates them.
+    if state.config.auth_mode == australis_core::config::AuthMode::Password && !account.has_password
+    {
         return Err(AppError::Unprocessable(
             "the professor has not activated the account yet".into(),
         ));
