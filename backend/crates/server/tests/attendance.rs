@@ -422,3 +422,109 @@ async fn a_suspended_student_is_not_listed_and_the_record_stays() {
         .unwrap();
     assert_eq!(kept, 1);
 }
+
+#[tokio::test]
+async fn a_second_take_from_the_session_keeps_manual_corrections() {
+    let app = TestApp::new().await;
+    let prof = app.login_as(Role::Professor).await;
+    let campus = app.seed_campus(&prof).await;
+    let class = create_class(&app, &prof, campus, "placeholder").await;
+    for _ in 0..6 {
+        app.seed_student(campus).await;
+    }
+    let url = format!("{}/from-session", uri(class));
+    let (status, taken) = app.post_json(&url, Some(&prof.cookie), json!({})).await;
+    assert_eq!(status, StatusCode::OK, "{taken}");
+    let absent = taken["rows"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|r| r["status"] == "absent")
+        .unwrap()["user_id"]
+        .as_i64()
+        .unwrap();
+    let (status, sheet) = save(
+        &app,
+        &prof,
+        class,
+        json!([{"user_id": absent, "status": "excused"}]),
+        Some("Avisó que faltaba"),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{sheet}");
+    let audits = audit_rows(&app, campus).await.len();
+
+    let (status, again) = app.post_json(&url, Some(&prof.cookie), json!({})).await;
+    assert_eq!(status, StatusCode::OK, "{again}");
+    assert_eq!(status_of(&again, absent), "excused");
+    let row = again["rows"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|r| r["user_id"] == absent)
+        .unwrap();
+    assert_eq!(row["source"], "manual");
+    assert_eq!(audit_rows(&app, campus).await.len(), audits);
+}
+
+#[tokio::test]
+async fn the_secretary_reads_and_writes_on_a_campus_she_is_not_a_member_of() {
+    let app = TestApp::new().await;
+    let prof = app.login_as(Role::Professor).await;
+    let secretary = app.login_as(Role::Secretary).await;
+    let campus = app.seed_campus(&prof).await;
+    let class = create_class(&app, &prof, campus, "placeholder").await;
+    let student = app.seed_student(campus).await;
+
+    let (status, sheet) = app.get(&uri(class), Some(&secretary.cookie)).await;
+    assert_eq!(status, StatusCode::OK, "{sheet}");
+    assert_eq!(sheet["can_teach"], true);
+    let (status, sheet) = save(
+        &app,
+        &secretary,
+        class,
+        json!([{"user_id": student.id, "status": "present"}]),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{sheet}");
+    let (status, _) = save(
+        &app,
+        &secretary,
+        class,
+        json!([{"user_id": student.id, "status": "late"}]),
+        Some("Corrección de secretaría"),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let (status, taken) = app
+        .post_json(
+            &format!("{}/from-session", uri(class)),
+            Some(&secretary.cookie),
+            json!({ "reason": "Sesión" }),
+        )
+        .await;
+    assert_eq!(status, StatusCode::OK, "{taken}");
+
+    // A professor who is not a member of the campus is refused on every route.
+    let outsider = app.login_as(Role::Professor).await;
+    let (status, _) = app.get(&uri(class), Some(&outsider.cookie)).await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+    let (status, _) = save(
+        &app,
+        &outsider,
+        class,
+        json!([{"user_id": student.id, "status": "absent"}]),
+        Some("x"),
+    )
+    .await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+    let (status, _) = app
+        .post_json(
+            &format!("{}/from-session", uri(class)),
+            Some(&outsider.cookie),
+            json!({}),
+        )
+        .await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+}

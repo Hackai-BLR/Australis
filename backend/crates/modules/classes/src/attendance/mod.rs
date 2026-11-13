@@ -202,7 +202,8 @@ fn clean_reason(raw: Option<&str>) -> AppResult<Option<String>> {
 }
 
 /// Writes the changes in one transaction. A first save needs no reason; changing an existing
-/// record to another status needs one. Records that already hold the status are left alone.
+/// record to another status needs one. Records that already hold the status are left alone, and a record saved
+/// by hand is never replaced by the session's status.
 async fn apply(
     state: &AppState,
     actor: &CurrentUser,
@@ -268,6 +269,8 @@ async fn apply(
                 .await?;
             }
             Some(old) if old.status == change.status => {}
+            // A second take from the session never overwrites a record saved by hand.
+            Some(old) if change.source == "session" && old.source != "session" => {}
             Some(old) => {
                 let reason = reason.ok_or_else(|| {
                     AppError::Unprocessable(
