@@ -388,3 +388,81 @@ async fn header_mode_cannot_be_configured_without_a_key() {
     let config = Config::from_lookup(|name| (name == "AUTH_MODE").then(|| "header".to_string()));
     assert!(config.is_err());
 }
+
+#[tokio::test]
+async fn the_roster_creates_no_invites_in_header_mode() {
+    let app = header_app().await;
+    let owner = sign(&claims("prof@demo.test", "Prof", "profesor", false));
+    let owner_id = me(&app, Some(&owner)).await.json()["id"].as_i64().unwrap();
+    let mut conn = app.db.acquire().await.unwrap();
+    let campus = directory::create_campus(&mut conn, owner_id, "Campus", owner_id)
+        .await
+        .unwrap()
+        .id;
+    drop(conn);
+
+    let uri = format!("/api/campuses/{campus}/roster/imports");
+    let preview = call(
+        &app,
+        Method::POST,
+        &uri,
+        Some(&owner),
+        None,
+        Some(json!({ "text": "Ana Pérez,ana@alumnos.test" })),
+    )
+    .await;
+    assert_eq!(preview.status, StatusCode::CREATED, "{}", preview.json());
+    let import = preview.json()["id"].as_i64().unwrap();
+    let confirm = call(
+        &app,
+        Method::POST,
+        &format!("{uri}/{import}/confirm"),
+        Some(&owner),
+        None,
+        Some(json!({})),
+    )
+    .await;
+    assert_eq!(confirm.status, StatusCode::OK, "{}", confirm.json());
+    assert_eq!(confirm.json()["created"], 1);
+    assert!(confirm.json()["invites"].as_array().unwrap().is_empty());
+    let invites: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM core_invites")
+        .fetch_one(&app.db)
+        .await
+        .unwrap();
+    assert_eq!(invites, 0);
+
+    let reissue = call(
+        &app,
+        Method::POST,
+        &format!("/api/campuses/{campus}/members/1/invite"),
+        Some(&owner),
+        None,
+        None,
+    )
+    .await;
+    assert_eq!(reissue.status, StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn losing_the_professor_mark_removes_manage_access_on_campuses() {
+    let app = header_app().await;
+    let professor = sign(&claims("prof@demo.test", "Prof", "profesor", false));
+    let id = me(&app, Some(&professor)).await.json()["id"]
+        .as_i64()
+        .unwrap();
+    let mut conn = app.db.acquire().await.unwrap();
+    let campus = directory::create_campus(&mut conn, id, "Campus", id)
+        .await
+        .unwrap()
+        .id;
+    drop(conn);
+    let uri = format!("/api/campuses/{campus}/roster/imports");
+    let body = || Some(json!({ "text": "Ana Pérez,ana@alumnos.test" }));
+    let allowed = call(&app, Method::POST, &uri, Some(&professor), None, body()).await;
+    assert_eq!(allowed.status, StatusCode::CREATED);
+
+    let demoted = sign(&claims("prof@demo.test", "Prof", "alumno", false));
+    assert_eq!(me(&app, Some(&demoted)).await.json()["role"], "student");
+    let denied = call(&app, Method::POST, &uri, Some(&demoted), None, body()).await;
+    assert_eq!(denied.status, StatusCode::FORBIDDEN);
+}

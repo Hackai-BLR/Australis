@@ -84,7 +84,17 @@ pub async fn require_campus(
     let level = if user.role == Role::Secretary {
         Some(Access::Manage)
     } else {
-        member_role.map(Access::of_member)
+        // A professor or guest seat only counts for an account that still has a teaching
+        // role: when the platform takes the professor mark away, the person is a student
+        // again and keeps no more than view access.
+        member_role.map(|role| {
+            let level = Access::of_member(role);
+            if user.role == Role::Student {
+                level.min(Access::View)
+            } else {
+                level
+            }
+        })
     };
     match level {
         Some(level) if level >= needed => Ok(CampusAccess {

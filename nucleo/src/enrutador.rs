@@ -589,4 +589,123 @@ mod pruebas {
         assert_eq!(r.status(), StatusCode::BAD_GATEWAY);
         assert!(r.headers().contains_key(header::RETRY_AFTER));
     }
+
+    struct CorreoMudo;
+
+    #[async_trait::async_trait]
+    impl crate::email::ProveedorDeEmail for CorreoMudo {
+        async fn enviar(&self, _mail: &crate::email::Mail) -> anyhow::Result<()> {
+            Ok(())
+        }
+    }
+
+    const TOKEN: &str = "abcdefghijklmnopqrstuvwxyz0123456789ABCD";
+
+    async fn app_con_australis(destino: &str) -> App {
+        let ruta = std::env::temp_dir().join(format!("campusia-enrutador-{}.db", token_aleatorio()));
+        for (k, v) in [
+            ("SESSION_SECRET", "0123456789abcdef0123456789abcdef"),
+            ("PROVEEDOR_EMAIL", "archivo"),
+            ("ARCHIVO_EMAIL", "/dev/null"),
+            ("DOMINIO_BASE", "campusia.test"),
+            ("TURNSTILE_SITE_KEY", "x"),
+            ("TURNSTILE_SECRET", "x"),
+            ("ENTORNO", "desarrollo"),
+        ] {
+            std::env::set_var(k, v);
+        }
+        std::env::set_var("DATABASE_URL", format!("sqlite://{}", ruta.display()));
+        std::env::set_var("AUSTRALIS_URL", destino);
+        let cfg = crate::config::Config::desde_entorno().unwrap();
+        let db = crate::db::conectar(&cfg.database_url).await.unwrap();
+        crate::db::migrar(&db).await.unwrap();
+        let identidad = Identidad::cargar(&db, Some(SEMILLA)).await.unwrap();
+        let intermediario = std::sync::Arc::new(crate::modelo::Intermediario::nuevo(&cfg.agente).unwrap());
+        App {
+            cfg,
+            db,
+            email: Box::new(CorreoMudo),
+            http: reqwest::Client::new(),
+            proxy: reqwest::Client::new(),
+            identidad,
+            supervisor: None,
+            espacios: None,
+            intermediario,
+        }
+    }
+
+    async fn persona_con_sesion(app: &App, email: &str) -> i64 {
+        let ahora = ahora_txt();
+        let id: i64 = sqlx::query_scalar("INSERT INTO usuarios (email, nombre, creado_en) VALUES (?, 'Ana', ?) RETURNING id")
+            .bind(email)
+            .bind(&ahora)
+            .fetch_one(&app.db)
+            .await
+            .unwrap();
+        sqlx::query("INSERT INTO sesiones (usuario_id, huella, creada_en, vence_en, ultimo_uso) VALUES (?, ?, ?, ?, ?)")
+            .bind(id)
+            .bind(huella(&app.cfg.session_secret, TOKEN))
+            .bind(&ahora)
+            .bind(fecha(en_segundos(3600)))
+            .bind(&ahora)
+            .execute(&app.db)
+            .await
+            .unwrap();
+        id
+    }
+
+    fn pedido(metodo: Method, cookie: bool, origen: Option<&str>) -> Request {
+        let mut b = Request::builder().method(metodo).uri("/api/campuses");
+        if cookie {
+            b = b.header(header::COOKIE, format!("{COOKIE}={TOKEN}"));
+        }
+        if let Some(o) = origen {
+            b = b.header(header::ORIGIN, o);
+        }
+        b.body(Body::empty()).unwrap()
+    }
+
+    #[tokio::test]
+    async fn australis_exige_sesion_origen_propio_y_cuenta_habilitada() {
+        let destino = destino_eco().await;
+        let app = app_con_australis(&destino).await;
+        let id = persona_con_sesion(&app, "ana@demo.test").await;
+        let propio = origen_de(&app, crate::servidor::SUBDOMINIO_AUSTRALIS, None);
+
+        let sin_sesion = atender_australis(&app, None, pedido(Method::GET, false, None)).await;
+        assert_eq!(sin_sesion.status(), StatusCode::UNAUTHORIZED);
+
+        let lectura = atender_australis(&app, None, pedido(Method::GET, true, None)).await;
+        assert_eq!(lectura.status(), StatusCode::OK);
+
+        let sin_origen = atender_australis(&app, None, pedido(Method::POST, true, None)).await;
+        assert_eq!(sin_origen.status(), StatusCode::FORBIDDEN);
+        let ajeno = atender_australis(&app, None, pedido(Method::POST, true, Some("http://evil.test"))).await;
+        assert_eq!(ajeno.status(), StatusCode::FORBIDDEN);
+        let escritura = atender_australis(&app, None, pedido(Method::POST, true, Some(&propio))).await;
+        assert_eq!(escritura.status(), StatusCode::OK);
+
+        sqlx::query("UPDATE usuarios SET suspendida_en = ? WHERE id = ?")
+            .bind(ahora_txt())
+            .bind(id)
+            .execute(&app.db)
+            .await
+            .unwrap();
+        let suspendida = atender_australis(&app, None, pedido(Method::GET, true, None)).await;
+        assert_eq!(suspendida.status(), StatusCode::FORBIDDEN);
+
+        sqlx::query("INSERT INTO universidades (id, nombre, creada_en, deshabilitada_en) VALUES (1, 'Demo', ?, ?)")
+            .bind(ahora_txt())
+            .bind(ahora_txt())
+            .execute(&app.db)
+            .await
+            .unwrap();
+        sqlx::query("UPDATE usuarios SET suspendida_en = NULL, universidad_id = 1 WHERE id = ?")
+            .bind(id)
+            .execute(&app.db)
+            .await
+            .unwrap();
+        let deshabilitada = atender_australis(&app, None, pedido(Method::GET, true, None)).await;
+        assert_eq!(deshabilitada.status(), StatusCode::FORBIDDEN);
+    }
 }

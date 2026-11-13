@@ -381,8 +381,9 @@ async fn confirm(
         }
         // Only an account created by this import gets a link. An existing account keeps its
         // own sign-in or pending link: issuing one here would revoke it and let this campus's
-        // professor take over the account.
-        if is_new {
+        // professor take over the account. In header mode the platform signs people in and
+        // invites are off, so no link is issued at all.
+        if is_new && state.config.auth_mode == australis_core::config::AuthMode::Password {
             let token = directory::create_invite(
                 &mut tx,
                 user.id,

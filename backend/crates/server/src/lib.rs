@@ -66,6 +66,7 @@ fn is_password_route(request: &Request) -> bool {
     path == "/api/auth/login"
         || path.starts_with("/api/auth/invites")
         || (path.starts_with("/api/users/") && path.ends_with("/invite"))
+        || (path.starts_with("/api/campuses/") && path.ends_with("/invite"))
         || (path == "/api/users" && request.method() == Method::POST)
 }
 
