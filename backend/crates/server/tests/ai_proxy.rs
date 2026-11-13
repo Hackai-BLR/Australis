@@ -27,8 +27,10 @@ struct Fake {
     seen: Arc<Mutex<Vec<(HeaderMap, Value)>>>,
     /// When set, the fake answers 429 with this message.
     refuse: Arc<Mutex<Option<String>>>,
-    /// When set, the fake waits this long before answering.
-    delay: Arc<Mutex<Option<std::time::Duration>>>,
+    /// When set, the fake signals `arrived`, then waits for `release` before answering.
+    gated: Arc<std::sync::atomic::AtomicBool>,
+    arrived: Arc<tokio::sync::Notify>,
+    release: Arc<tokio::sync::Notify>,
 }
 
 async fn messages(
@@ -37,9 +39,9 @@ async fn messages(
     Json(body): Json<Value>,
 ) -> (StatusCode, Json<Value>) {
     fake.seen.lock().unwrap().push((headers, body));
-    let delay = *fake.delay.lock().unwrap();
-    if let Some(delay) = delay {
-        tokio::time::sleep(delay).await;
+    if fake.gated.load(std::sync::atomic::Ordering::SeqCst) {
+        fake.arrived.notify_one();
+        fake.release.notified().await;
     }
     if let Some(message) = fake.refuse.lock().unwrap().clone() {
         return (
@@ -272,28 +274,37 @@ async fn the_proxy_provider_is_chosen_only_when_configured_completely() {
 #[tokio::test]
 async fn a_call_dropped_by_the_caller_deadline_is_still_logged() {
     let (url, fake) = start_fake().await;
-    *fake.delay.lock().unwrap() = Some(std::time::Duration::from_millis(400));
+    fake.gated.store(true, std::sync::atomic::Ordering::SeqCst);
     let app = app_with_proxy(&url).await;
     let professor = app.login_as(Role::Professor).await;
 
-    let cut = tokio::time::timeout(
-        std::time::Duration::from_millis(100),
-        ai::run(&app.state, professor.id, None, &request("agregá ética")),
-    )
-    .await;
-    assert!(cut.is_err(), "the caller gave up first");
+    // The caller gives up exactly when the proxy has the request: no clock involved.
+    tokio::select! {
+        _ = ai::run(&app.state, professor.id, None, &request("agregá ética")) => {
+            panic!("the call finished before the proxy was released");
+        }
+        _ = fake.arrived.notified() => {}
+    }
+    fake.release.notify_one();
 
-    tokio::time::sleep(std::time::Duration::from_millis(900)).await;
-    let mut conn = app.db.acquire().await.unwrap();
-    let usage = ai::list_usage(
-        &mut conn,
-        UsageQuery {
-            user_id: Some(professor.id),
-            ..UsageQuery::default()
-        },
-    )
-    .await
-    .unwrap();
+    let mut usage = Vec::new();
+    for _ in 0..200 {
+        let mut conn = app.db.acquire().await.unwrap();
+        usage = ai::list_usage(
+            &mut conn,
+            UsageQuery {
+                user_id: Some(professor.id),
+                ..UsageQuery::default()
+            },
+        )
+        .await
+        .unwrap();
+        if !usage.is_empty() {
+            break;
+        }
+        drop(conn);
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    }
     assert_eq!(usage.len(), 1, "the paid call has a usage row");
     assert_eq!(usage[0].status, UsageStatus::Ok);
 }
