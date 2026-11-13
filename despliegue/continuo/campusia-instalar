@@ -124,6 +124,13 @@ fi
 
 FUENTES="$DESPLIEGUE_DIR/fuentes/$COMMIT"
 
+TIENE_AUSTRALIS=0
+if git --git-dir="$ESPEJO" cat-file -e "$COMMIT:backend" 2>/dev/null \
+  && git --git-dir="$ESPEJO" cat-file -e "$COMMIT:frontend" 2>/dev/null \
+  && { [ -e "$FUENTES/compilado/bin/australis-server" ] || [ -L "$FUENTES/compilado/bin/australis-server" ]; }; then
+  TIENE_AUSTRALIS=1
+fi
+
 sin_enlaces() {
   local ruta="$1" parcial=""
   local -a partes
@@ -144,6 +151,17 @@ sin_enlaces "$FUENTES/interfaz/dist"
 [ -f "$FUENTES/interfaz/dist/index.html" ] && ! [ -L "$FUENTES/interfaz/dist/index.html" ] || falla "la interfaz no tiene index.html"
 if [ -n "$(find -P "$FUENTES/interfaz/dist" ! -type f ! -type d -print -quit)" ]; then
   falla "la interfaz tiene enlaces simbólicos o archivos especiales"
+fi
+
+if [ "$TIENE_AUSTRALIS" = 1 ]; then
+  sin_enlaces "$FUENTES/compilado/bin/australis-server"
+  sin_enlaces "$FUENTES/frontend/dist"
+  [ -f "$FUENTES/compilado/bin/australis-server" ] || falla "el binario de Australis no es un archivo regular"
+  [ -d "$FUENTES/frontend/dist" ] || falla "el frontend de Australis no es una carpeta"
+  [ -f "$FUENTES/frontend/dist/index.html" ] && ! [ -L "$FUENTES/frontend/dist/index.html" ] || falla "el frontend de Australis no tiene index.html"
+  if [ -n "$(find -P "$FUENTES/frontend/dist" ! -type f ! -type d -print -quit)" ]; then
+    falla "el frontend de Australis tiene enlaces simbólicos o archivos especiales"
+  fi
 fi
 
 if [ "$TIENE_PLATAFORMA" = 1 ]; then
@@ -188,6 +206,16 @@ if [ "$TIENE_PLATAFORMA" = 1 ]; then
     || falla "no se pudo copiar el SDK compilado"
 fi
 
+OPCIONES_AUSTRALIS=()
+if [ "$TIENE_AUSTRALIS" = 1 ]; then
+  leer_como_fuentes tar -C "$FUENTES" --no-recursion -cf - compilado/bin/australis-server \
+    | tar -x --no-same-owner --no-same-permissions -C "$ARTEFACTOS" \
+    || falla "no se pudo copiar el binario de Australis"
+  (cd "$FUENTES" && leer_como_fuentes tar -cf - frontend/dist) \
+    | tar -x --no-same-owner --no-same-permissions -C "$ARTEFACTOS" \
+    || falla "no se pudo copiar el frontend de Australis"
+fi
+
 BINARIO="$ARTEFACTOS/compilado/bin/campusia-nucleo"
 INTERFAZ="$ARTEFACTOS/interfaz/dist"
 if [ -n "$(find -P "$ARTEFACTOS" ! -type f ! -type d -print -quit)" ]; then
@@ -211,6 +239,19 @@ if [ "$TIENE_PLATAFORMA" = 1 ]; then
   OPCIONES_PLATAFORMA=(--plantilla "$PLATAFORMA/plantilla-curso" --sdk "$PLATAFORMA/sdk" --espacio "$PLATAFORMA/espacio-trabajo")
 fi
 
+if [ "$TIENE_AUSTRALIS" = 1 ]; then
+  AUSTRALIS_BINARIO="$ARTEFACTOS/compilado/bin/australis-server"
+  AUSTRALIS_FRONTEND="$ARTEFACTOS/frontend/dist"
+  [ -f "$AUSTRALIS_BINARIO" ] && ! [ -L "$AUSTRALIS_BINARIO" ] || falla "el binario de Australis no es un archivo regular"
+  [ -d "$AUSTRALIS_FRONTEND" ] && ! [ -L "$AUSTRALIS_FRONTEND" ] || falla "el frontend de Australis no es una carpeta"
+  [ -f "$AUSTRALIS_FRONTEND/index.html" ] || falla "el frontend de Australis no tiene index.html"
+  mv "$AUSTRALIS_BINARIO" "$TEMPORAL/australis-server"
+  mv "$AUSTRALIS_FRONTEND" "$TEMPORAL/australis-frontend"
+  chmod 0755 "$TEMPORAL/australis-server"
+  chmod -R u=rwX,go=rX "$TEMPORAL/australis-frontend"
+  OPCIONES_AUSTRALIS=(--australis-binario "$TEMPORAL/australis-server" --australis-frontend "$TEMPORAL/australis-frontend")
+fi
+
 mv "$BINARIO" "$TEMPORAL/campusia-nucleo"
 mv "$INTERFAZ" "$TEMPORAL/interfaz"
 rm -rf -- "$ARTEFACTOS"
@@ -220,7 +261,7 @@ chmod 0755 "$TEMPORAL" "$PLATAFORMA"
 
 set +e
 env -i PATH="$RUTA_FIJA" HOME=/root LC_ALL=C.UTF-8 LANG=C.UTF-8 \
-  bash "$TEMPORAL/despliegue/instalar.sh" --binario "$TEMPORAL/campusia-nucleo" --interfaz "$TEMPORAL/interfaz" "${OPCIONES_PLATAFORMA[@]}"
+  bash "$TEMPORAL/despliegue/instalar.sh" --binario "$TEMPORAL/campusia-nucleo" --interfaz "$TEMPORAL/interfaz" "${OPCIONES_PLATAFORMA[@]}" "${OPCIONES_AUSTRALIS[@]}"
 CODIGO=$?
 set -e
 exit "$CODIGO"

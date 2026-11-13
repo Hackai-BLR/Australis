@@ -10,3 +10,11 @@ dbs:
         endpoint: https://<cuenta>.r2.cloudflarestorage.com
         region: auto
         force-path-style: true
+  - path: /srv/campusia/australis/datos/australis.db
+    replicas:
+      - type: s3
+        bucket: campusia-respaldos
+        path: australis
+        endpoint: https://<cuenta>.r2.cloudflarestorage.com
+        region: auto
+        force-path-style: true

@@ -2,7 +2,7 @@
 set -euo pipefail
 
 uso() {
-	echo "uso: instalar.sh --binario <ruta> --interfaz <carpeta> [--plantilla <carpeta>] [--sdk <carpeta>] [--espacio <carpeta>] [--raiz <carpeta>] [--sin-servicios]" >&2
+	echo "uso: instalar.sh --binario <ruta> --interfaz <carpeta> [--plantilla <carpeta>] [--sdk <carpeta>] [--espacio <carpeta>] [--australis-binario <ruta> --australis-frontend <carpeta>] [--raiz <carpeta>] [--sin-servicios]" >&2
 	exit 2
 }
 
@@ -18,6 +18,8 @@ RAIZ=""
 PLANTILLA=""
 SDK=""
 ESPACIO=""
+AUSTRALIS_BINARIO=""
+AUSTRALIS_FRONTEND=""
 SERVICIOS=1
 
 while [ $# -gt 0 ]; do
@@ -28,6 +30,8 @@ while [ $# -gt 0 ]; do
 		--plantilla) [ $# -ge 2 ] || uso; PLANTILLA="$2"; shift 2 ;;
 		--sdk) [ $# -ge 2 ] || uso; SDK="$2"; shift 2 ;;
 		--espacio) [ $# -ge 2 ] || uso; ESPACIO="$2"; shift 2 ;;
+		--australis-binario) [ $# -ge 2 ] || uso; AUSTRALIS_BINARIO="$2"; shift 2 ;;
+		--australis-frontend) [ $# -ge 2 ] || uso; AUSTRALIS_FRONTEND="$2"; shift 2 ;;
 		--sin-servicios) SERVICIOS=0; shift ;;
 		-h|--help) uso ;;
 		*) echo "opción desconocida: $1" >&2; uso ;;
@@ -54,7 +58,14 @@ if [ -n "$ESPACIO" ]; then
 	[ -f "$ESPACIO/Containerfile" ] || falla "el espacio de trabajo no tiene Containerfile: $ESPACIO"
 	ESPACIO="$(cd "$ESPACIO" && pwd)"
 fi
-for f in campusia-nucleo.service Caddyfile respaldo/respaldar.sh respaldo/restaurar.sh respaldo/campusia-respaldo.service respaldo/campusia-respaldo.timer; do
+if [ -n "$AUSTRALIS_BINARIO" ] || [ -n "$AUSTRALIS_FRONTEND" ]; then
+	[ -n "$AUSTRALIS_BINARIO" ] && [ -n "$AUSTRALIS_FRONTEND" ] || falla "--australis-binario y --australis-frontend van juntos"
+	[ -f "$AUSTRALIS_BINARIO" ] || falla "no existe el binario de Australis: $AUSTRALIS_BINARIO"
+	[ -d "$AUSTRALIS_FRONTEND" ] || falla "no existe el frontend de Australis: $AUSTRALIS_FRONTEND"
+	[ -f "$AUSTRALIS_FRONTEND/index.html" ] || falla "el frontend de Australis no tiene index.html: $AUSTRALIS_FRONTEND"
+	AUSTRALIS_FRONTEND="$(cd "$AUSTRALIS_FRONTEND" && pwd)"
+fi
+for f in campusia-nucleo.service campusia-australis.service australis.env.ejemplo Caddyfile respaldo/respaldar.sh respaldo/restaurar.sh respaldo/campusia-respaldo.service respaldo/campusia-respaldo.timer; do
 	[ -f "$AQUI/$f" ] || falla "falta $AQUI/$f"
 done
 
@@ -88,6 +99,14 @@ DESPLIEGUE_DESTINO="$PLATAFORMA/despliegue"
 RESPALDO_DESTINO="$DESPLIEGUE_DESTINO/respaldo"
 CADDY_DESTINO="$RAIZ/etc/caddy/Caddyfile"
 BASE="$DATOS/campusia.db"
+AUSTRALIS="$SRV/australis"
+AUSTRALIS_DATOS="$AUSTRALIS/datos"
+AUSTRALIS_ARCHIVOS="$AUSTRALIS/archivos"
+AUSTRALIS_FRONTEND_DESTINO="$AUSTRALIS/frontend"
+AUSTRALIS_BIN_DESTINO="$RAIZ/usr/local/bin/australis-server"
+AUSTRALIS_ENTORNO="$CONFIG/australis.env"
+AUSTRALIS_UNIDAD="$UNIDADES_DIR/campusia-australis.service"
+AUSTRALIS_PUERTO=8090
 
 if [ "$SERVICIOS" = 1 ]; then
 	if ! getent group campusia >/dev/null; then
@@ -104,6 +123,9 @@ if [ "$SERVICIOS" = 1 ]; then
 		loginctl enable-linger campusia || true
 	fi
 	[ -f "$ENTORNO_ARCHIVO" ] || falla "falta $ENTORNO_ARCHIVO; copiá $AQUI/campusia.env.ejemplo y completalo"
+	if [ -n "$AUSTRALIS_BINARIO" ]; then
+		[ -f "$AUSTRALIS_ENTORNO" ] || falla "falta $AUSTRALIS_ENTORNO; copiá $AQUI/australis.env.ejemplo y completalo"
+	fi
 fi
 
 mkdir -p "$RAIZ/usr/local/bin" "$SRV" "$DATOS" "$CONFIG" "$CURSOS" "$ARCHIVOS" "$RESPALDOS" "$ESPACIOS" "$PLATAFORMA" "$(dirname "$UNIDAD_DESTINO")" "$(dirname "$CADDY_DESTINO")"
@@ -202,6 +224,42 @@ instalar_respaldo() {
 
 instalar_respaldo
 
+instalar_australis() {
+	local tmp vieja
+	mkdir -p "$AUSTRALIS_DATOS" "$AUSTRALIS_ARCHIVOS"
+	tmp="$(mktemp "$RAIZ/usr/local/bin/.australis-server.XXXXXX")"
+	cp "$AUSTRALIS_BINARIO" "$tmp"
+	chmod 0755 "$tmp"
+	mv -f "$tmp" "$AUSTRALIS_BIN_DESTINO"
+	tmp="$(mktemp -d "$AUSTRALIS/.frontend.XXXXXX")"
+	cp -R "$AUSTRALIS_FRONTEND/." "$tmp/"
+	chmod 0755 "$tmp"
+	if [ -e "$AUSTRALIS_FRONTEND_DESTINO" ]; then
+		vieja="$AUSTRALIS/.frontend-vieja.$$"
+		mv "$AUSTRALIS_FRONTEND_DESTINO" "$vieja"
+		mv "$tmp" "$AUSTRALIS_FRONTEND_DESTINO"
+		rm -rf "$vieja"
+	else
+		mv "$tmp" "$AUSTRALIS_FRONTEND_DESTINO"
+	fi
+	chmod 0700 "$AUSTRALIS_ARCHIVOS"
+	install -m 0644 "$AQUI/campusia-australis.service" "$AUSTRALIS_UNIDAD"
+	if [ "$SERVICIOS" = 1 ]; then
+		chown -R root:root "$AUSTRALIS_FRONTEND_DESTINO"
+		chmod -R u=rwX,go=rX "$AUSTRALIS_FRONTEND_DESTINO"
+		chown campusia:campusia "$AUSTRALIS" "$AUSTRALIS_DATOS" "$AUSTRALIS_ARCHIVOS"
+		chmod 0750 "$AUSTRALIS" "$AUSTRALIS_DATOS"
+		find "$AUSTRALIS_DATOS" -maxdepth 1 -name 'australis.db*' -exec chown campusia:campusia {} +
+		chown -R campusia:campusia "$AUSTRALIS_ARCHIVOS"
+		chown campusia:campusia "$AUSTRALIS_ENTORNO"
+		chmod 0600 "$AUSTRALIS_ENTORNO"
+	fi
+}
+
+if [ -n "$AUSTRALIS_BINARIO" ]; then
+	instalar_australis
+fi
+
 install -m 0644 "$AQUI/campusia-nucleo.service" "$UNIDAD_DESTINO"
 install -m 0644 "$AQUI/Caddyfile" "$CADDY_DESTINO"
 
@@ -242,7 +300,12 @@ if [ "$SERVICIOS" = 1 ]; then
 	systemctl daemon-reload
 	systemctl enable --now campusia-respaldo.timer
 	systemctl enable campusia-nucleo.service
-	systemctl restart campusia-nucleo.service
+	if [ -n "$AUSTRALIS_BINARIO" ]; then
+		systemctl enable campusia-australis.service
+		systemctl restart campusia-nucleo.service campusia-australis.service
+	else
+		systemctl restart campusia-nucleo.service
+	fi
 	if command -v caddy >/dev/null; then
 		caddy validate --config "$CADDY_DESTINO" --adapter caddyfile
 	fi
@@ -253,16 +316,37 @@ if [ "$SERVICIOS" = 1 ]; then
 	fi
 	PUERTO_SALUD="$(sed -n 's/^PUERTO=\([0-9]*\).*/\1/p' "$ENTORNO_ARCHIVO" | tail -n 1)"
 	PUERTO_SALUD="${PUERTO_SALUD:-8080}"
+	NUCLEO_SANO=0
 	for i in $(seq 1 120); do
 		if curl -fsS --max-time 3 "http://127.0.0.1:$PUERTO_SALUD/salud" >/dev/null 2>&1; then
-			echo "campusia-nucleo instalado y sano"
+			NUCLEO_SANO=1
+			break
+		fi
+		sleep 1
+	done
+	if [ "$NUCLEO_SANO" = 0 ]; then
+		systemctl --no-pager status campusia-nucleo.service >&2 || true
+		journalctl --no-pager -u campusia-nucleo.service -n 40 -o cat >&2 || true
+		falla "campusia-nucleo no respondió en /salud"
+	fi
+	if [ -z "$AUSTRALIS_BINARIO" ]; then
+		echo "campusia-nucleo instalado y sano"
+		exit 0
+	fi
+	for i in $(seq 1 120); do
+		if curl -fsS --max-time 3 "http://127.0.0.1:$AUSTRALIS_PUERTO/api/health" >/dev/null 2>&1; then
+			echo "campusia-nucleo y campusia-australis instalados y sanos"
 			exit 0
 		fi
 		sleep 1
 	done
-	systemctl --no-pager status campusia-nucleo.service >&2 || true
-	journalctl --no-pager -u campusia-nucleo.service -n 40 -o cat >&2 || true
-	falla "campusia-nucleo no respondió en /salud"
+	systemctl --no-pager status campusia-australis.service >&2 || true
+	journalctl --no-pager -u campusia-australis.service -n 40 -o cat >&2 || true
+	falla "campusia-australis no respondió en /api/health"
 fi
 
-echo "campusia-nucleo instalado en ${RAIZ:-/}"
+if [ -n "$AUSTRALIS_BINARIO" ]; then
+	echo "campusia-nucleo y campusia-australis instalados en ${RAIZ:-/}"
+else
+	echo "campusia-nucleo instalado en ${RAIZ:-/}"
+fi

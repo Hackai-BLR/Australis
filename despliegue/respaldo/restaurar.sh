@@ -61,6 +61,7 @@ USUARIO="${CAMPUSIA_USUARIO:-campusia}"
 GRUPO="${CAMPUSIA_GRUPO:-campusia}"
 DETENER="${RESTAURAR_DETENER:-si}"
 SERVICIO="${CAMPUSIA_SERVICIO:-campusia.service}"
+SERVICIO_AUSTRALIS="${CAMPUSIA_SERVICIO_AUSTRALIS:-campusia-australis.service}"
 
 [[ "$AHORA" =~ ^[0-9]{8}-[0-9]{6}$ ]] || fallar "CAMPUSIA_AHORA inválida: $AHORA"
 case "$DETENER" in si|no) ;; *) fallar "RESTAURAR_DETENER tiene que ser si o no" ;; esac
@@ -107,11 +108,16 @@ fi
 
 TEMPORAL=""
 DETENIDO=no
+DETENIDO_AUSTRALIS=no
 terminar() {
   local codigo=$?
   if [ -n "$TEMPORAL" ] && [ -d "$TEMPORAL" ]; then
     chmod -R u+rwX -- "$TEMPORAL" 2>/dev/null || true
     rm -rf -- "$TEMPORAL"
+  fi
+  if [ "$DETENIDO_AUSTRALIS" = si ]; then
+    DETENIDO_AUSTRALIS=no
+    systemctl start "$SERVICIO_AUSTRALIS" || codigo=1
   fi
   if [ "$DETENIDO" = si ]; then
     DETENIDO=no
@@ -181,6 +187,18 @@ INTEGRIDAD="$(sqlite3 -init /dev/null -batch "$TRABAJO/prueba-base/base.db" "PRA
 [ "$INTEGRIDAD" = ok ] || rechazar "la base de la plataforma está dañada"
 rm -rf -- "$TRABAJO/prueba-base"
 
+CON_AUSTRALIS=no
+if [ -e "$EXTRAIDO/australis" ]; then
+  CON_AUSTRALIS=si
+  BASE_AUSTRALIS="$EXTRAIDO/australis/australis.db"
+  [ -f "$BASE_AUSTRALIS" ] || rechazar "falta australis/australis.db"
+  mkdir -- "$TRABAJO/prueba-base-australis"
+  cp -- "$BASE_AUSTRALIS" "$TRABAJO/prueba-base-australis/base.db"
+  INTEGRIDAD="$(sqlite3 -init /dev/null -batch "$TRABAJO/prueba-base-australis/base.db" "PRAGMA integrity_check" 2>/dev/null)" || rechazar "la base de Australis está dañada"
+  [ "$INTEGRIDAD" = ok ] || rechazar "la base de Australis está dañada"
+  rm -rf -- "$TRABAJO/prueba-base-australis"
+fi
+
 GIT=(git -c core.fsmonitor=false -c core.hooksPath=/dev/null -c init.templateDir= -c advice.detachedHead=false)
 
 armar_repo() {
@@ -249,6 +267,20 @@ else
   mkdir -- "$NUEVO/archivos"
 fi
 
+if [ "$CON_AUSTRALIS" = si ]; then
+  mkdir -- "$NUEVO/australis" "$NUEVO/australis/datos"
+  mv -- "$BASE_AUSTRALIS" "$NUEVO/australis/datos/australis.db"
+  if [ -d "$EXTRAIDO/australis/archivos" ]; then
+    mv -- "$EXTRAIDO/australis/archivos" "$NUEVO/australis/archivos"
+  else
+    mkdir -- "$NUEVO/australis/archivos"
+  fi
+  chown -R -- "$USUARIO:$GRUPO" "$NUEVO/australis" || fallar "no se pudo cambiar el dueño"
+  chmod -R go-w -- "$NUEVO/australis"
+  chmod 700 -- "$NUEVO/australis/datos"
+  chmod 600 -- "$NUEVO/australis/datos/australis.db"
+fi
+
 chown -R -- "$USUARIO:$GRUPO" "$NUEVO/datos" "$NUEVO/cursos" "$NUEVO/archivos" || fallar "no se pudo cambiar el dueño"
 chmod -R go-w -- "$NUEVO/datos" "$NUEVO/cursos" "$NUEVO/archivos"
 chmod 700 -- "$NUEVO/datos"
@@ -261,6 +293,9 @@ done < <(find "$NUEVO/cursos" -mindepth 2 -maxdepth 2 -type d -name datos -print
 if [ "$CON_DESTINO" = si ]; then
   if [ "$DESTINO_EXISTE" = si ]; then
     mv -- "$NUEVO/datos" "$NUEVO/cursos" "$NUEVO/archivos" "$DESTINO/"
+    if [ "$CON_AUSTRALIS" = si ]; then
+      mv -- "$NUEVO/australis" "$DESTINO/"
+    fi
   else
     mv -T -- "$NUEVO" "$DESTINO"
   fi
@@ -271,6 +306,10 @@ fi
 if [ "$DETENER" = si ]; then
   systemctl stop "$SERVICIO" || fallar "no se pudo detener $SERVICIO"
   DETENIDO=si
+  if [ "$CON_AUSTRALIS" = si ]; then
+    systemctl stop "$SERVICIO_AUSTRALIS" || fallar "no se pudo detener $SERVICIO_AUSTRALIS"
+    DETENIDO_AUSTRALIS=si
+  fi
 fi
 
 mkdir -- "$PREVIO"
@@ -294,6 +333,24 @@ fi
 if [ ! -d "$RAIZ/datos" ]; then
   mkdir -- "$RAIZ/datos"
 fi
+if [ "$CON_AUSTRALIS" = si ]; then
+  mkdir -p -- "$PREVIO/australis"
+  for sufijo in "" -wal -shm -journal; do
+    if [ -e "$RAIZ/australis/datos/australis.db$sufijo" ] || [ -L "$RAIZ/australis/datos/australis.db$sufijo" ]; then
+      mkdir -p -- "$PREVIO/australis/datos"
+      mv -- "$RAIZ/australis/datos/australis.db$sufijo" "$PREVIO/australis/datos/"
+    fi
+  done
+  if [ -e "$RAIZ/australis/archivos" ] || [ -L "$RAIZ/australis/archivos" ]; then
+    mv -- "$RAIZ/australis/archivos" "$PREVIO/australis/archivos"
+  fi
+  mkdir -p -- "$RAIZ/australis/datos"
+  chown -- "$USUARIO:$GRUPO" "$RAIZ/australis" "$RAIZ/australis/datos"
+  chmod 700 -- "$RAIZ/australis/datos"
+  mv -- "$NUEVO/australis/datos/australis.db" "$RAIZ/australis/datos/australis.db"
+  mv -- "$NUEVO/australis/archivos" "$RAIZ/australis/archivos"
+fi
+
 chown -- "$USUARIO:$GRUPO" "$RAIZ/datos"
 chmod 700 -- "$RAIZ/datos"
 mv -- "$NUEVO/datos/campusia.db" "$RAIZ/datos/campusia.db"

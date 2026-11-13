@@ -33,3 +33,19 @@ def test_la_compilacion_empaqueta_el_sdk_en_la_plantilla(artefactos_listos):
     assert "package/package.json" in nombres
     assert "package/dist/index.js" in nombres and "package/dist/hono.js" in nombres
     assert (fuentes / "sdk" / "dist" / "index.js").is_file()
+
+
+@pytest.mark.aceptacion
+def test_la_compilacion_produce_el_backend_y_el_frontend_de_australis(artefactos_listos):
+    binario = artefactos_listos.australis_binario
+    assert binario.is_file(), "la compilación no dejó compilado/bin/australis-server"
+    assert binario.read_bytes()[:4] == b"\x7fELF", "el binario de Australis no es un ejecutable ELF"
+    assert os.access(binario, os.X_OK)
+    assert (artefactos_listos.australis_frontend / "index.html").stat().st_size > 0
+
+
+@pytest.mark.aceptacion
+def test_el_frontend_compilado_de_australis_no_tiene_enlaces(artefactos_listos):
+    for raiz, carpetas, archivos in os.walk(artefactos_listos.australis_frontend):
+        for nombre in carpetas + archivos:
+            assert not os.path.islink(os.path.join(raiz, nombre)), f"enlace en el frontend compilado: {nombre}"

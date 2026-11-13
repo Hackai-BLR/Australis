@@ -16,7 +16,7 @@ export DESPLIEGUE_ESPACIO_IMAGEN="${DESPLIEGUE_ESPACIO_IMAGEN:-${ESPACIO_IMAGEN:
 export DESPLIEGUE_ESPACIO_CARPETAS="${DESPLIEGUE_ESPACIO_CARPETAS:-sdk plantilla-curso despliegue/espacio-trabajo despliegue/construir-espacio.sh}"
 INSTALAR_POR_DEFECTO='sudo -n /usr/local/sbin/campusia-instalar "$COMMIT"'
 export DESPLIEGUE_INSTALAR="${DESPLIEGUE_INSTALAR:-$INSTALAR_POR_DEFECTO}"
-SALUD_POR_DEFECTO='curl -fsS --max-time 5 http://127.0.0.1:${NUCLEO_PUERTO:-8080}/salud'
+SALUD_POR_DEFECTO='curl -fsS --max-time 5 http://127.0.0.1:${NUCLEO_PUERTO:-8080}/salud && { [ ! -e compilado/bin/australis-server ] || curl -fsS --max-time 5 http://127.0.0.1:${AUSTRALIS_PUERTO:-8090}/api/health; }'
 export DESPLIEGUE_SALUD="${DESPLIEGUE_SALUD:-$SALUD_POR_DEFECTO}"
 export DESPLIEGUE_SALUD_ESPERA="${DESPLIEGUE_SALUD_ESPERA:-60}"
 export DESPLIEGUE_CPUS="${DESPLIEGUE_CPUS:-1.5}"
@@ -59,7 +59,7 @@ en_contenedor() {
   if [ "$red" = "sin-red" ]; then
     opciones_red=(--network none)
   fi
-  mkdir -p "$CACHE_DIR/cargo" "$CACHE_DIR/target" "$CACHE_DIR/pnpm/store" "$CACHE_DIR/pnpm/cache"
+  mkdir -p "$CACHE_DIR/cargo" "$CACHE_DIR/target" "$CACHE_DIR/target-australis" "$CACHE_DIR/npm" "$CACHE_DIR/pnpm/store" "$CACHE_DIR/pnpm/cache"
   docker run --rm "${opciones_red[@]}" \
     --cpus "$DESPLIEGUE_CPUS" \
     --memory "$DESPLIEGUE_MEMORIA" \
@@ -71,6 +71,8 @@ en_contenedor() {
     -e DIRECTORIOS_NODE="$directorios" \
     -e CARGO_HOME=/cache/cargo \
     -e CARGO_TARGET_DIR=/cache/target \
+    -e CARGO_TARGET_DIR_AUSTRALIS=/cache/target-australis \
+    -e npm_config_cache=/cache/npm \
     -e npm_config_store_dir=/cache/pnpm/store \
     -e npm_config_cache_dir=/cache/pnpm/cache \
     -e pnpm_config_store_dir=/cache/pnpm/store \
@@ -100,9 +102,11 @@ directorios_node() {
 
 GUION_DEPENDENCIAS="$GUION_NODE"'
 if [ -f nucleo/Cargo.toml ]; then cargo fetch --locked --manifest-path nucleo/Cargo.toml; fi
+if [ -f backend/Cargo.toml ]; then cargo fetch --locked --manifest-path backend/Cargo.toml; fi
 for d in $(directorios_node); do
   pnpm_instalar "$d"
 done
+if [ -f frontend/package-lock.json ]; then (cd frontend && npm ci --no-audit --no-fund); fi
 '
 
 GUION_INSTALAR_NODE="$GUION_NODE"'
@@ -113,10 +117,14 @@ done
 
 GUION_PRUEBAS="$GUION_INSTALAR_NODE"'
 if [ -f nucleo/Cargo.toml ]; then cargo test --offline --locked --manifest-path nucleo/Cargo.toml; fi
+if [ -f backend/Cargo.toml ]; then CARGO_TARGET_DIR="$CARGO_TARGET_DIR_AUSTRALIS" cargo test --offline --locked --manifest-path backend/Cargo.toml; fi
 for d in $(directorios_node); do
   pnpm_correr "$d" --if-present build
   pnpm_correr "$d" --if-present test
 done
+if [ -f frontend/package-lock.json ]; then
+  (cd frontend && npm run lint && npm run build && npm test)
+fi
 '
 
 GUION_COMPILAR="$GUION_INSTALAR_NODE"'
@@ -125,6 +133,15 @@ mkdir -p compilado/bin
 if [ -f nucleo/Cargo.toml ]; then
   cargo build --offline --locked --release --manifest-path nucleo/Cargo.toml --bin campusia-nucleo
   install -m 0755 "$CARGO_TARGET_DIR/release/campusia-nucleo" compilado/bin/campusia-nucleo
+fi
+if [ -f backend/Cargo.toml ]; then
+  CARGO_TARGET_DIR="$CARGO_TARGET_DIR_AUSTRALIS" cargo build --offline --locked --release --manifest-path backend/Cargo.toml --bin australis-server
+  install -m 0755 "$CARGO_TARGET_DIR_AUSTRALIS/release/australis-server" compilado/bin/australis-server
+fi
+if [ -f frontend/package-lock.json ]; then
+  rm -rf frontend/dist
+  (cd frontend && npm run build)
+  test -f frontend/dist/index.html
 fi
 if [ -f interfaz/package.json ]; then
   rm -rf interfaz/dist
@@ -329,6 +346,20 @@ copia_de_datos() {
     mkdir -p "$DESPLIEGUE_DIR/previos"
     sqlite3 "$base" ".backup '$DESPLIEGUE_DIR/previos/$NUEVO.db'" || decir "no se pudo copiar la base"
   fi
+  local base_australis="$CAMPUSIA_RAIZ/australis/datos/australis.db"
+  rm -f "$DESPLIEGUE_DIR/previos/$NUEVO-australis.db"
+  if [ -f "$base_australis" ] && command -v sqlite3 >/dev/null 2>&1; then
+    mkdir -p "$DESPLIEGUE_DIR/previos"
+    sqlite3 "$base_australis" ".backup '$DESPLIEGUE_DIR/previos/$NUEVO-australis.db'" || decir "no se pudo copiar la base de Australis"
+  fi
+}
+
+restaurar_base_australis() {
+  local base_australis="$CAMPUSIA_RAIZ/australis/datos/australis.db"
+  local copia="$DESPLIEGUE_DIR/previos/$NUEVO-australis.db"
+  [ -f "$copia" ] && [ -f "$base_australis" ] || return 0
+  command -v sqlite3 >/dev/null 2>&1 || { decir "sin sqlite3: no se restaura la base de Australis"; return 0; }
+  sqlite3 "$base_australis" ".restore '$copia'" || decir "no se pudo restaurar la base de Australis"
 }
 
 anterior_disponible() {
@@ -352,6 +383,7 @@ copia_de_datos
 volver_a_la_anterior() {
   local espacio_tocado="$1"
   anterior_disponible || return 1
+  restaurar_base_australis
   etapa "$DESPLIEGUE_INSTALAR" "$ANTERIOR" || { decir "no se pudo reinstalar $ANTERIOR"; return 1; }
   if [ "$espacio_tocado" = 1 ]; then
     etapa "$DESPLIEGUE_ESPACIO" "$ANTERIOR" "$NUEVO" || { decir "no se pudo reconstruir el espacio de $ANTERIOR"; return 1; }
