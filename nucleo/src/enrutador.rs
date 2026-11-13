@@ -390,6 +390,7 @@ async fn atender_australis_interno(app: &App, puerto: Option<&str>, req: Request
     let cambio = cambio_de_inscriptos(req.method(), req.uri().path());
     let es_alta_de_docente = req.uri().path().trim_end_matches('/').ends_with("/teachers");
     let respuesta = reenviar_a_australis(cliente_australis(), destino, &identidad, req).await;
+    let respuesta = cortar_flujo_si_se_inhabilita(app, usuario.id, respuesta);
     if let Some(campus) = cambio {
         if respuesta.status().is_success() {
             match crate::cursos::modulos::sincronizar_campus_externo(app, &usuario, campus).await {
@@ -402,6 +403,40 @@ async fn atender_australis_interno(app: &App, puerto: Option<&str>, req: Request
         }
     }
     Ok(respuesta)
+}
+
+const REVISION_DE_FLUJO: Duration = Duration::from_secs(2);
+
+fn cortar_flujo_si_se_inhabilita(app: &App, usuario_id: i64, respuesta: Response) -> Response {
+    let es_flujo = respuesta
+        .headers()
+        .get(header::CONTENT_TYPE)
+        .and_then(|v| v.to_str().ok())
+        .map(|v| v.starts_with("text/event-stream"))
+        .unwrap_or(false);
+    if !es_flujo {
+        return respuesta;
+    }
+    let db = app.db.clone();
+    let (partes, cuerpo) = respuesta.into_parts();
+    let flujo = cuerpo.into_data_stream();
+    let revision = tokio::time::interval(REVISION_DE_FLUJO);
+    let salida = futures_util::stream::unfold((flujo, revision), move |(mut flujo, mut revision)| {
+        let db = db.clone();
+        async move {
+            loop {
+                tokio::select! {
+                    dato = futures_util::StreamExt::next(&mut flujo) => return dato.map(|d| (d, (flujo, revision))),
+                    _ = revision.tick() => {
+                        if crate::inhabilitar::cuenta_inhabilitada(&db, usuario_id).await.unwrap_or(true) {
+                            return None;
+                        }
+                    }
+                }
+            }
+        }
+    });
+    Response::from_parts(partes, Body::from_stream(salida))
 }
 
 fn cambio_de_inscriptos(metodo: &Method, ruta: &str) -> Option<i64> {
@@ -486,6 +521,7 @@ mod pruebas {
     use crate::identidad::Identidad;
     use crate::servidor::{clasificar, Host};
     use axum::routing::any;
+    use futures_util::StreamExt;
     use axum::{Json, Router};
     use base64::engine::general_purpose::URL_SAFE_NO_PAD;
     use base64::Engine;
@@ -750,6 +786,44 @@ mod pruebas {
             .unwrap();
         let deshabilitada = atender_australis(&app, None, pedido(Method::GET, true, None)).await;
         assert_eq!(deshabilitada.status(), StatusCode::FORBIDDEN);
+    }
+
+    async fn destino_de_eventos() -> String {
+        let eventos = || async {
+            let flujo = futures_util::stream::unfold(0u32, |n| async move {
+                tokio::time::sleep(Duration::from_millis(100)).await;
+                Some((Ok::<_, std::io::Error>(axum::body::Bytes::from(format!("data: {n}\n\n"))), n + 1))
+            });
+            let mut r = Response::new(Body::from_stream(flujo));
+            r.headers_mut().insert(header::CONTENT_TYPE, HeaderValue::from_static("text/event-stream"));
+            r
+        };
+        let escucha = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let direccion = escucha.local_addr().unwrap();
+        tokio::spawn(async move {
+            axum::serve(escucha, Router::new().fallback(any(eventos))).await.unwrap();
+        });
+        format!("http://{direccion}")
+    }
+
+    #[tokio::test]
+    async fn un_flujo_de_eventos_abierto_se_corta_cuando_la_cuenta_se_inhabilita() {
+        let destino = destino_de_eventos().await;
+        let app = app_con_australis(&destino).await;
+        let id = persona_con_sesion(&app, "ana@demo.test").await;
+        let r = atender_australis(&app, None, pedido(Method::GET, true, None)).await;
+        assert_eq!(r.status(), StatusCode::OK);
+        let mut cuerpo = r.into_body().into_data_stream();
+        assert!(cuerpo.next().await.is_some());
+
+        sqlx::query("UPDATE usuarios SET suspendida_en = ? WHERE id = ?")
+            .bind(ahora_txt())
+            .bind(id)
+            .execute(&app.db)
+            .await
+            .unwrap();
+        let cierre = tokio::time::timeout(Duration::from_secs(10), async { while cuerpo.next().await.is_some() {} }).await;
+        assert!(cierre.is_ok(), "el flujo siguió abierto con la cuenta inhabilitada");
     }
 
     #[tokio::test]

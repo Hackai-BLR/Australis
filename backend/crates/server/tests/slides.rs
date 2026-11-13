@@ -165,6 +165,46 @@ async fn an_upload_with_a_non_positive_class_id_is_refused() {
 }
 
 #[tokio::test]
+async fn an_upload_linked_to_a_class_of_another_campus_or_none_is_refused() {
+    let s = setup().await;
+    let other_owner = s.app.login_as(Role::Professor).await;
+    let other_campus = s.app.seed_campus(&other_owner).await;
+    let mut ids = Vec::new();
+    for campus in [s.campus, other_campus] {
+        let id: i64 = sqlx::query_scalar(
+            "INSERT INTO classes_classes (campus_id, title, starts_at, duration_min, \
+             meeting_source, join_url, created_by) \
+             VALUES (?, 'Clase', '2026-11-20 12:00:00', 60, 'manual', 'https://example.test', ?) \
+             RETURNING id",
+        )
+        .bind(campus)
+        .bind(s.professor.id)
+        .fetch_one(&s.app.db)
+        .await
+        .unwrap();
+        ids.push(id);
+    }
+    let uri = format!("/api/campuses/{}/presentations", s.campus);
+    let post = |class_id: i64| {
+        s.app.post_multipart(
+            &uri,
+            Some(&s.professor.cookie),
+            vec![
+                Part::text("class_id", &class_id.to_string()),
+                Part::file("file", "a.pdf", "application/pdf", make_pdf(1, 0)),
+            ],
+        )
+    };
+    for bad in [ids[1], 99_999] {
+        let (status, body) = post(bad).await;
+        assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{bad}: {body}");
+    }
+    let (status, body) = post(ids[0]).await;
+    assert_eq!(status, StatusCode::CREATED, "{body}");
+    assert_eq!(body["class_id"], ids[0]);
+}
+
+#[tokio::test]
 async fn a_file_over_2_mb_uploads() {
     let s = setup().await;
     let pdf = make_pdf(2, 3 * 1024 * 1024);
