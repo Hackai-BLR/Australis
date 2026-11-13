@@ -666,6 +666,30 @@ pub async fn run(
         }
     };
 
+    // The call and its bookkeeping run in their own task: if the caller is dropped (a
+    // deadline, a closed browser tab) while the provider works, the usage row is still
+    // written, because the provider may already have charged tokens.
+    let state = state.clone();
+    let request = request.clone();
+    let task =
+        tokio::spawn(
+            async move { finish(&state, user_id, campus_id, &request, reservation).await },
+        );
+    match task.await {
+        Ok(result) => result,
+        Err(_) => Err(AppError::Internal("the AI call was interrupted".into())),
+    }
+}
+
+async fn finish(
+    state: &AppState,
+    user_id: i64,
+    campus_id: Option<i64>,
+    request: &AiRequest,
+    reservation: Reservation,
+) -> AppResult<AiOutcome> {
+    let provider = state.ai.as_ref();
+    let simulated = provider.is_placeholder();
     let result = provider.complete(request, &reservation).await;
 
     let mut conn = state.db.acquire().await?;

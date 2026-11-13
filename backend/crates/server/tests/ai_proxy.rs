@@ -27,6 +27,8 @@ struct Fake {
     seen: Arc<Mutex<Vec<(HeaderMap, Value)>>>,
     /// When set, the fake answers 429 with this message.
     refuse: Arc<Mutex<Option<String>>>,
+    /// When set, the fake waits this long before answering.
+    delay: Arc<Mutex<Option<std::time::Duration>>>,
 }
 
 async fn messages(
@@ -35,6 +37,10 @@ async fn messages(
     Json(body): Json<Value>,
 ) -> (StatusCode, Json<Value>) {
     fake.seen.lock().unwrap().push((headers, body));
+    let delay = *fake.delay.lock().unwrap();
+    if let Some(delay) = delay {
+        tokio::time::sleep(delay).await;
+    }
     if let Some(message) = fake.refuse.lock().unwrap().clone() {
         return (
             StatusCode::TOO_MANY_REQUESTS,
@@ -261,4 +267,33 @@ async fn the_proxy_provider_is_chosen_only_when_configured_completely() {
     ] {
         assert!(australis_server::build_state(incomplete).await.is_err());
     }
+}
+
+#[tokio::test]
+async fn a_call_dropped_by_the_caller_deadline_is_still_logged() {
+    let (url, fake) = start_fake().await;
+    *fake.delay.lock().unwrap() = Some(std::time::Duration::from_millis(400));
+    let app = app_with_proxy(&url).await;
+    let professor = app.login_as(Role::Professor).await;
+
+    let cut = tokio::time::timeout(
+        std::time::Duration::from_millis(100),
+        ai::run(&app.state, professor.id, None, &request("agregá ética")),
+    )
+    .await;
+    assert!(cut.is_err(), "the caller gave up first");
+
+    tokio::time::sleep(std::time::Duration::from_millis(900)).await;
+    let mut conn = app.db.acquire().await.unwrap();
+    let usage = ai::list_usage(
+        &mut conn,
+        UsageQuery {
+            user_id: Some(professor.id),
+            ..UsageQuery::default()
+        },
+    )
+    .await
+    .unwrap();
+    assert_eq!(usage.len(), 1, "the paid call has a usage row");
+    assert_eq!(usage[0].status, UsageStatus::Ok);
 }
